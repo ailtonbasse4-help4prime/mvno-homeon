@@ -8,111 +8,115 @@ Criar um sistema web completo para gestão de telefonia móvel (MVNO), independe
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticação**: JWT com httpOnly cookies
-- **Serviço de Operadora**: OperadoraService isolado (mock/real)
+- **Integração**: OperadoraService com padrão Adapter (Mock/Real)
 
-## Personas
-1. **Administrador**: Acesso total ao sistema (CRUD completo, gerenciamento de planos)
-2. **Atendente**: Acesso limitado (consultas, ativações, mas sem exclusões)
+## OperadoraService - Arquitetura
 
-## Requisitos Core (Implementados)
+### Estrutura
+```
+/app/backend/services/operadora_service.py
+├── IOperadoraAdapter (Interface abstrata)
+├── MockOperadoraAdapter (Para desenvolvimento/testes)
+├── RealOperadoraAdapter (Para produção - HTTP com httpx)
+└── OperadoraService (Serviço principal com logs)
+```
 
-### Autenticação ✅
-- Login com email e senha
-- JWT com cookies httpOnly
-- Controle de acesso por role (admin/atendente)
-- Proteção contra brute force
+### Funções Disponíveis
+- `ativar_chip(cpf, nome, iccid, plano, ...)` - Ativa chip na operadora
+- `consultar_linha(numero)` - Consulta status da linha
+- `bloquear_linha(numero, motivo)` - Bloqueia linha
+- `desbloquear_linha(numero)` - Desbloqueia linha
 
-### Módulo de Clientes ✅
-- Cadastro: Nome, CPF, Telefone, Status
-- CRUD completo
-- Busca por nome, CPF ou telefone
+### Configuração (.env)
+```
+USE_MOCK_API="true"           # "true" para mock, "false" para real
+OPERADORA_API_URL="https://api.surftelecom.com.br"
+OPERADORA_API_TOKEN=""        # Token Bearer
+OPERADORA_TIMEOUT="30"        # Timeout em segundos
 
-### Módulo de Chips ✅
-- Cadastro de ICCID
-- Status: Disponível, Ativado, Bloqueado
-- Filtro por status
+# Endpoints configuráveis
+ENDPOINT_ATIVAR_CHIP="/api/v1/chip/ativar"
+ENDPOINT_CONSULTAR_LINHA="/api/v1/linha/status"
+ENDPOINT_BLOQUEAR_LINHA="/api/v1/linha/bloquear"
+ENDPOINT_DESBLOQUEAR_LINHA="/api/v1/linha/desbloquear"
+```
 
-### Módulo de Planos ✅
-- Nome, Valor, Franquia (GB)
-- CRUD (apenas admin pode criar/editar/excluir)
-- Cards visuais
+### Tratamento de Erros
+- `ERR_TIMEOUT` - Timeout de requisição
+- `ERR_CONNECTION` - Erro de conexão
+- `ERR_AUTH` - Erro de autenticação (401/403)
+- `ERR_NOT_FOUND` - Recurso não encontrado (404)
+- `ERR_VALIDATION` - Erro de validação (4xx)
+- `ERR_SERVER` - Erro do servidor (5xx)
+- `ERR_UNKNOWN` - Erro desconhecido
 
-### Módulo de Ativação ✅
-- Seleção de Cliente, Chip e Plano
-- Integração com OperadoraService
-- Retorna: sucesso, pendente ou erro
-- Registra no banco de dados com detalhes da API
+### Logs Detalhados
+Cada chamada registra:
+- Endpoint chamado
+- Método HTTP
+- Payload enviado
+- Resposta completa
+- Tempo de resposta (ms)
+- Código de erro (se houver)
+- Indicador mock/real
 
-### Módulo de Linhas ✅ (MELHORADO)
-- Lista linhas com número, cliente, plano, status
-- Cards de estatísticas (Total, Ativas, Pendentes, Bloqueadas)
-- Consulta de status via API com tempo de resposta
-- Botões de Bloqueio/Desbloqueio
-- Status com cores: ativo (verde), pendente (amarelo), bloqueado (vermelho), erro (rosa)
+## Status Suportados
+- `ativo` - Linha funcionando
+- `pendente` - Aguardando processamento
+- `bloqueado` - Linha suspensa
+- `erro` - Falha na operação
 
-### Logs do Sistema ✅ (MELHORADO)
-- Registra todas as ações
-- Cards de estatísticas (Total, Ativações, Erros, Chamadas API)
-- Detalhes completos da requisição e resposta da API
-- Indicador MOCK/REAL para cada log
-- Tempo de resposta da API
+## Endpoints da API
 
-### OperadoraService ✅ (NOVO)
-- Serviço isolado em /app/backend/services/operadora_service.py
-- Facilita troca entre mock e API real
-- Configurável via .env (USE_MOCK_API, OPERADORA_API_URL, OPERADORA_API_TOKEN)
-- Mock com probabilidades realistas (70% sucesso, 20% pendente, 10% erro)
+### Operadora
+- `GET /api/operadora/config` - Configuração atual do serviço
+- `POST /api/operadora/test` - Testa conexão com operadora
 
-## O que foi implementado
+### Core
+- Auth: login, logout, register, me, refresh
+- Clientes: CRUD completo
+- Chips: CRUD (sem update)
+- Planos: CRUD (admin only)
+- Ativação: POST /api/ativacao
+- Linhas: GET, status, bloquear, desbloquear
+- Logs: GET com filtros
+- Dashboard: stats
 
-### Backend (/app/backend/)
-- server.py: 20+ endpoints REST
-- services/operadora_service.py: Serviço isolado de integração
-- Autenticação JWT completa
-- CRUD para todas as entidades
-- Logs avançados com request/response
+## Como Usar API Real
 
-### Frontend (/app/frontend/src/)
-- 7 páginas completas
-- Tema escuro profissional
-- Interface em português do Brasil
-- Componentes Shadcn/UI
-- Responsivo
+1. Obter credenciais da operadora (Surf Telecom)
+2. Editar `/app/backend/.env`:
+   ```
+   USE_MOCK_API="false"
+   OPERADORA_API_URL="https://api.surftelecom.com.br"
+   OPERADORA_API_TOKEN="seu-token-bearer"
+   ```
+3. Reiniciar o backend: `sudo supervisorctl restart backend`
+4. Verificar: `GET /api/operadora/config`
 
-## Configuração para API Real
+## Credenciais de Teste
+- **Admin**: admin@mvno.com / admin123
 
-Para usar a API real da Surf Telecom:
-1. Editar /app/backend/.env:
-   - USE_MOCK_API="false"
-   - OPERADORA_API_URL="https://api.surftelecom.com.br"
-   - OPERADORA_API_TOKEN="seu-token-aqui"
-2. Implementar métodos _real_* em operadora_service.py
+## Backlog
 
-## Dados de Teste
-- Credenciais: admin@mvno.com / admin123
-
-## Backlog (Próximas Fases)
-
-### P0 - Crítico
-- [ ] Integração real com API Surf Telecom
-- [ ] Dashboard de métricas avançadas com gráficos
+### P0 - Pronto para Produção
+- [x] OperadoraService com interface abstrata
+- [x] Mock para desenvolvimento
+- [x] Real adapter com httpx
+- [x] Tratamento completo de erros
+- [x] Logs detalhados
+- [x] Configuração via .env
 
 ### P1 - Alta Prioridade
-- [ ] Suporte a múltiplas empresas (multifilial)
-- [ ] Notificações por email/SMS
-- [ ] Relatórios exportáveis (PDF/Excel)
+- [ ] Integração real com Surf Telecom
+- [ ] Webhook para callbacks
+- [ ] Retry automático em falhas
 
 ### P2 - Média Prioridade
-- [ ] Integração com pagamento (PIX)
-- [ ] App mobile (React Native)
-- [ ] Portal do cliente
-- [ ] Recarga online
-
-### P3 - Baixa Prioridade
-- [ ] Chat de suporte
-- [ ] Integração com WhatsApp
-- [ ] Analytics avançados
+- [ ] Cache de consultas
+- [ ] Rate limiting
+- [ ] Dashboard de métricas de API
 
 ## Data de Implementação
 - MVP Inicial: 31/03/2026
-- Melhorias v2: 31/03/2026
+- OperadoraService v2: 31/03/2026

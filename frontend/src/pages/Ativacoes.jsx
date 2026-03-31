@@ -9,14 +9,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import { IccidInput } from '../components/IccidInput';
 import { toast } from 'sonner';
-import { Zap, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Zap, CheckCircle, Clock, AlertCircle, CreditCard } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export function Ativacoes() {
   const [clientes, setClientes] = useState([]);
   const [chips, setChips] = useState([]);
+  const [allChips, setAllChips] = useState([]); // Todos os chips para validação
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
@@ -24,18 +26,21 @@ export function Ativacoes() {
 
   const [selectedCliente, setSelectedCliente] = useState('');
   const [selectedChip, setSelectedChip] = useState('');
+  const [selectedChipData, setSelectedChipData] = useState(null);
   const [selectedPlano, setSelectedPlano] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
-      const [clientesRes, chipsRes, planosRes] = await Promise.all([
+      const [clientesRes, chipsDisponiveisRes, allChipsRes, planosRes] = await Promise.all([
         axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/chips?status=disponivel`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/chips`, { withCredentials: true }),
         axios.get(`${API_URL}/api/planos`, { withCredentials: true })
       ]);
       
       setClientes(clientesRes.data.filter(c => c.status === 'ativo'));
-      setChips(chipsRes.data);
+      setChips(chipsDisponiveisRes.data);
+      setAllChips(allChipsRes.data);
       setPlanos(planosRes.data);
     } catch (error) {
       toast.error('Erro ao carregar dados');
@@ -80,6 +85,7 @@ export function Ativacoes() {
         // Reset form
         setSelectedCliente('');
         setSelectedChip('');
+        setSelectedChipData(null);
         setSelectedPlano('');
         // Refresh chips list
         fetchData();
@@ -99,19 +105,12 @@ export function Ativacoes() {
     }
   };
 
-  const getSelectedClienteName = () => {
-    const cliente = clientes.find(c => c.id === selectedCliente);
-    return cliente ? `${cliente.nome} - CPF: ${cliente.cpf}` : '';
+  const getSelectedClienteData = () => {
+    return clientes.find(c => c.id === selectedCliente);
   };
 
-  const getSelectedChipIccid = () => {
-    const chip = chips.find(c => c.id === selectedChip);
-    return chip ? chip.iccid : '';
-  };
-
-  const getSelectedPlanoName = () => {
-    const plano = planos.find(p => p.id === selectedPlano);
-    return plano ? `${plano.nome} - R$ ${plano.valor.toFixed(2)}` : '';
+  const getSelectedPlanoData = () => {
+    return planos.find(p => p.id === selectedPlano);
   };
 
   if (loading) {
@@ -138,6 +137,7 @@ export function Ativacoes() {
           <h2 className="section-title mb-6">Nova Ativação</h2>
 
           <div className="space-y-5">
+            {/* Cliente */}
             <div className="space-y-2">
               <Label className="text-zinc-300">1. Selecione o Cliente</Label>
               <Select value={selectedCliente} onValueChange={setSelectedCliente}>
@@ -158,26 +158,25 @@ export function Ativacoes() {
               </Select>
             </div>
 
+            {/* ICCID com input inteligente */}
             <div className="space-y-2">
-              <Label className="text-zinc-300">2. Selecione o Chip (ICCID)</Label>
-              <Select value={selectedChip} onValueChange={setSelectedChip}>
-                <SelectTrigger className="form-input font-mono" data-testid="select-chip">
-                  <SelectValue placeholder="Escolha um chip disponível" />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
-                  {chips.length === 0 ? (
-                    <SelectItem value="__none__" disabled>Nenhum chip disponível</SelectItem>
-                  ) : (
-                    chips.map((chip) => (
-                      <SelectItem key={chip.id} value={chip.id} className="font-mono">
-                        {chip.iccid}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+              <Label className="text-zinc-300 flex items-center gap-2">
+                <span>2. Digite ou Selecione o ICCID</span>
+                <CreditCard className="w-4 h-4 text-zinc-500" />
+              </Label>
+              <IccidInput
+                value={selectedChip}
+                onChange={setSelectedChip}
+                onChipSelect={setSelectedChipData}
+                chips={allChips}
+                disabled={activating}
+              />
+              <p className="text-xs text-zinc-500">
+                Digite o ICCID manualmente ou selecione da lista de chips disponíveis
+              </p>
             </div>
 
+            {/* Plano */}
             <div className="space-y-2">
               <Label className="text-zinc-300">3. Selecione o Plano</Label>
               <Select value={selectedPlano} onValueChange={setSelectedPlano}>
@@ -229,19 +228,27 @@ export function Ativacoes() {
                 {selectedCliente && (
                   <div className="p-3 bg-zinc-800/50 rounded-sm">
                     <p className="text-xs text-zinc-500 mb-1">Cliente</p>
-                    <p className="text-white">{getSelectedClienteName()}</p>
+                    <p className="text-white">
+                      {getSelectedClienteData()?.nome} - CPF: {getSelectedClienteData()?.cpf}
+                    </p>
                   </div>
                 )}
-                {selectedChip && (
+                {selectedChipData && (
                   <div className="p-3 bg-zinc-800/50 rounded-sm">
                     <p className="text-xs text-zinc-500 mb-1">ICCID</p>
-                    <p className="text-white font-mono">{getSelectedChipIccid()}</p>
+                    <p className="text-white font-mono">{selectedChipData.iccid}</p>
+                    <p className="text-xs text-emerald-500 mt-1">Status: {selectedChipData.status}</p>
                   </div>
                 )}
                 {selectedPlano && (
                   <div className="p-3 bg-zinc-800/50 rounded-sm">
                     <p className="text-xs text-zinc-500 mb-1">Plano</p>
-                    <p className="text-white">{getSelectedPlanoName()}</p>
+                    <p className="text-white">
+                      {getSelectedPlanoData()?.nome} - R$ {getSelectedPlanoData()?.valor.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Franquia: {getSelectedPlanoData()?.franquia}
+                    </p>
                   </div>
                 )}
               </div>
@@ -300,6 +307,12 @@ export function Ativacoes() {
                       </p>
                     </div>
                   )}
+
+                  {activationResult.response_time_ms && (
+                    <p className="text-xs text-zinc-600 mt-2">
+                      Tempo de resposta: {activationResult.response_time_ms}ms
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -317,11 +330,27 @@ export function Ativacoes() {
           <div className="dashboard-card bg-blue-500/5 border-blue-500/20">
             <h3 className="text-sm font-semibold text-blue-400 mb-2">Sobre a Ativação</h3>
             <ul className="text-sm text-zinc-400 space-y-1">
+              <li>• Digite ou cole o ICCID diretamente no campo</li>
+              <li>• O sistema valida automaticamente o ICCID</li>
+              <li>• Apenas chips com status "disponível" podem ser ativados</li>
               <li>• A ativação é processada via API da operadora</li>
-              <li>• O status pode ser: Ativo, Pendente ou Erro</li>
-              <li>• Ativações pendentes podem levar até 24h</li>
-              <li>• Verifique o status na seção "Linhas"</li>
             </ul>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 text-center">
+              <p className="text-xl font-bold text-white font-mono">{clientes.length}</p>
+              <p className="text-xs text-zinc-500">Clientes Ativos</p>
+            </div>
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-3 text-center">
+              <p className="text-xl font-bold text-emerald-400 font-mono">{chips.length}</p>
+              <p className="text-xs text-zinc-500">Chips Disponíveis</p>
+            </div>
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 text-center">
+              <p className="text-xl font-bold text-white font-mono">{planos.length}</p>
+              <p className="text-xs text-zinc-500">Planos</p>
+            </div>
           </div>
         </div>
       </div>
