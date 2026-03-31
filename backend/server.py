@@ -12,9 +12,12 @@ import bcrypt
 import jwt
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from enum import Enum
+
+# Import operadora service
+from services.operadora_service import operadora_service, OperadoraStatus
 
 # Configure logging
 logging.basicConfig(
@@ -58,6 +61,7 @@ class LineStatus(str, Enum):
     ativo = "ativo"
     bloqueado = "bloqueado"
     pendente = "pendente"
+    erro = "erro"
 
 class LogAction(str, Enum):
     ativacao = "ativacao"
@@ -67,6 +71,7 @@ class LogAction(str, Enum):
     login = "login"
     logout = "logout"
     cadastro = "cadastro"
+    api_call = "api_call"
 
 # ==================== MODELS ====================
 class UserBase(BaseModel):
@@ -153,6 +158,7 @@ class ActivationResponse(BaseModel):
     status: str
     message: str
     numero: Optional[str] = None
+    response_time_ms: Optional[int] = None
 
 class LogEntry(BaseModel):
     id: str
@@ -161,6 +167,9 @@ class LogEntry(BaseModel):
     user_id: Optional[str] = None
     user_name: Optional[str] = None
     created_at: datetime
+    api_request: Optional[dict] = None
+    api_response: Optional[dict] = None
+    is_mock: Optional[bool] = None
 
 # ==================== PASSWORD UTILS ====================
 def hash_password(password: str) -> str:
@@ -235,76 +244,6 @@ async def create_log(action: str, details: str, user_id: Optional[str] = None, u
         "created_at": datetime.now(timezone.utc)
     }
     await db.logs.insert_one(log_entry)
-
-# ==================== MOCK OPERADORA API ====================
-class MockOperadoraAPI:
-    """Mock da API da operadora (Surf Telecom) para simulação"""
-    
-    @staticmethod
-    async def ativar_chip(cpf: str, nome: str, iccid: str, plano: str) -> dict:
-        """Simula ativação de chip na operadora"""
-        import random
-        
-        # Simula diferentes cenários (70% sucesso, 20% pendente, 10% erro)
-        scenario = random.choices(
-            ["sucesso", "pendente", "erro"],
-            weights=[70, 20, 10],
-            k=1
-        )[0]
-        
-        if scenario == "sucesso":
-            numero = f"11{random.randint(900000000, 999999999)}"
-            return {
-                "success": True,
-                "status": "ativo",
-                "message": "Chip ativado com sucesso",
-                "numero": numero
-            }
-        elif scenario == "pendente":
-            return {
-                "success": True,
-                "status": "pendente",
-                "message": "Ativação em processamento. Aguarde até 24h.",
-                "numero": None
-            }
-        else:
-            return {
-                "success": False,
-                "status": "erro",
-                "message": "Falha na comunicação com a operadora",
-                "numero": None
-            }
-    
-    @staticmethod
-    async def consultar_status(numero: str) -> dict:
-        """Consulta status da linha na operadora"""
-        return {
-            "success": True,
-            "numero": numero,
-            "status": "ativo",
-            "saldo_dados": "5.2GB",
-            "validade": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-        }
-    
-    @staticmethod
-    async def bloquear_linha(numero: str) -> dict:
-        """Bloqueia linha na operadora"""
-        return {
-            "success": True,
-            "message": "Linha bloqueada com sucesso",
-            "status": "bloqueado"
-        }
-    
-    @staticmethod
-    async def desbloquear_linha(numero: str) -> dict:
-        """Desbloqueia linha na operadora"""
-        return {
-            "success": True,
-            "message": "Linha desbloqueada com sucesso",
-            "status": "ativo"
-        }
-
-mock_api = MockOperadoraAPI()
 
 # ==================== AUTH ROUTES ====================
 @api_router.post("/auth/register", response_model=UserResponse)
@@ -741,54 +680,47 @@ async def activate_line(data: ActivationRequest, request: Request):
     if not plano:
         raise HTTPException(status_code=404, detail="Plano não encontrado")
     
-    # Call mock API
-    result = await mock_api.ativar_chip(
+    # Call operadora service (usa mock ou API real)
+    result = await operadora_service.ativar_chip(
         cpf=cliente["cpf"],
         nome=cliente["nome"],
         iccid=chip["iccid"],
-        plano=plano["nome"]
+        plano=plano["nome"],
+        plano_id=data.plano_id,
+        db=db,
+        user_id=user["id"],
+        user_name=user["name"]
     )
     
-    if result["success"]:
-        # Update chip
+    if result.success:
+        # Update chip status based on result
+        chip_status = ChipStatus.ativado.value if result.status == OperadoraStatus.ATIVO else ChipStatus.ativado.value
+        
         await db.chips.update_one(
             {"_id": ObjectId(data.chip_id)},
             {"$set": {
-                "status": ChipStatus.ativado.value,
+                "status": chip_status,
                 "cliente_id": data.cliente_id
             }}
         )
         
         # Create line
         line_doc = {
-            "numero": result.get("numero") or "Pendente",
-            "status": result["status"],
+            "numero": result.numero or "Pendente",
+            "status": result.status,
             "cliente_id": data.cliente_id,
             "chip_id": data.chip_id,
             "plano_id": data.plano_id,
             "created_at": datetime.now(timezone.utc)
         }
         await db.linhas.insert_one(line_doc)
-        
-        await create_log(
-            "ativacao",
-            f"Ativação realizada - Cliente: {cliente['nome']}, ICCID: {chip['iccid']}, Plano: {plano['nome']}, Status: {result['status']}",
-            user["id"],
-            user["name"]
-        )
-    else:
-        await create_log(
-            "erro",
-            f"Erro na ativação - Cliente: {cliente['nome']}, ICCID: {chip['iccid']}, Erro: {result['message']}",
-            user["id"],
-            user["name"]
-        )
     
     return ActivationResponse(
-        success=result["success"],
-        status=result["status"],
-        message=result["message"],
-        numero=result.get("numero")
+        success=result.success,
+        status=result.status,
+        message=result.message,
+        numero=result.numero,
+        response_time_ms=result.response_time_ms
     )
 
 # ==================== LINES ROUTES ====================
@@ -840,16 +772,28 @@ async def list_lines(request: Request, status: Optional[str] = None):
 
 @api_router.get("/linhas/{line_id}/status")
 async def get_line_status(line_id: str, request: Request):
-    await get_current_user(request)
+    user = await get_current_user(request)
     
     line = await db.linhas.find_one({"_id": ObjectId(line_id)})
     if not line:
         raise HTTPException(status_code=404, detail="Linha não encontrada")
     
-    # Call mock API to get current status
-    result = await mock_api.consultar_status(line["numero"])
+    # Call operadora service
+    result = await operadora_service.consultar_status(
+        numero=line["numero"],
+        db=db,
+        user_id=user["id"],
+        user_name=user["name"]
+    )
     
-    return result
+    return {
+        "success": result.success,
+        "numero": result.numero,
+        "status": result.status,
+        "saldo_dados": result.data.get("saldo_dados") if result.data else None,
+        "validade": result.data.get("validade") if result.data else None,
+        "response_time_ms": result.response_time_ms
+    }
 
 @api_router.post("/linhas/{line_id}/bloquear")
 async def block_line(line_id: str, request: Request):
@@ -862,10 +806,15 @@ async def block_line(line_id: str, request: Request):
     if line["status"] == LineStatus.bloqueado.value:
         raise HTTPException(status_code=400, detail="Linha já está bloqueada")
     
-    # Call mock API
-    result = await mock_api.bloquear_linha(line["numero"])
+    # Call operadora service
+    result = await operadora_service.bloquear_linha(
+        numero=line["numero"],
+        db=db,
+        user_id=user["id"],
+        user_name=user["name"]
+    )
     
-    if result["success"]:
+    if result.success:
         await db.linhas.update_one(
             {"_id": ObjectId(line_id)},
             {"$set": {"status": LineStatus.bloqueado.value}}
@@ -875,15 +824,13 @@ async def block_line(line_id: str, request: Request):
             {"_id": ObjectId(line["chip_id"])},
             {"$set": {"status": ChipStatus.bloqueado.value}}
         )
-        
-        await create_log(
-            "bloqueio",
-            f"Linha bloqueada: {line['numero']}",
-            user["id"],
-            user["name"]
-        )
     
-    return result
+    return {
+        "success": result.success,
+        "message": result.message,
+        "status": result.status,
+        "response_time_ms": result.response_time_ms
+    }
 
 @api_router.post("/linhas/{line_id}/desbloquear")
 async def unblock_line(line_id: str, request: Request):
@@ -896,10 +843,15 @@ async def unblock_line(line_id: str, request: Request):
     if line["status"] != LineStatus.bloqueado.value:
         raise HTTPException(status_code=400, detail="Linha não está bloqueada")
     
-    # Call mock API
-    result = await mock_api.desbloquear_linha(line["numero"])
+    # Call operadora service
+    result = await operadora_service.desbloquear_linha(
+        numero=line["numero"],
+        db=db,
+        user_id=user["id"],
+        user_name=user["name"]
+    )
     
-    if result["success"]:
+    if result.success:
         await db.linhas.update_one(
             {"_id": ObjectId(line_id)},
             {"$set": {"status": LineStatus.ativo.value}}
@@ -909,15 +861,13 @@ async def unblock_line(line_id: str, request: Request):
             {"_id": ObjectId(line["chip_id"])},
             {"$set": {"status": ChipStatus.ativado.value}}
         )
-        
-        await create_log(
-            "desbloqueio",
-            f"Linha desbloqueada: {line['numero']}",
-            user["id"],
-            user["name"]
-        )
     
-    return result
+    return {
+        "success": result.success,
+        "message": result.message,
+        "status": result.status,
+        "response_time_ms": result.response_time_ms
+    }
 
 # ==================== LOGS ROUTES ====================
 @api_router.get("/logs", response_model=List[LogEntry])
@@ -937,7 +887,10 @@ async def list_logs(request: Request, action: Optional[str] = None, limit: int =
             details=log["details"],
             user_id=log.get("user_id"),
             user_name=log.get("user_name"),
-            created_at=log.get("created_at", datetime.now(timezone.utc))
+            created_at=log.get("created_at", datetime.now(timezone.utc)),
+            api_request=log.get("api_request"),
+            api_response=log.get("api_response"),
+            is_mock=log.get("is_mock")
         ) for log in logs
     ]
 

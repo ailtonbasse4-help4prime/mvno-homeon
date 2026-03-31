@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -30,6 +30,7 @@ export function Linhas() {
   const [actionType, setActionType] = useState(null); // 'bloquear' or 'desbloquear'
   const [lineStatus, setLineStatus] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
   const fetchLinhas = useCallback(async () => {
     try {
@@ -82,6 +83,7 @@ export function Linhas() {
     setSelectedLinha(linha);
     setLineStatus(null);
     setStatusDialogOpen(true);
+    setCheckingStatus(true);
 
     try {
       const response = await axios.get(
@@ -92,20 +94,56 @@ export function Linhas() {
     } catch (error) {
       toast.error('Erro ao consultar status');
       setStatusDialogOpen(false);
+    } finally {
+      setCheckingStatus(false);
     }
   };
 
   const getStatusBadge = (status) => {
     switch (status) {
       case 'ativo':
-        return <span className="badge-active">Ativo</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Ativo
+          </span>
+        );
       case 'bloqueado':
-        return <span className="badge-blocked">Bloqueado</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+            <Lock className="w-3 h-3" />
+            Bloqueado
+          </span>
+        );
       case 'pendente':
-        return <span className="badge-pending">Pendente</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <RefreshCw className="w-3 h-3 animate-spin" />
+            Pendente
+          </span>
+        );
+      case 'erro':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <Activity className="w-3 h-3" />
+            Erro
+          </span>
+        );
       default:
-        return <span className="badge-inactive">{status}</span>;
+        return (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+            {status}
+          </span>
+        );
     }
+  };
+
+  const canBlock = (status) => {
+    return status === 'ativo';
+  };
+
+  const canUnblock = (status) => {
+    return status === 'bloqueado';
   };
 
   if (loading) {
@@ -118,12 +156,23 @@ export function Linhas() {
 
   return (
     <div className="space-y-6" data-testid="linhas-page">
-      <div>
-        <h1 className="page-title flex items-center gap-3">
-          <Phone className="w-7 h-7 text-purple-500" />
-          Linhas
-        </h1>
-        <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de linhas ativas</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="page-title flex items-center gap-3">
+            <Phone className="w-7 h-7 text-purple-500" />
+            Linhas
+          </h1>
+          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de linhas ativas</p>
+        </div>
+        <Button
+          onClick={fetchLinhas}
+          variant="outline"
+          className="btn-secondary flex items-center gap-2"
+          data-testid="refresh-linhas"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </Button>
       </div>
 
       {/* Filter */}
@@ -141,8 +190,35 @@ export function Linhas() {
             <SelectItem value="ativo">Ativo</SelectItem>
             <SelectItem value="pendente">Pendente</SelectItem>
             <SelectItem value="bloqueado">Bloqueado</SelectItem>
+            <SelectItem value="erro">Erro</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4">
+          <p className="text-2xl font-bold text-white font-mono">{linhas.length}</p>
+          <p className="text-xs text-zinc-500">Total de Linhas</p>
+        </div>
+        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-4">
+          <p className="text-2xl font-bold text-emerald-400 font-mono">
+            {linhas.filter(l => l.status === 'ativo').length}
+          </p>
+          <p className="text-xs text-zinc-500">Ativas</p>
+        </div>
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-4">
+          <p className="text-2xl font-bold text-amber-400 font-mono">
+            {linhas.filter(l => l.status === 'pendente').length}
+          </p>
+          <p className="text-xs text-zinc-500">Pendentes</p>
+        </div>
+        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-4">
+          <p className="text-2xl font-bold text-red-400 font-mono">
+            {linhas.filter(l => l.status === 'bloqueado').length}
+          </p>
+          <p className="text-xs text-zinc-500">Bloqueadas</p>
+        </div>
       </div>
 
       {/* Table */}
@@ -175,19 +251,21 @@ export function Linhas() {
                     <td className="text-zinc-300">{linha.plano_nome || '—'}</td>
                     <td>{getStatusBadge(linha.status)}</td>
                     <td className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
+                        {/* Consultar Status */}
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleCheckStatus(linha)}
-                          className="text-zinc-400 hover:text-blue-400"
+                          className="text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10"
                           title="Consultar Status"
                           data-testid={`check-status-${linha.id}`}
                         >
                           <Info className="w-4 h-4" />
                         </Button>
                         
-                        {linha.status === 'ativo' && (
+                        {/* Bloquear */}
+                        {canBlock(linha.status) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -196,15 +274,16 @@ export function Linhas() {
                               setActionType('bloquear');
                               setActionDialogOpen(true);
                             }}
-                            className="text-zinc-400 hover:text-red-400"
-                            title="Bloquear"
+                            className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                            title="Bloquear Linha"
                             data-testid={`block-linha-${linha.id}`}
                           >
                             <Lock className="w-4 h-4" />
                           </Button>
                         )}
                         
-                        {linha.status === 'bloqueado' && (
+                        {/* Desbloquear */}
+                        {canUnblock(linha.status) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -213,8 +292,8 @@ export function Linhas() {
                               setActionType('desbloquear');
                               setActionDialogOpen(true);
                             }}
-                            className="text-zinc-400 hover:text-emerald-400"
-                            title="Desbloquear"
+                            className="text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            title="Desbloquear Linha"
                             data-testid={`unblock-linha-${linha.id}`}
                           >
                             <Unlock className="w-4 h-4" />
@@ -234,29 +313,47 @@ export function Linhas() {
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
         <DialogContent className="bg-zinc-900 border-zinc-800">
           <DialogHeader>
-            <DialogTitle className="text-white">
-              {actionType === 'bloquear' ? 'Bloquear Linha' : 'Desbloquear Linha'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-zinc-400">
+            <DialogTitle className="text-white flex items-center gap-2">
               {actionType === 'bloquear' ? (
                 <>
-                  Tem certeza que deseja <span className="text-red-400 font-medium">bloquear</span> a linha{' '}
-                  <span className="text-white font-mono">{selectedLinha?.numero}</span>?
+                  <Lock className="w-5 h-5 text-red-400" />
+                  Bloquear Linha
                 </>
               ) : (
                 <>
-                  Tem certeza que deseja <span className="text-emerald-400 font-medium">desbloquear</span> a linha{' '}
-                  <span className="text-white font-mono">{selectedLinha?.numero}</span>?
+                  <Unlock className="w-5 h-5 text-emerald-400" />
+                  Desbloquear Linha
+                </>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-zinc-800/50 rounded-sm mb-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">Número</p>
+                  <p className="text-white font-mono font-semibold">{selectedLinha?.numero}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">Cliente</p>
+                  <p className="text-white">{selectedLinha?.cliente_nome || '—'}</p>
+                </div>
+              </div>
+            </div>
+            
+            <p className="text-zinc-400">
+              {actionType === 'bloquear' ? (
+                <>
+                  Tem certeza que deseja <span className="text-red-400 font-medium">bloquear</span> esta linha?
+                  A linha será suspensa imediatamente.
+                </>
+              ) : (
+                <>
+                  Tem certeza que deseja <span className="text-emerald-400 font-medium">desbloquear</span> esta linha?
+                  A linha será reativada imediatamente.
                 </>
               )}
             </p>
-            {selectedLinha?.cliente_nome && (
-              <p className="text-sm text-zinc-500 mt-2">
-                Cliente: {selectedLinha.cliente_nome}
-              </p>
-            )}
           </div>
           <DialogFooter>
             <Button
@@ -298,14 +395,18 @@ export function Linhas() {
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent className="bg-zinc-900 border-zinc-800">
           <DialogHeader>
-            <DialogTitle className="text-white">Status da Linha</DialogTitle>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-400" />
+              Status da Linha
+            </DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            {!lineStatus ? (
-              <div className="flex items-center justify-center py-8">
+            {checkingStatus ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
                 <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-zinc-400">Consultando operadora...</p>
               </div>
-            ) : (
+            ) : lineStatus ? (
               <div className="space-y-4">
                 <div className="p-4 bg-zinc-800/50 rounded-sm">
                   <p className="text-xs text-zinc-500 mb-1">Número</p>
@@ -319,21 +420,32 @@ export function Linhas() {
                   </div>
                   <div className="p-4 bg-zinc-800/50 rounded-sm">
                     <p className="text-xs text-zinc-500 mb-1">Saldo de Dados</p>
-                    <p className="text-lg font-semibold text-emerald-400">{lineStatus.saldo_dados}</p>
+                    <p className="text-lg font-semibold text-emerald-400">{lineStatus.saldo_dados || '—'}</p>
                   </div>
                 </div>
                 
                 <div className="p-4 bg-zinc-800/50 rounded-sm">
                   <p className="text-xs text-zinc-500 mb-1">Validade</p>
                   <p className="text-white">
-                    {new Date(lineStatus.validade).toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
+                    {lineStatus.validade 
+                      ? new Date(lineStatus.validade).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric'
+                        })
+                      : '—'
+                    }
                   </p>
                 </div>
+
+                {lineStatus.response_time_ms && (
+                  <p className="text-xs text-zinc-600 text-center">
+                    Tempo de resposta: {lineStatus.response_time_ms}ms
+                  </p>
+                )}
               </div>
+            ) : (
+              <p className="text-center text-zinc-500 py-8">Erro ao carregar status</p>
             )}
           </div>
           <DialogFooter>
