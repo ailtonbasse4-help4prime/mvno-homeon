@@ -8,6 +8,7 @@ Criar um sistema web completo para gestão de telefonia móvel (MVNO), independe
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticação**: JWT com httpOnly cookies
+- **Serviço de Operadora**: OperadoraService isolado (mock/real)
 
 ## Personas
 1. **Administrador**: Acesso total ao sistema (CRUD completo, gerenciamento de planos)
@@ -38,29 +39,38 @@ Criar um sistema web completo para gestão de telefonia móvel (MVNO), independe
 
 ### Módulo de Ativação ✅
 - Seleção de Cliente, Chip e Plano
-- Integração com API mock de operadora
+- Integração com OperadoraService
 - Retorna: sucesso, pendente ou erro
-- Registra no banco de dados
+- Registra no banco de dados com detalhes da API
 
-### Módulo de Linhas ✅
+### Módulo de Linhas ✅ (MELHORADO)
 - Lista linhas com número, cliente, plano, status
-- Consulta de status via API
-- Bloqueio/Desbloqueio
+- Cards de estatísticas (Total, Ativas, Pendentes, Bloqueadas)
+- Consulta de status via API com tempo de resposta
+- Botões de Bloqueio/Desbloqueio
+- Status com cores: ativo (verde), pendente (amarelo), bloqueado (vermelho), erro (rosa)
 
-### Logs do Sistema ✅
+### Logs do Sistema ✅ (MELHORADO)
 - Registra todas as ações
-- Filtro por tipo de ação
-- Data e hora
+- Cards de estatísticas (Total, Ativações, Erros, Chamadas API)
+- Detalhes completos da requisição e resposta da API
+- Indicador MOCK/REAL para cada log
+- Tempo de resposta da API
+
+### OperadoraService ✅ (NOVO)
+- Serviço isolado em /app/backend/services/operadora_service.py
+- Facilita troca entre mock e API real
+- Configurável via .env (USE_MOCK_API, OPERADORA_API_URL, OPERADORA_API_TOKEN)
+- Mock com probabilidades realistas (70% sucesso, 20% pendente, 10% erro)
 
 ## O que foi implementado
 
-### Backend (/app/backend/server.py)
-- 20+ endpoints REST
+### Backend (/app/backend/)
+- server.py: 20+ endpoints REST
+- services/operadora_service.py: Serviço isolado de integração
 - Autenticação JWT completa
 - CRUD para todas as entidades
-- Mock de API de operadora
-- Seed de dados de exemplo
-- Logs automáticos
+- Logs avançados com request/response
 
 ### Frontend (/app/frontend/src/)
 - 7 páginas completas
@@ -69,24 +79,23 @@ Criar um sistema web completo para gestão de telefonia móvel (MVNO), independe
 - Componentes Shadcn/UI
 - Responsivo
 
-### Dados de Exemplo
-- 4 clientes
-- 5 chips disponíveis
-- 4 planos (Básico 5GB, Essencial 10GB, Plus 20GB, Premium 50GB)
+## Configuração para API Real
 
-## APIs Mock (Operadora)
-A integração com operadora está SIMULADA com endpoints mock que retornam:
-- 70% sucesso (linha ativa com número)
-- 20% pendente (processando)
-- 10% erro (falha de comunicação)
+Para usar a API real da Surf Telecom:
+1. Editar /app/backend/.env:
+   - USE_MOCK_API="false"
+   - OPERADORA_API_URL="https://api.surftelecom.com.br"
+   - OPERADORA_API_TOKEN="seu-token-aqui"
+2. Implementar métodos _real_* em operadora_service.py
 
-**Para integração real**, substituir `MockOperadoraAPI` no server.py pela implementação real da Surf Telecom.
+## Dados de Teste
+- Credenciais: admin@mvno.com / admin123
 
 ## Backlog (Próximas Fases)
 
 ### P0 - Crítico
 - [ ] Integração real com API Surf Telecom
-- [ ] Dashboard de métricas avançadas
+- [ ] Dashboard de métricas avançadas com gráficos
 
 ### P1 - Alta Prioridade
 - [ ] Suporte a múltiplas empresas (multifilial)
@@ -104,9 +113,6 @@ A integração com operadora está SIMULADA com endpoints mock que retornam:
 - [ ] Integração com WhatsApp
 - [ ] Analytics avançados
 
-## Credenciais de Teste
-- **Admin**: admin@mvno.com / admin123
-
 ## Data de Implementação
-- Início: 31/03/2026
-- MVP Completo: 31/03/2026
+- MVP Inicial: 31/03/2026
+- Melhorias v2: 31/03/2026
