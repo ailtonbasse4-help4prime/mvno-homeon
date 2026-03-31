@@ -1,0 +1,102 @@
+{
+  "theme": "dark",
+  "archetype": "4_swiss_and_high_contrast",
+  "domain": "telecom_mvno_management",
+  "design_philosophy": {
+    "core_principles": [
+      "Control Room aesthetics: Density, Data Correlation, and Scanability",
+      "Strict grid hierarchy with generous negative space around dense tables",
+      "Color is function only: 95% monochrome, colors strictly for status (active/blocked) and primary actions",
+      "Technical, flat surfaces with sharp or subtle rounded corners (max 4px radius)",
+      "High contrast typography for absolute legibility of numbers (ICCID, CPF, Status)"
+    ]
+  },
+  "colors": {
+    "background": "#09090b",
+    "surface": "#18181b",
+    "border": "#27272a",
+    "primary": "#3b82f6",
+    "primary_hover": "#2563eb",
+    "text_primary": "#fafafa",
+    "text_secondary": "#a1a1aa",
+    "success": "#10b981",
+    "danger": "#ef4444",
+    "warning": "#f59e0b",
+    "neutral_tint": "#27272a"
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Chivo, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-3xl sm:text-4xl font-bold tracking-tight",
+      "h2": "text-xl sm:text-2xl font-bold tracking-tight",
+      "h3": "text-lg font-semibold",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "small": "text-xs font-medium uppercase tracking-[0.1em]",
+      "data_numbers": "font-mono text-sm tracking-tight"
+    }
+  },
+  "layout_and_spacing": {
+    "grid_strategy": "Control Room Protocol",
+    "spacing_scale": "p-4, p-6, p-8 for containers. Generous gap-6 between dashboard widgets.",
+    "border_radius": "rounded-sm (4px) to emphasize technical precision",
+    "sidebar": "w-64 fixed left navigation, rich dark background (bg-zinc-950) with 1px right border (border-zinc-800)"
+  },
+  "surfaces_and_micro_themes": {
+    "dashboard_cards": "bg-zinc-900 border border-zinc-800 rounded-sm hover:border-zinc-700 transition-colors",
+    "table_rows": "border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors",
+    "login_card": "bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 shadow-2xl rounded-md",
+    "buttons": "rounded-sm font-semibold transition-all hover:-translate-y-[1px]"
+  },
+  "components": {
+    "tables": "Dense, left-aligned, use JetBrains Mono for ICCID, CPF, and Phone numbers.",
+    "badges": {
+      "active": "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
+      "blocked": "bg-red-500/10 text-red-500 border border-red-500/20",
+      "pending": "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+    },
+    "forms": "Inputs use bg-zinc-950 border-zinc-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
+    "icons": "lucide-react, 18px size for standard buttons, 24px for dashboard metrics"
+  },
+  "media": {
+    "image_urls": {
+      "backgrounds": [
+        {
+          "url": "https://images.unsplash.com/photo-1762267683517-6e9bc20675e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwxfHxkYXJrJTIwdGVjaG5vbG9neSUyMGFic3RyYWN0JTIwZGF0YSUyMHNlcnZlcnxlbnwwfHx8fDE3NzQ5NzU3NDR8MA&ixlib=rb-4.1.0&q=85",
+          "description": "Abstract streaks of light at night",
+          "category": "login_background"
+        }
+      ],
+      "avatars": [
+        {
+          "url": "https://images.unsplash.com/photo-1629507313712-f21468afdf2e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NDk3NTY3M3ww&ixlib=rb-4.1.0&q=85",
+          "description": "Admin User Avatar",
+          "category": "user_avatar"
+        },
+        {
+          "url": "https://images.unsplash.com/photo-1581065178047-8ee15951ede6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NDk3NTY3M3ww&ixlib=rb-4.1.0&q=85",
+          "description": "Attendant User Avatar",
+          "category": "user_avatar"
+        }
+      ]
+    }
+  },
+  "accessibility_and_interactions": {
+    "hover_states": "All interactive elements must change background and text color explicitly on hover.",
+    "data_testid": "MANDATORY: All buttons, links, form inputs, and menu items MUST have data-testid attributes (e.g., data-testid='login-submit-button').",
+    "contrast": "Ensure text-zinc-400 meets 4.5:1 ratio against bg-zinc-900. Use text-zinc-300 if necessary for better legibility."
+  },
+  "instructions_to_main_agent": [
+    "Strictly use the Dark theme as configured. Do not implement a light theme.",
+    "Use Shadcn UI components extensively for Tables, Dialogs, Dropdowns, and Forms.",
+    "Do NOT use HTML native inputs (<select>, <input type='date'>); rely on Shadcn equivalents.",
+    "For the Sidebar navigation, use a rigid, uncollapsed state on desktop (w-64) for maximum efficiency.",
+    "In the SIM cards (Chips) and Lines management modules, visually distinguish active vs blocked statuses using the predefined Badge styles.",
+    "For the login page, use a split layout: left side with the provided technology abstract background image, right side with the login form.",
+    "Apply `data-testid` to all forms (e.g., 'client-form-submit'), table actions, and navigation links.",
+    "Use CSS variables in index.css to map the defined colors to Tailwind's HSL system for Shadcn compatibility (e.g., --background: 240 10% 3.9%;)."
+  ]
+}
