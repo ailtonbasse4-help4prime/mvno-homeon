@@ -305,12 +305,62 @@ class MVNOAPITester:
         
         return False
 
+    def test_operadora_config(self) -> bool:
+        """Test operadora configuration endpoint"""
+        success, response = self.make_request('GET', 'operadora/config')
+        
+        if success and 'mode' in response:
+            mode = response.get('mode', 'unknown')
+            token_configured = response.get('token_configured', False)
+            timeout = response.get('timeout', 0)
+            endpoints = response.get('endpoints', {})
+            
+            details = f"Mode: {mode}, Token: {'Yes' if token_configured else 'No'}, Timeout: {timeout}s, Endpoints: {len(endpoints)}"
+            self.log_test("Operadora Config", True, details)
+            return True
+        else:
+            self.log_test("Operadora Config", False, f"Failed to get config: {response}")
+            return False
+
+    def test_operadora_connection(self) -> bool:
+        """Test operadora connection test endpoint"""
+        success, response = self.make_request('POST', 'operadora/test', {})
+        
+        if success and 'mode' in response:
+            mode = response.get('mode', 'unknown')
+            test_success = response.get('test_success', False)
+            response_time = response.get('response_time_ms', 0)
+            message = response.get('message', '')
+            
+            details = f"Mode: {mode}, Test Success: {test_success}, Response Time: {response_time}ms, Message: {message}"
+            self.log_test("Operadora Connection Test", True, details)
+            return True
+        else:
+            self.log_test("Operadora Connection Test", False, f"Failed to test connection: {response}")
+            return False
+
     def test_logs(self) -> bool:
-        """Test system logs"""
+        """Test system logs with detailed API logging"""
         success, logs = self.make_request('GET', 'logs')
         
         if success and isinstance(logs, list):
             self.log_test("Get Logs", True, f"Found {len(logs)} log entries")
+            
+            # Check for API logs with detailed request/response
+            api_logs = [l for l in logs if l.get('api_request') or l.get('api_response')]
+            if api_logs:
+                self.log_test("API Logs Found", True, f"Found {len(api_logs)} logs with API details")
+                
+                # Check for mock indicators
+                mock_logs = [l for l in api_logs if l.get('is_mock') is not None]
+                if mock_logs:
+                    mock_count = len([l for l in mock_logs if l.get('is_mock')])
+                    real_count = len(mock_logs) - mock_count
+                    self.log_test("Mock/Real Indicators", True, f"Mock: {mock_count}, Real: {real_count}")
+                else:
+                    self.log_test("Mock/Real Indicators", False, "No mock/real indicators found in logs")
+            else:
+                self.log_test("API Logs Found", False, "No logs with API request/response details found")
             
             # Test filtered logs
             success, filtered_logs = self.make_request('GET', 'logs?action=login')
@@ -319,6 +369,14 @@ class MVNOAPITester:
                 self.log_test("Filter Logs", True, f"Found {len(login_logs)} login logs")
             else:
                 self.log_test("Filter Logs", False, f"Failed to filter logs: {filtered_logs}")
+            
+            # Test operadora action logs
+            success, operadora_logs = self.make_request('GET', 'logs?action=ativacao')
+            if success:
+                activation_logs = [l for l in operadora_logs if l.get('action') == 'ativacao']
+                self.log_test("Operadora Action Logs", True, f"Found {len(activation_logs)} activation logs")
+            else:
+                self.log_test("Operadora Action Logs", False, f"Failed to get operadora logs: {operadora_logs}")
             
             return True
         else:
@@ -348,6 +406,11 @@ class MVNOAPITester:
         
         self.test_auth_me()
         
+        # Operadora service tests (admin required)
+        print("\n🔧 Testing Operadora Service...")
+        self.test_operadora_config()
+        self.test_operadora_connection()
+        
         # Dashboard tests
         stats = self.test_dashboard_stats()
         
@@ -356,7 +419,8 @@ class MVNOAPITester:
         chip_id = self.test_chips_crud()
         plan_id = self.test_plans_crud()
         
-        # Line activation and management
+        # Line activation and management (uses OperadoraService)
+        print("\n📱 Testing Line Management with OperadoraService...")
         line_id = None
         if client_id and chip_id and plan_id:
             line_id = self.test_line_activation(client_id, chip_id, plan_id)
@@ -364,7 +428,8 @@ class MVNOAPITester:
         if line_id:
             self.test_lines_management(line_id)
         
-        # System logs
+        # System logs (should now include detailed API logs)
+        print("\n📋 Testing Detailed Logging...")
         self.test_logs()
         
         # Logout

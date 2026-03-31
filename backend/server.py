@@ -694,7 +694,12 @@ async def activate_line(data: ActivationRequest, request: Request):
     
     if result.success:
         # Update chip status based on result
-        chip_status = ChipStatus.ativado.value if result.status == OperadoraStatus.ATIVO else ChipStatus.ativado.value
+        if result.status == OperadoraStatus.ATIVO:
+            chip_status = ChipStatus.ativado.value
+        elif result.status == OperadoraStatus.BLOQUEADO:
+            chip_status = ChipStatus.bloqueado.value
+        else:
+            chip_status = ChipStatus.ativado.value  # Pendente também marca como ativado
         
         await db.chips.update_one(
             {"_id": ObjectId(data.chip_id)},
@@ -704,10 +709,14 @@ async def activate_line(data: ActivationRequest, request: Request):
             }}
         )
         
-        # Create line
+        # Create line with proper status
+        line_status = result.status
+        if isinstance(result.status, OperadoraStatus):
+            line_status = result.status.value
+        
         line_doc = {
             "numero": result.numero or "Pendente",
-            "status": result.status,
+            "status": line_status,
             "cliente_id": data.cliente_id,
             "chip_id": data.chip_id,
             "plano_id": data.plano_id,
@@ -717,7 +726,7 @@ async def activate_line(data: ActivationRequest, request: Request):
     
     return ActivationResponse(
         success=result.success,
-        status=result.status,
+        status=result.status if isinstance(result.status, str) else result.status.value,
         message=result.message,
         numero=result.numero,
         response_time_ms=result.response_time_ms
@@ -945,6 +954,36 @@ async def get_dashboard_stats(request: Request):
                 "created_at": log.get("created_at", datetime.now(timezone.utc)).isoformat()
             } for log in recent_logs
         ]
+    }
+
+# ==================== OPERADORA CONFIG ====================
+@api_router.get("/operadora/config")
+async def get_operadora_config(request: Request):
+    """Retorna configuração atual do serviço de operadora"""
+    await require_admin(request)
+    
+    return operadora_service.get_config_status()
+
+@api_router.post("/operadora/test")
+async def test_operadora_connection(request: Request):
+    """Testa conexão com a operadora (faz uma consulta de teste)"""
+    user = await require_admin(request)
+    
+    # Tenta fazer uma consulta de teste
+    test_numero = "11999999999"
+    result = await operadora_service.consultar_linha(
+        numero=test_numero,
+        db=db,
+        user_id=user["id"],
+        user_name=user["name"]
+    )
+    
+    return {
+        "mode": "mock" if operadora_service.use_mock else "real",
+        "test_success": result.success,
+        "response_time_ms": result.response_time_ms,
+        "message": result.message if result.success else f"Erro: {result.message}",
+        "error_code": result.error_code
     }
 
 # ==================== SEED DATA ====================
