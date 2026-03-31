@@ -245,8 +245,12 @@ class MockOperadoraAPI:
         """Simula ativação de chip na operadora"""
         import random
         
-        # Simula diferentes cenários
-        scenario = random.choice(["sucesso", "sucesso", "sucesso", "pendente", "erro"])
+        # Simula diferentes cenários (70% sucesso, 20% pendente, 10% erro)
+        scenario = random.choices(
+            ["sucesso", "pendente", "erro"],
+            weights=[70, 20, 10],
+            k=1
+        )[0]
         
         if scenario == "sucesso":
             numero = f"11{random.randint(900000000, 999999999)}"

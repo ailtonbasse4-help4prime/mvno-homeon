@@ -33,7 +33,7 @@ export function Linhas() {
 
   const fetchLinhas = useCallback(async () => {
     try {
-      const params = statusFilter ? { status: statusFilter } : {};
+      const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
       const response = await axios.get(`${API_URL}/api/linhas`, {
         params,
         withCredentials: true
@@ -137,7 +137,7 @@ export function Linhas() {
             <SelectValue placeholder="Todos" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
-            <SelectItem value="">Todos</SelectItem>
+            <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="ativo">Ativo</SelectItem>
             <SelectItem value="pendente">Pendente</SelectItem>
             <SelectItem value="bloqueado">Bloqueado</SelectItem>

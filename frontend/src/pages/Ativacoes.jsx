@@ -146,7 +146,7 @@ export function Ativacoes() {
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
                   {clientes.length === 0 ? (
-                    <SelectItem value="" disabled>Nenhum cliente ativo disponível</SelectItem>
+                    <SelectItem value="__none__" disabled>Nenhum cliente ativo disponível</SelectItem>
                   ) : (
                     clientes.map((cliente) => (
                       <SelectItem key={cliente.id} value={cliente.id}>
@@ -166,7 +166,7 @@ export function Ativacoes() {
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
                   {chips.length === 0 ? (
-                    <SelectItem value="" disabled>Nenhum chip disponível</SelectItem>
+                    <SelectItem value="__none__" disabled>Nenhum chip disponível</SelectItem>
                   ) : (
                     chips.map((chip) => (
                       <SelectItem key={chip.id} value={chip.id} className="font-mono">
@@ -186,7 +186,7 @@ export function Ativacoes() {
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
                   {planos.length === 0 ? (
-                    <SelectItem value="" disabled>Nenhum plano disponível</SelectItem>
+                    <SelectItem value="__none__" disabled>Nenhum plano disponível</SelectItem>
                   ) : (
                     planos.map((plano) => (
                       <SelectItem key={plano.id} value={plano.id}>

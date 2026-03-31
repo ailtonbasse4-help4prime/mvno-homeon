@@ -36,7 +36,7 @@ export function Chips() {
 
   const fetchChips = useCallback(async () => {
     try {
-      const params = statusFilter ? { status: statusFilter } : {};
+      const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
       const response = await axios.get(`${API_URL}/api/chips`, {
         params,
         withCredentials: true
@@ -143,7 +143,7 @@ export function Chips() {
             <SelectValue placeholder="Todos" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
-            <SelectItem value="">Todos</SelectItem>
+            <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="disponivel">Disponível</SelectItem>
             <SelectItem value="ativado">Ativado</SelectItem>
             <SelectItem value="bloqueado">Bloqueado</SelectItem>

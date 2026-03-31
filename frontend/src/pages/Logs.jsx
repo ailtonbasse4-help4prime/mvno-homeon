@@ -20,7 +20,7 @@ export function Logs() {
   const fetchLogs = useCallback(async () => {
     try {
       const params = { limit: 100 };
-      if (actionFilter) params.action = actionFilter;
+      if (actionFilter && actionFilter !== 'all') params.action = actionFilter;
       
       const response = await axios.get(`${API_URL}/api/logs`, {
         params,
@@ -110,7 +110,7 @@ export function Logs() {
             <SelectValue placeholder="Todas as ações" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
-            <SelectItem value="">Todas as ações</SelectItem>
+            <SelectItem value="all">Todas as ações</SelectItem>
             <SelectItem value="ativacao">Ativação</SelectItem>
             <SelectItem value="bloqueio">Bloqueio</SelectItem>
             <SelectItem value="desbloqueio">Desbloqueio</SelectItem>
