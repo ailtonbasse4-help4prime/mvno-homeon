@@ -10,6 +10,25 @@ Criar um sistema web completo para gestão de telefonia móvel (MVNO), independe
 - **Autenticação**: JWT com httpOnly cookies
 - **Integração**: OperadoraService com padrão Adapter (Mock/Real)
 
+## Modelo de Dados (Planos vs Ofertas)
+
+### Planos (Técnicos - sem valor comercial)
+- id, nome, franquia, descricao, created_at
+- Exemplo: "Plano 10GB" com franquia "10GB"
+
+### Ofertas (Comerciais - com valor)
+- id, nome, plano_id (referência ao plano técnico), valor, descricao, ativo, created_at
+- Exemplo: "Chip 10GB Essencial" R$ 49,90 vinculado ao "Plano 10GB"
+
+### Chips (vinculados a Ofertas)
+- id, iccid, status, oferta_id (obrigatório), cliente_id, created_at
+- Cada chip DEVE estar vinculado a uma oferta
+
+### Ativação (automatizada)
+- Entrada: cliente_id + chip_id (SEM plano_id manual)
+- O sistema detecta automaticamente: chip -> oferta -> plano
+- Resultado: linha criada com número, status, oferta e plano
+
 ## OperadoraService - Arquitetura
 
 ### Estrutura
@@ -21,102 +40,80 @@ Criar um sistema web completo para gestão de telefonia móvel (MVNO), independe
 └── OperadoraService (Serviço principal com logs)
 ```
 
-### Funções Disponíveis
-- `ativar_chip(cpf, nome, iccid, plano, ...)` - Ativa chip na operadora
-- `consultar_linha(numero)` - Consulta status da linha
-- `bloquear_linha(numero, motivo)` - Bloqueia linha
-- `desbloquear_linha(numero)` - Desbloqueia linha
-
 ### Configuração (.env)
 ```
-USE_MOCK_API="true"           # "true" para mock, "false" para real
+USE_MOCK_API="true"
 OPERADORA_API_URL="https://api.surftelecom.com.br"
-OPERADORA_API_TOKEN=""        # Token Bearer
-OPERADORA_TIMEOUT="30"        # Timeout em segundos
-
-# Endpoints configuráveis
-ENDPOINT_ATIVAR_CHIP="/api/v1/chip/ativar"
-ENDPOINT_CONSULTAR_LINHA="/api/v1/linha/status"
-ENDPOINT_BLOQUEAR_LINHA="/api/v1/linha/bloquear"
-ENDPOINT_DESBLOQUEAR_LINHA="/api/v1/linha/desbloquear"
+OPERADORA_API_TOKEN=""
+OPERADORA_TIMEOUT="30"
 ```
-
-### Tratamento de Erros
-- `ERR_TIMEOUT` - Timeout de requisição
-- `ERR_CONNECTION` - Erro de conexão
-- `ERR_AUTH` - Erro de autenticação (401/403)
-- `ERR_NOT_FOUND` - Recurso não encontrado (404)
-- `ERR_VALIDATION` - Erro de validação (4xx)
-- `ERR_SERVER` - Erro do servidor (5xx)
-- `ERR_UNKNOWN` - Erro desconhecido
-
-### Logs Detalhados
-Cada chamada registra:
-- Endpoint chamado
-- Método HTTP
-- Payload enviado
-- Resposta completa
-- Tempo de resposta (ms)
-- Código de erro (se houver)
-- Indicador mock/real
-
-## Status Suportados
-- `ativo` - Linha funcionando
-- `pendente` - Aguardando processamento
-- `bloqueado` - Linha suspensa
-- `erro` - Falha na operação
 
 ## Endpoints da API
 
-### Operadora
-- `GET /api/operadora/config` - Configuração atual do serviço
-- `POST /api/operadora/test` - Testa conexão com operadora
+### Auth
+- POST /api/auth/login, /api/auth/register, /api/auth/logout
+- GET /api/auth/me, POST /api/auth/refresh
 
-### Core
-- Auth: login, logout, register, me, refresh
-- Clientes: CRUD completo
-- Chips: CRUD (sem update)
-- Planos: CRUD (admin only)
-- Ativação: POST /api/ativacao
-- Linhas: GET, status, bloquear, desbloquear
-- Logs: GET com filtros
-- Dashboard: stats
+### Planos (técnicos)
+- GET/POST /api/planos, PUT/DELETE /api/planos/{id}
 
-## Como Usar API Real
+### Ofertas (comerciais)
+- GET/POST /api/ofertas, GET/PUT/DELETE /api/ofertas/{id}
 
-1. Obter credenciais da operadora (Surf Telecom)
-2. Editar `/app/backend/.env`:
-   ```
-   USE_MOCK_API="false"
-   OPERADORA_API_URL="https://api.surftelecom.com.br"
-   OPERADORA_API_TOKEN="seu-token-bearer"
-   ```
-3. Reiniciar o backend: `sudo supervisorctl restart backend`
-4. Verificar: `GET /api/operadora/config`
+### Chips
+- GET/POST /api/chips, DELETE /api/chips/{id}
+
+### Ativação
+- POST /api/ativacao (cliente_id + chip_id)
+
+### Linhas
+- GET /api/linhas, GET /api/linhas/{id}/status
+- POST /api/linhas/{id}/bloquear, POST /api/linhas/{id}/desbloquear
+
+### Logs, Dashboard, Operadora
+- GET /api/logs, GET /api/dashboard/stats
+- GET /api/operadora/config, POST /api/operadora/test
 
 ## Credenciais de Teste
 - **Admin**: admin@mvno.com / admin123
 
+## O que foi implementado
+
+### MVP Inicial (31/03/2026)
+- [x] JWT Auth com cookies httpOnly + brute force protection
+- [x] CRUD completo: Clientes, Chips, Planos
+- [x] Sistema de ativação de linhas
+- [x] Gerenciamento de linhas (bloquear/desbloquear)
+- [x] Logs detalhados com payloads de API
+- [x] Dashboard com estatísticas
+- [x] IccidInput inteligente com autocomplete
+
+### OperadoraService v2 (31/03/2026)
+- [x] Interface abstrata com Mock e Real adapters
+- [x] Configuração via .env
+- [x] Tratamento completo de erros
+- [x] Logs de API com tempo de resposta
+
+### Reestruturação Planos vs Ofertas (01/04/2026)
+- [x] Backend reescrito: Planos (técnico) e Ofertas (comercial)
+- [x] Nova página Ofertas CRUD
+- [x] Planos sem campo de valor
+- [x] Chips vinculados obrigatoriamente a ofertas
+- [x] Ativação automática: detecta oferta/plano pelo ICCID
+- [x] IccidInput mostra info da oferta nas sugestões
+- [x] Dashboard com stats de ofertas
+- [x] Testes: Backend 100% (19/19), Frontend 100%
+
 ## Backlog
 
-### P0 - Pronto para Produção
-- [x] OperadoraService com interface abstrata
-- [x] Mock para desenvolvimento
-- [x] Real adapter com httpx
-- [x] Tratamento completo de erros
-- [x] Logs detalhados
-- [x] Configuração via .env
-
 ### P1 - Alta Prioridade
+- [ ] Leitor de código de barras/QR code para ICCID na ativação
+- [ ] Webhooks para callbacks da operadora (auto-update status)
 - [ ] Integração real com Surf Telecom
-- [ ] Webhook para callbacks
-- [ ] Retry automático em falhas
 
 ### P2 - Média Prioridade
+- [ ] Histórico de ativações recentes
 - [ ] Cache de consultas
 - [ ] Rate limiting
 - [ ] Dashboard de métricas de API
-
-## Data de Implementação
-- MVP Inicial: 31/03/2026
-- OperadoraService v2: 31/03/2026
+- [ ] Retry automático em falhas
