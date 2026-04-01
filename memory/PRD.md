@@ -153,6 +153,18 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Coluna Categoria com badges na tabela de chips
 - [x] Indicacao "Sem oferta" em amarelo para chips sem vinculo
 
+### Carteira Movel - Asaas (01/04/2026)
+- [x] Servico AsaasService com adapter (sandbox/production)
+- [x] Modelos: cobrancas, assinaturas no MongoDB
+- [x] CRUD cobrancas avulsas (PIX/Boleto/Cartao)
+- [x] CRUD assinaturas recorrentes (Mensal/Trimestral/etc)
+- [x] Dashboard financeiro (Receita, Pendente, Vencido, Assinaturas)
+- [x] Endpoint webhook para callbacks do Asaas
+- [x] Badge indicador de status Asaas (Pendente/Conectado)
+- [x] Paginas frontend: Carteira Movel + Assinaturas
+- [x] Sidebar atualizado com novos links
+- [x] Preparado para ativacao: basta definir ASAAS_API_KEY no .env
+
 ## Backlog
 
 ### P0 - Concluido
@@ -160,11 +172,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] USE_MOCK_API=false ativo
 
 ### P1 - Alta Prioridade
+- [ ] Configurar chave API do Asaas (sandbox/producao)
 - [ ] Leitor codigo de barras/QR code para ICCID
 - [ ] Webhooks para callbacks da operadora
 - [ ] Retry automatico para ativacoes pendentes
 
 ### P2 - Media Prioridade
+- [ ] Bloqueio automatico por inadimplencia (via Carteira Movel)
 - [ ] Historico de ativacoes recentes
 - [ ] Consulta de saldo e consumo
 - [ ] Dashboard metricas API
+- [ ] Pix Automatico (quando disponivel no Asaas)
