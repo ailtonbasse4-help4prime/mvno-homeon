@@ -54,6 +54,7 @@ class ClientStatus(str, Enum):
 
 class ChipStatus(str, Enum):
     disponivel = "disponivel"
+    reservado = "reservado"
     ativado = "ativado"
     bloqueado = "bloqueado"
 
@@ -74,11 +75,8 @@ class LogAction(str, Enum):
     api_call = "api_call"
 
 # ==================== MODELS ====================
-class UserBase(BaseModel):
-    email: EmailStr
-    name: str
-    role: UserRole = UserRole.atendente
 
+# User Models
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -96,70 +94,105 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime
 
-class ClientBase(BaseModel):
+# Client Models
+class ClientCreate(BaseModel):
     nome: str
     cpf: str
     telefone: str
     status: ClientStatus = ClientStatus.ativo
 
-class ClientCreate(ClientBase):
-    pass
-
-class ClientResponse(ClientBase):
+class ClientResponse(BaseModel):
     id: str
+    nome: str
+    cpf: str
+    telefone: str
+    status: str
     created_at: datetime
 
-class ChipBase(BaseModel):
-    iccid: str
-    status: ChipStatus = ChipStatus.disponivel
-    cliente_id: Optional[str] = None
+# Plan Models (Técnico - sem valor)
+class PlanCreate(BaseModel):
+    nome: str
+    franquia: str  # Ex: "10GB"
+    descricao: Optional[str] = None
 
+class PlanResponse(BaseModel):
+    id: str
+    nome: str
+    franquia: str
+    descricao: Optional[str] = None
+    created_at: datetime
+
+# Offer Models (Comercial - com valor)
+class OfferCreate(BaseModel):
+    nome: str
+    plano_id: str
+    valor: float
+    descricao: Optional[str] = None
+    ativo: bool = True
+
+class OfferResponse(BaseModel):
+    id: str
+    nome: str
+    plano_id: str
+    plano_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    valor: float
+    descricao: Optional[str] = None
+    ativo: bool
+    created_at: datetime
+
+# Chip Models (com oferta_id)
 class ChipCreate(BaseModel):
     iccid: str
+    oferta_id: str  # Obrigatório vincular a uma oferta
 
-class ChipResponse(ChipBase):
+class ChipResponse(BaseModel):
     id: str
-    created_at: datetime
+    iccid: str
+    status: str
+    oferta_id: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    plano_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    valor: Optional[float] = None
+    cliente_id: Optional[str] = None
     cliente_nome: Optional[str] = None
-
-class PlanBase(BaseModel):
-    nome: str
-    valor: float
-    franquia: str  # Ex: "10GB"
-
-class PlanCreate(PlanBase):
-    pass
-
-class PlanResponse(PlanBase):
-    id: str
     created_at: datetime
 
-class LineBase(BaseModel):
+# Line Models
+class LineResponse(BaseModel):
+    id: str
     numero: str
-    status: LineStatus = LineStatus.pendente
+    status: str
     cliente_id: str
     chip_id: str
     plano_id: str
-
-class LineResponse(LineBase):
-    id: str
-    created_at: datetime
+    oferta_id: Optional[str] = None
     cliente_nome: Optional[str] = None
     plano_nome: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    franquia: Optional[str] = None
     iccid: Optional[str] = None
+    created_at: datetime
 
+# Activation Models (simplificado - apenas cliente e chip)
 class ActivationRequest(BaseModel):
     cliente_id: str
     chip_id: str
-    plano_id: str
+    # plano_id removido - vem da oferta do chip
 
 class ActivationResponse(BaseModel):
     success: bool
     status: str
     message: str
     numero: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    plano_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    valor: Optional[float] = None
     response_time_ms: Optional[int] = None
 
+# Log Models
 class LogEntry(BaseModel):
     id: str
     action: str
@@ -295,7 +328,6 @@ async def login(data: UserLogin, response: Response, request: Request):
     
     user = await db.usuarios.find_one({"email": email})
     if not user or not verify_password(data.password, user["password_hash"]):
-        # Increment failed attempts
         await db.login_attempts.update_one(
             {"identifier": identifier},
             {
@@ -306,7 +338,6 @@ async def login(data: UserLogin, response: Response, request: Request):
         )
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     
-    # Clear failed attempts on success
     await db.login_attempts.delete_one({"identifier": identifier})
     
     user_id = str(user["_id"])
@@ -394,7 +425,7 @@ async def list_clients(request: Request, search: Optional[str] = None):
             ]
         }
     
-    clients = await db.clientes.find(query, {"_id": 1, "nome": 1, "cpf": 1, "telefone": 1, "status": 1, "created_at": 1}).to_list(1000)
+    clients = await db.clientes.find(query).to_list(1000)
     
     return [
         ClientResponse(
@@ -411,7 +442,6 @@ async def list_clients(request: Request, search: Optional[str] = None):
 async def create_client(data: ClientCreate, request: Request):
     user = await get_current_user(request)
     
-    # Check if CPF already exists
     existing = await db.clientes.find_one({"cpf": data.cpf})
     if existing:
         raise HTTPException(status_code=400, detail="CPF já cadastrado")
@@ -432,7 +462,7 @@ async def create_client(data: ClientCreate, request: Request):
         nome=data.nome,
         cpf=data.cpf,
         telefone=data.telefone,
-        status=data.status,
+        status=data.status.value,
         created_at=client_doc["created_at"]
     )
 
@@ -461,7 +491,6 @@ async def update_client(client_id: str, data: ClientCreate, request: Request):
     if not client:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     
-    # Check if CPF already exists for another client
     existing = await db.clientes.find_one({"cpf": data.cpf, "_id": {"$ne": ObjectId(client_id)}})
     if existing:
         raise HTTPException(status_code=400, detail="CPF já cadastrado para outro cliente")
@@ -483,7 +512,7 @@ async def update_client(client_id: str, data: ClientCreate, request: Request):
         nome=data.nome,
         cpf=data.cpf,
         telefone=data.telefone,
-        status=data.status,
+        status=data.status.value,
         created_at=client.get("created_at", datetime.now(timezone.utc))
     )
 
@@ -500,29 +529,288 @@ async def delete_client(client_id: str, request: Request):
     
     return {"message": "Cliente removido com sucesso"}
 
-# ==================== CHIPS ROUTES ====================
+# ==================== PLANS ROUTES (Técnico - sem valor) ====================
+@api_router.get("/planos", response_model=List[PlanResponse])
+async def list_plans(request: Request):
+    await get_current_user(request)
+    
+    plans = await db.planos.find({}).to_list(1000)
+    
+    return [
+        PlanResponse(
+            id=str(p["_id"]),
+            nome=p["nome"],
+            franquia=p["franquia"],
+            descricao=p.get("descricao"),
+            created_at=p.get("created_at", datetime.now(timezone.utc))
+        ) for p in plans
+    ]
+
+@api_router.post("/planos", response_model=PlanResponse)
+async def create_plan(data: PlanCreate, request: Request):
+    user = await require_admin(request)
+    
+    plan_doc = {
+        "nome": data.nome,
+        "franquia": data.franquia,
+        "descricao": data.descricao,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.planos.insert_one(plan_doc)
+    
+    await create_log("cadastro", f"Plano técnico cadastrado: {data.nome} ({data.franquia})", user["id"], user["name"])
+    
+    return PlanResponse(
+        id=str(result.inserted_id),
+        nome=data.nome,
+        franquia=data.franquia,
+        descricao=data.descricao,
+        created_at=plan_doc["created_at"]
+    )
+
+@api_router.put("/planos/{plan_id}", response_model=PlanResponse)
+async def update_plan(plan_id: str, data: PlanCreate, request: Request):
+    user = await require_admin(request)
+    
+    plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    
+    await db.planos.update_one(
+        {"_id": ObjectId(plan_id)},
+        {"$set": {
+            "nome": data.nome,
+            "franquia": data.franquia,
+            "descricao": data.descricao
+        }}
+    )
+    
+    await create_log("cadastro", f"Plano técnico atualizado: {data.nome}", user["id"], user["name"])
+    
+    return PlanResponse(
+        id=plan_id,
+        nome=data.nome,
+        franquia=data.franquia,
+        descricao=data.descricao,
+        created_at=plan.get("created_at", datetime.now(timezone.utc))
+    )
+
+@api_router.delete("/planos/{plan_id}")
+async def delete_plan(plan_id: str, request: Request):
+    user = await require_admin(request)
+    
+    plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    
+    # Check if plan is in use by any offer
+    offer_using = await db.ofertas.find_one({"plano_id": plan_id})
+    if offer_using:
+        raise HTTPException(status_code=400, detail="Plano está vinculado a ofertas e não pode ser removido")
+    
+    await db.planos.delete_one({"_id": ObjectId(plan_id)})
+    await create_log("cadastro", f"Plano técnico removido: {plan['nome']}", user["id"], user["name"])
+    
+    return {"message": "Plano removido com sucesso"}
+
+# ==================== OFFERS ROUTES (Comercial - com valor) ====================
+@api_router.get("/ofertas", response_model=List[OfferResponse])
+async def list_offers(request: Request, ativo: Optional[bool] = None):
+    await get_current_user(request)
+    
+    query = {}
+    if ativo is not None:
+        query["ativo"] = ativo
+    
+    offers = await db.ofertas.find(query).to_list(1000)
+    
+    result = []
+    for o in offers:
+        plano_nome = None
+        franquia = None
+        if o.get("plano_id"):
+            plano = await db.planos.find_one({"_id": ObjectId(o["plano_id"])})
+            if plano:
+                plano_nome = plano["nome"]
+                franquia = plano["franquia"]
+        
+        result.append(OfferResponse(
+            id=str(o["_id"]),
+            nome=o["nome"],
+            plano_id=o["plano_id"],
+            plano_nome=plano_nome,
+            franquia=franquia,
+            valor=o["valor"],
+            descricao=o.get("descricao"),
+            ativo=o.get("ativo", True),
+            created_at=o.get("created_at", datetime.now(timezone.utc))
+        ))
+    
+    return result
+
+@api_router.get("/ofertas/{offer_id}", response_model=OfferResponse)
+async def get_offer(offer_id: str, request: Request):
+    await get_current_user(request)
+    
+    offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Oferta não encontrada")
+    
+    plano_nome = None
+    franquia = None
+    if offer.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(offer["plano_id"])})
+        if plano:
+            plano_nome = plano["nome"]
+            franquia = plano["franquia"]
+    
+    return OfferResponse(
+        id=str(offer["_id"]),
+        nome=offer["nome"],
+        plano_id=offer["plano_id"],
+        plano_nome=plano_nome,
+        franquia=franquia,
+        valor=offer["valor"],
+        descricao=offer.get("descricao"),
+        ativo=offer.get("ativo", True),
+        created_at=offer.get("created_at", datetime.now(timezone.utc))
+    )
+
+@api_router.post("/ofertas", response_model=OfferResponse)
+async def create_offer(data: OfferCreate, request: Request):
+    user = await require_admin(request)
+    
+    # Validate plano exists
+    plano = await db.planos.find_one({"_id": ObjectId(data.plano_id)})
+    if not plano:
+        raise HTTPException(status_code=400, detail="Plano não encontrado")
+    
+    offer_doc = {
+        "nome": data.nome,
+        "plano_id": data.plano_id,
+        "valor": data.valor,
+        "descricao": data.descricao,
+        "ativo": data.ativo,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.ofertas.insert_one(offer_doc)
+    
+    await create_log("cadastro", f"Oferta cadastrada: {data.nome} - R$ {data.valor:.2f}", user["id"], user["name"])
+    
+    return OfferResponse(
+        id=str(result.inserted_id),
+        nome=data.nome,
+        plano_id=data.plano_id,
+        plano_nome=plano["nome"],
+        franquia=plano["franquia"],
+        valor=data.valor,
+        descricao=data.descricao,
+        ativo=data.ativo,
+        created_at=offer_doc["created_at"]
+    )
+
+@api_router.put("/ofertas/{offer_id}", response_model=OfferResponse)
+async def update_offer(offer_id: str, data: OfferCreate, request: Request):
+    user = await require_admin(request)
+    
+    offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Oferta não encontrada")
+    
+    # Validate plano exists
+    plano = await db.planos.find_one({"_id": ObjectId(data.plano_id)})
+    if not plano:
+        raise HTTPException(status_code=400, detail="Plano não encontrado")
+    
+    await db.ofertas.update_one(
+        {"_id": ObjectId(offer_id)},
+        {"$set": {
+            "nome": data.nome,
+            "plano_id": data.plano_id,
+            "valor": data.valor,
+            "descricao": data.descricao,
+            "ativo": data.ativo
+        }}
+    )
+    
+    await create_log("cadastro", f"Oferta atualizada: {data.nome}", user["id"], user["name"])
+    
+    return OfferResponse(
+        id=offer_id,
+        nome=data.nome,
+        plano_id=data.plano_id,
+        plano_nome=plano["nome"],
+        franquia=plano["franquia"],
+        valor=data.valor,
+        descricao=data.descricao,
+        ativo=data.ativo,
+        created_at=offer.get("created_at", datetime.now(timezone.utc))
+    )
+
+@api_router.delete("/ofertas/{offer_id}")
+async def delete_offer(offer_id: str, request: Request):
+    user = await require_admin(request)
+    
+    offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Oferta não encontrada")
+    
+    # Check if offer is in use by any chip
+    chip_using = await db.chips.find_one({"oferta_id": offer_id})
+    if chip_using:
+        raise HTTPException(status_code=400, detail="Oferta está vinculada a chips e não pode ser removida")
+    
+    await db.ofertas.delete_one({"_id": ObjectId(offer_id)})
+    await create_log("cadastro", f"Oferta removida: {offer['nome']}", user["id"], user["name"])
+    
+    return {"message": "Oferta removida com sucesso"}
+
+# ==================== CHIPS ROUTES (com oferta_id) ====================
 @api_router.get("/chips", response_model=List[ChipResponse])
-async def list_chips(request: Request, status: Optional[str] = None):
+async def list_chips(request: Request, status: Optional[str] = None, oferta_id: Optional[str] = None):
     await get_current_user(request)
     
     query = {}
     if status:
         query["status"] = status
+    if oferta_id:
+        query["oferta_id"] = oferta_id
     
     chips = await db.chips.find(query).to_list(1000)
     
     result = []
     for chip in chips:
         cliente_nome = None
+        oferta_nome = None
+        plano_nome = None
+        franquia = None
+        valor = None
+        
         if chip.get("cliente_id"):
             cliente = await db.clientes.find_one({"_id": ObjectId(chip["cliente_id"])})
             if cliente:
                 cliente_nome = cliente["nome"]
         
+        if chip.get("oferta_id"):
+            oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+            if oferta:
+                oferta_nome = oferta["nome"]
+                valor = oferta["valor"]
+                if oferta.get("plano_id"):
+                    plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+                    if plano:
+                        plano_nome = plano["nome"]
+                        franquia = plano["franquia"]
+        
         result.append(ChipResponse(
             id=str(chip["_id"]),
             iccid=chip["iccid"],
             status=chip["status"],
+            oferta_id=chip.get("oferta_id"),
+            oferta_nome=oferta_nome,
+            plano_nome=plano_nome,
+            franquia=franquia,
+            valor=valor,
             cliente_id=chip.get("cliente_id"),
             cliente_nome=cliente_nome,
             created_at=chip.get("created_at", datetime.now(timezone.utc))
@@ -534,24 +822,48 @@ async def list_chips(request: Request, status: Optional[str] = None):
 async def create_chip(data: ChipCreate, request: Request):
     user = await get_current_user(request)
     
+    # Validate ICCID unique
     existing = await db.chips.find_one({"iccid": data.iccid})
     if existing:
         raise HTTPException(status_code=400, detail="ICCID já cadastrado")
     
+    # Validate offer exists
+    oferta = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta não encontrada")
+    
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta não está ativa")
+    
     chip_doc = {
         "iccid": data.iccid,
         "status": ChipStatus.disponivel.value,
+        "oferta_id": data.oferta_id,
         "cliente_id": None,
         "created_at": datetime.now(timezone.utc)
     }
     result = await db.chips.insert_one(chip_doc)
     
-    await create_log("cadastro", f"Chip cadastrado: {data.iccid}", user["id"], user["name"])
+    # Get offer and plan info
+    plano_nome = None
+    franquia = None
+    if oferta.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+        if plano:
+            plano_nome = plano["nome"]
+            franquia = plano["franquia"]
+    
+    await create_log("cadastro", f"Chip cadastrado: {data.iccid} - Oferta: {oferta['nome']}", user["id"], user["name"])
     
     return ChipResponse(
         id=str(result.inserted_id),
         iccid=data.iccid,
-        status=ChipStatus.disponivel,
+        status=ChipStatus.disponivel.value,
+        oferta_id=data.oferta_id,
+        oferta_nome=oferta["nome"],
+        plano_nome=plano_nome,
+        franquia=franquia,
+        valor=oferta["valor"],
         cliente_id=None,
         cliente_nome=None,
         created_at=chip_doc["created_at"]
@@ -573,90 +885,6 @@ async def delete_chip(chip_id: str, request: Request):
     
     return {"message": "Chip removido com sucesso"}
 
-# ==================== PLANS ROUTES ====================
-@api_router.get("/planos", response_model=List[PlanResponse])
-async def list_plans(request: Request):
-    await get_current_user(request)
-    
-    plans = await db.planos.find({}).to_list(1000)
-    
-    return [
-        PlanResponse(
-            id=str(p["_id"]),
-            nome=p["nome"],
-            valor=p["valor"],
-            franquia=p["franquia"],
-            created_at=p.get("created_at", datetime.now(timezone.utc))
-        ) for p in plans
-    ]
-
-@api_router.post("/planos", response_model=PlanResponse)
-async def create_plan(data: PlanCreate, request: Request):
-    user = await require_admin(request)
-    
-    plan_doc = {
-        "nome": data.nome,
-        "valor": data.valor,
-        "franquia": data.franquia,
-        "created_at": datetime.now(timezone.utc)
-    }
-    result = await db.planos.insert_one(plan_doc)
-    
-    await create_log("cadastro", f"Plano cadastrado: {data.nome}", user["id"], user["name"])
-    
-    return PlanResponse(
-        id=str(result.inserted_id),
-        nome=data.nome,
-        valor=data.valor,
-        franquia=data.franquia,
-        created_at=plan_doc["created_at"]
-    )
-
-@api_router.put("/planos/{plan_id}", response_model=PlanResponse)
-async def update_plan(plan_id: str, data: PlanCreate, request: Request):
-    user = await require_admin(request)
-    
-    plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plano não encontrado")
-    
-    await db.planos.update_one(
-        {"_id": ObjectId(plan_id)},
-        {"$set": {
-            "nome": data.nome,
-            "valor": data.valor,
-            "franquia": data.franquia
-        }}
-    )
-    
-    await create_log("cadastro", f"Plano atualizado: {data.nome}", user["id"], user["name"])
-    
-    return PlanResponse(
-        id=plan_id,
-        nome=data.nome,
-        valor=data.valor,
-        franquia=data.franquia,
-        created_at=plan.get("created_at", datetime.now(timezone.utc))
-    )
-
-@api_router.delete("/planos/{plan_id}")
-async def delete_plan(plan_id: str, request: Request):
-    user = await require_admin(request)
-    
-    plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plano não encontrado")
-    
-    # Check if plan is in use
-    line_using = await db.linhas.find_one({"plano_id": plan_id})
-    if line_using:
-        raise HTTPException(status_code=400, detail="Plano está em uso e não pode ser removido")
-    
-    await db.planos.delete_one({"_id": ObjectId(plan_id)})
-    await create_log("cadastro", f"Plano removido: {plan['nome']}", user["id"], user["name"])
-    
-    return {"message": "Plano removido com sucesso"}
-
 # ==================== ACTIVATION ROUTES ====================
 @api_router.post("/ativacao", response_model=ActivationResponse)
 async def activate_line(data: ActivationRequest, request: Request):
@@ -667,39 +895,62 @@ async def activate_line(data: ActivationRequest, request: Request):
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     
+    if cliente["status"] != ClientStatus.ativo.value:
+        raise HTTPException(status_code=400, detail="Cliente não está ativo")
+    
     # Get chip
     chip = await db.chips.find_one({"_id": ObjectId(data.chip_id)})
     if not chip:
         raise HTTPException(status_code=404, detail="Chip não encontrado")
     
     if chip["status"] != ChipStatus.disponivel.value:
-        raise HTTPException(status_code=400, detail="Chip não está disponível para ativação")
+        status_msg = {
+            ChipStatus.ativado.value: "Chip já está ativado",
+            ChipStatus.bloqueado.value: "Chip está bloqueado",
+            ChipStatus.reservado.value: "Chip está reservado"
+        }
+        raise HTTPException(status_code=400, detail=status_msg.get(chip["status"], f"Chip com status inválido: {chip['status']}"))
     
-    # Get plan
-    plano = await db.planos.find_one({"_id": ObjectId(data.plano_id)})
+    # Get offer from chip
+    if not chip.get("oferta_id"):
+        raise HTTPException(status_code=400, detail="Chip não possui oferta vinculada")
+    
+    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta do chip não encontrada")
+    
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta do chip não está ativa")
+    
+    # Get plan from offer
+    if not oferta.get("plano_id"):
+        raise HTTPException(status_code=400, detail="Oferta não possui plano vinculado")
+    
+    plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
     if not plano:
-        raise HTTPException(status_code=404, detail="Plano não encontrado")
+        raise HTTPException(status_code=400, detail="Plano da oferta não encontrado")
     
-    # Call operadora service (usa mock ou API real)
+    # Call operadora service
     result = await operadora_service.ativar_chip(
         cpf=cliente["cpf"],
         nome=cliente["nome"],
         iccid=chip["iccid"],
         plano=plano["nome"],
-        plano_id=data.plano_id,
+        plano_id=oferta["plano_id"],
+        telefone=cliente.get("telefone"),
         db=db,
         user_id=user["id"],
         user_name=user["name"]
     )
     
     if result.success:
-        # Update chip status based on result
-        if result.status == OperadoraStatus.ATIVO:
+        # Update chip status
+        if result.status == OperadoraStatus.ATIVO or result.status == "ativo":
             chip_status = ChipStatus.ativado.value
-        elif result.status == OperadoraStatus.BLOQUEADO:
+        elif result.status == OperadoraStatus.BLOQUEADO or result.status == "bloqueado":
             chip_status = ChipStatus.bloqueado.value
         else:
-            chip_status = ChipStatus.ativado.value  # Pendente também marca como ativado
+            chip_status = ChipStatus.ativado.value
         
         await db.chips.update_one(
             {"_id": ObjectId(data.chip_id)},
@@ -709,9 +960,9 @@ async def activate_line(data: ActivationRequest, request: Request):
             }}
         )
         
-        # Create line with proper status
+        # Create line
         line_status = result.status
-        if isinstance(result.status, OperadoraStatus):
+        if hasattr(result.status, 'value'):
             line_status = result.status.value
         
         line_doc = {
@@ -719,7 +970,8 @@ async def activate_line(data: ActivationRequest, request: Request):
             "status": line_status,
             "cliente_id": data.cliente_id,
             "chip_id": data.chip_id,
-            "plano_id": data.plano_id,
+            "plano_id": oferta["plano_id"],
+            "oferta_id": chip["oferta_id"],
             "created_at": datetime.now(timezone.utc)
         }
         await db.linhas.insert_one(line_doc)
@@ -729,6 +981,10 @@ async def activate_line(data: ActivationRequest, request: Request):
         status=result.status if isinstance(result.status, str) else result.status.value,
         message=result.message,
         numero=result.numero,
+        oferta_nome=oferta["nome"],
+        plano_nome=plano["nome"],
+        franquia=plano["franquia"],
+        valor=oferta["valor"],
         response_time_ms=result.response_time_ms
     )
 
@@ -747,6 +1003,8 @@ async def list_lines(request: Request, status: Optional[str] = None):
     for line in lines:
         cliente_nome = None
         plano_nome = None
+        oferta_nome = None
+        franquia = None
         iccid = None
         
         if line.get("cliente_id"):
@@ -758,6 +1016,12 @@ async def list_lines(request: Request, status: Optional[str] = None):
             plano = await db.planos.find_one({"_id": ObjectId(line["plano_id"])})
             if plano:
                 plano_nome = plano["nome"]
+                franquia = plano["franquia"]
+        
+        if line.get("oferta_id"):
+            oferta = await db.ofertas.find_one({"_id": ObjectId(line["oferta_id"])})
+            if oferta:
+                oferta_nome = oferta["nome"]
         
         if line.get("chip_id"):
             chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
@@ -771,8 +1035,11 @@ async def list_lines(request: Request, status: Optional[str] = None):
             cliente_id=line["cliente_id"],
             chip_id=line["chip_id"],
             plano_id=line["plano_id"],
+            oferta_id=line.get("oferta_id"),
             cliente_nome=cliente_nome,
             plano_nome=plano_nome,
+            oferta_nome=oferta_nome,
+            franquia=franquia,
             iccid=iccid,
             created_at=line.get("created_at", datetime.now(timezone.utc))
         ))
@@ -787,8 +1054,7 @@ async def get_line_status(line_id: str, request: Request):
     if not line:
         raise HTTPException(status_code=404, detail="Linha não encontrada")
     
-    # Call operadora service
-    result = await operadora_service.consultar_status(
+    result = await operadora_service.consultar_linha(
         numero=line["numero"],
         db=db,
         user_id=user["id"],
@@ -798,7 +1064,7 @@ async def get_line_status(line_id: str, request: Request):
     return {
         "success": result.success,
         "numero": result.numero,
-        "status": result.status,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
         "saldo_dados": result.data.get("saldo_dados") if result.data else None,
         "validade": result.data.get("validade") if result.data else None,
         "response_time_ms": result.response_time_ms
@@ -815,7 +1081,6 @@ async def block_line(line_id: str, request: Request):
     if line["status"] == LineStatus.bloqueado.value:
         raise HTTPException(status_code=400, detail="Linha já está bloqueada")
     
-    # Call operadora service
     result = await operadora_service.bloquear_linha(
         numero=line["numero"],
         db=db,
@@ -837,7 +1102,7 @@ async def block_line(line_id: str, request: Request):
     return {
         "success": result.success,
         "message": result.message,
-        "status": result.status,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
         "response_time_ms": result.response_time_ms
     }
 
@@ -852,7 +1117,6 @@ async def unblock_line(line_id: str, request: Request):
     if line["status"] != LineStatus.bloqueado.value:
         raise HTTPException(status_code=400, detail="Linha não está bloqueada")
     
-    # Call operadora service
     result = await operadora_service.desbloquear_linha(
         numero=line["numero"],
         db=db,
@@ -874,7 +1138,7 @@ async def unblock_line(line_id: str, request: Request):
     return {
         "success": result.success,
         "message": result.message,
-        "status": result.status,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
         "response_time_ms": result.response_time_ms
     }
 
@@ -915,6 +1179,7 @@ async def get_dashboard_stats(request: Request):
     chips_disponiveis = await db.chips.count_documents({"status": "disponivel"})
     chips_ativados = await db.chips.count_documents({"status": "ativado"})
     chips_bloqueados = await db.chips.count_documents({"status": "bloqueado"})
+    chips_reservados = await db.chips.count_documents({"status": "reservado"})
     
     total_linhas = await db.linhas.count_documents({})
     linhas_ativas = await db.linhas.count_documents({"status": "ativo"})
@@ -922,6 +1187,8 @@ async def get_dashboard_stats(request: Request):
     linhas_bloqueadas = await db.linhas.count_documents({"status": "bloqueado"})
     
     total_planos = await db.planos.count_documents({})
+    total_ofertas = await db.ofertas.count_documents({})
+    ofertas_ativas = await db.ofertas.count_documents({"ativo": True})
     
     # Recent logs
     recent_logs = await db.logs.find({}).sort("created_at", -1).limit(5).to_list(5)
@@ -935,7 +1202,8 @@ async def get_dashboard_stats(request: Request):
             "total": total_chips,
             "disponiveis": chips_disponiveis,
             "ativados": chips_ativados,
-            "bloqueados": chips_bloqueados
+            "bloqueados": chips_bloqueados,
+            "reservados": chips_reservados
         },
         "linhas": {
             "total": total_linhas,
@@ -945,6 +1213,10 @@ async def get_dashboard_stats(request: Request):
         },
         "planos": {
             "total": total_planos
+        },
+        "ofertas": {
+            "total": total_ofertas,
+            "ativas": ofertas_ativas
         },
         "recent_logs": [
             {
@@ -959,17 +1231,13 @@ async def get_dashboard_stats(request: Request):
 # ==================== OPERADORA CONFIG ====================
 @api_router.get("/operadora/config")
 async def get_operadora_config(request: Request):
-    """Retorna configuração atual do serviço de operadora"""
     await require_admin(request)
-    
     return operadora_service.get_config_status()
 
 @api_router.post("/operadora/test")
 async def test_operadora_connection(request: Request):
-    """Testa conexão com a operadora (faz uma consulta de teste)"""
     user = await require_admin(request)
     
-    # Tenta fazer uma consulta de teste
     test_numero = "11999999999"
     result = await operadora_service.consultar_linha(
         numero=test_numero,
@@ -1019,31 +1287,35 @@ async def seed_admin():
 - Email: {admin_email}
 - Password: {admin_password}
 - Role: admin
-
-## Auth Endpoints
-- POST /api/auth/login
-- POST /api/auth/register
-- POST /api/auth/logout
-- GET /api/auth/me
-- POST /api/auth/refresh
 """)
 
 async def seed_sample_data():
-    """Seed sample data for testing"""
+    """Seed sample data for testing with new structure"""
     
     # Check if data already exists
     existing_plans = await db.planos.count_documents({})
     if existing_plans > 0:
         return
     
-    # Create sample plans
+    # Create sample plans (técnico - sem valor)
     plans = [
-        {"nome": "Básico 5GB", "valor": 29.90, "franquia": "5GB", "created_at": datetime.now(timezone.utc)},
-        {"nome": "Essencial 10GB", "valor": 49.90, "franquia": "10GB", "created_at": datetime.now(timezone.utc)},
-        {"nome": "Plus 20GB", "valor": 79.90, "franquia": "20GB", "created_at": datetime.now(timezone.utc)},
-        {"nome": "Premium 50GB", "valor": 119.90, "franquia": "50GB", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 5GB", "franquia": "5GB", "descricao": "Plano básico com 5GB de dados", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 10GB", "franquia": "10GB", "descricao": "Plano essencial com 10GB de dados", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 20GB", "franquia": "20GB", "descricao": "Plano plus com 20GB de dados", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 50GB", "franquia": "50GB", "descricao": "Plano premium com 50GB de dados", "created_at": datetime.now(timezone.utc)},
     ]
-    await db.planos.insert_many(plans)
+    result = await db.planos.insert_many(plans)
+    plan_ids = [str(id) for id in result.inserted_ids]
+    
+    # Create sample offers (comercial - com valor)
+    offers = [
+        {"nome": "Chip 5GB Básico", "plano_id": plan_ids[0], "valor": 29.90, "descricao": "Oferta básica", "ativo": True, "created_at": datetime.now(timezone.utc)},
+        {"nome": "Chip 10GB Essencial", "plano_id": plan_ids[1], "valor": 49.90, "descricao": "Oferta essencial", "ativo": True, "created_at": datetime.now(timezone.utc)},
+        {"nome": "Chip 20GB Plus", "plano_id": plan_ids[2], "valor": 79.90, "descricao": "Oferta plus", "ativo": True, "created_at": datetime.now(timezone.utc)},
+        {"nome": "Chip 50GB Premium", "plano_id": plan_ids[3], "valor": 119.90, "descricao": "Oferta premium", "ativo": True, "created_at": datetime.now(timezone.utc)},
+    ]
+    result = await db.ofertas.insert_many(offers)
+    offer_ids = [str(id) for id in result.inserted_ids]
     
     # Create sample clients
     clients = [
@@ -1054,17 +1326,17 @@ async def seed_sample_data():
     ]
     await db.clientes.insert_many(clients)
     
-    # Create sample chips
+    # Create sample chips (vinculados às ofertas)
     chips = [
-        {"iccid": "8955010012345678901", "status": "disponivel", "cliente_id": None, "created_at": datetime.now(timezone.utc)},
-        {"iccid": "8955010012345678902", "status": "disponivel", "cliente_id": None, "created_at": datetime.now(timezone.utc)},
-        {"iccid": "8955010012345678903", "status": "disponivel", "cliente_id": None, "created_at": datetime.now(timezone.utc)},
-        {"iccid": "8955010012345678904", "status": "disponivel", "cliente_id": None, "created_at": datetime.now(timezone.utc)},
-        {"iccid": "8955010012345678905", "status": "disponivel", "cliente_id": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678901", "status": "disponivel", "oferta_id": offer_ids[0], "cliente_id": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678902", "status": "disponivel", "oferta_id": offer_ids[1], "cliente_id": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678903", "status": "disponivel", "oferta_id": offer_ids[2], "cliente_id": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678904", "status": "disponivel", "oferta_id": offer_ids[3], "cliente_id": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678905", "status": "disponivel", "oferta_id": offer_ids[0], "cliente_id": None, "created_at": datetime.now(timezone.utc)},
     ]
     await db.chips.insert_many(chips)
     
-    logger.info("Sample data seeded successfully")
+    logger.info("Sample data seeded successfully with new structure")
 
 @app.on_event("startup")
 async def startup_event():
