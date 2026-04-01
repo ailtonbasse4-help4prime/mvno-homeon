@@ -135,11 +135,29 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Brute force protection
 - [x] Backend 100% (33/33), Frontend 100%
 
+## Implementado (01/04/2026 - Continuacao)
+
+### Categorizacao de Ofertas (Movel vs M2M)
+- [x] Campo `categoria` (movel/m2m) no modelo de Ofertas
+- [x] 7 ofertas reais vinculadas aos plan_codes da Ta Telecom
+- [x] Pagina Ofertas com abas filtro Todas/Movel/M2M com contadores
+- [x] Badges de categoria (azul=Movel, violeta=M2M) nos cards
+
+### Vinculacao de Oferta ao Chip
+- [x] PUT /api/chips/{chip_id} para alterar oferta vinculada
+- [x] Regra: apenas chips disponiveis/reservados podem ter oferta alterada
+- [x] Regra: chips ativados bloqueados para alteracao
+- [x] Botao Editar na tabela de chips (apenas para disponiveis/reservados)
+- [x] Modal "Vincular Oferta ao Chip" com info do chip e dropdown
+- [x] Dropdown agrupado por categoria (Movel/M2M) em Chips e Novo Chip
+- [x] Coluna Categoria com badges na tabela de chips
+- [x] Indicacao "Sem oferta" em amarelo para chips sem vinculo
+
 ## Backlog
 
-### P0 - Configurar Token Real
-- [ ] Inserir TATELECOM_USER_TOKEN
-- [ ] Mudar USE_MOCK_API=false
+### P0 - Concluido
+- [x] Token real configurado (TATELECOM_USER_TOKEN)
+- [x] USE_MOCK_API=false ativo
 
 ### P1 - Alta Prioridade
 - [ ] Leitor codigo de barras/QR code para ICCID
