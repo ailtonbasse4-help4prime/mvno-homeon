@@ -185,12 +185,17 @@ class PlanResponse(BaseModel):
     plan_code: Optional[str] = None
     created_at: datetime
 
+class CategoriaOferta(str, Enum):
+    movel = "movel"
+    m2m = "m2m"
+
 # Offer Models
 class OfferCreate(BaseModel):
     nome: str
     plano_id: str
     valor: float
     descricao: Optional[str] = None
+    categoria: CategoriaOferta = CategoriaOferta.movel
     ativo: bool = True
 
 class OfferResponse(BaseModel):
@@ -202,6 +207,7 @@ class OfferResponse(BaseModel):
     plan_code: Optional[str] = None
     valor: float
     descricao: Optional[str] = None
+    categoria: str = "movel"
     ativo: bool
     created_at: datetime
 
@@ -217,6 +223,7 @@ class ChipResponse(BaseModel):
     msisdn: Optional[str] = None
     oferta_id: Optional[str] = None
     oferta_nome: Optional[str] = None
+    categoria: Optional[str] = None
     plano_nome: Optional[str] = None
     franquia: Optional[str] = None
     plan_code: Optional[str] = None
@@ -701,16 +708,19 @@ async def build_offer_response(o: dict) -> OfferResponse:
         id=str(o["_id"]), nome=o["nome"], plano_id=o["plano_id"],
         plano_nome=plano_nome, franquia=franquia, plan_code=plan_code,
         valor=o["valor"], descricao=o.get("descricao"),
+        categoria=o.get("categoria", "movel"),
         ativo=o.get("ativo", True),
         created_at=o.get("created_at", datetime.now(timezone.utc))
     )
 
 @api_router.get("/ofertas", response_model=List[OfferResponse])
-async def list_offers(request: Request, ativo: Optional[bool] = None):
+async def list_offers(request: Request, ativo: Optional[bool] = None, categoria: Optional[str] = None):
     await get_current_user(request)
     query = {}
     if ativo is not None:
         query["ativo"] = ativo
+    if categoria:
+        query["categoria"] = categoria
     offers = await db.ofertas.find(query).to_list(1000)
     return [await build_offer_response(o) for o in offers]
 
@@ -731,6 +741,7 @@ async def create_offer(data: OfferCreate, request: Request):
     offer_doc = {
         "nome": data.nome, "plano_id": data.plano_id,
         "valor": data.valor, "descricao": data.descricao,
+        "categoria": data.categoria.value,
         "ativo": data.ativo, "created_at": datetime.now(timezone.utc)
     }
     result = await db.ofertas.insert_one(offer_doc)
@@ -749,7 +760,8 @@ async def update_offer(offer_id: str, data: OfferCreate, request: Request):
         raise HTTPException(status_code=400, detail="Plano nao encontrado")
     await db.ofertas.update_one({"_id": ObjectId(offer_id)}, {"$set": {
         "nome": data.nome, "plano_id": data.plano_id,
-        "valor": data.valor, "descricao": data.descricao, "ativo": data.ativo,
+        "valor": data.valor, "descricao": data.descricao,
+        "categoria": data.categoria.value, "ativo": data.ativo,
     }})
     await create_log("cadastro", f"Oferta atualizada: {data.nome}", user["id"], user["name"])
     updated = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
@@ -770,7 +782,7 @@ async def delete_offer(offer_id: str, request: Request):
 
 # ==================== CHIPS ROUTES ====================
 async def build_chip_response(chip: dict) -> ChipResponse:
-    cliente_nome, oferta_nome, plano_nome, franquia, valor, plan_code = None, None, None, None, None, None
+    cliente_nome, oferta_nome, plano_nome, franquia, valor, plan_code, categoria = None, None, None, None, None, None, None
     if chip.get("cliente_id"):
         cl = await db.clientes.find_one({"_id": ObjectId(chip["cliente_id"])})
         if cl:
@@ -780,6 +792,7 @@ async def build_chip_response(chip: dict) -> ChipResponse:
         if oferta:
             oferta_nome = oferta["nome"]
             valor = oferta["valor"]
+            categoria = oferta.get("categoria", "movel")
             if oferta.get("plano_id"):
                 plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
                 if plano:
@@ -789,7 +802,8 @@ async def build_chip_response(chip: dict) -> ChipResponse:
     return ChipResponse(
         id=str(chip["_id"]), iccid=chip["iccid"], status=chip["status"],
         msisdn=chip.get("msisdn"), oferta_id=chip.get("oferta_id"),
-        oferta_nome=oferta_nome, plano_nome=plano_nome, franquia=franquia,
+        oferta_nome=oferta_nome, categoria=categoria,
+        plano_nome=plano_nome, franquia=franquia,
         plan_code=plan_code, valor=valor,
         cliente_id=chip.get("cliente_id"), cliente_nome=cliente_nome,
         created_at=chip.get("created_at", datetime.now(timezone.utc))
