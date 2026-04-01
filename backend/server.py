@@ -1130,28 +1130,39 @@ async def sync_plans_from_operator(request: Request):
     result = await operadora_service.listar_planos(db=db, user_id=user["id"], user_name=user["name"])
     if not result.success:
         raise HTTPException(status_code=502, detail=f"Erro ao buscar planos da operadora: {result.message}")
-    plans_data = result.data.get("plans", result.data.get("data", []))
+    plans_data = result.data.get("items", result.data.get("plans", result.data.get("data", [])))
     if isinstance(plans_data, dict):
-        plans_data = plans_data.get("plans", [])
+        plans_data = plans_data.get("items", plans_data.get("plans", []))
     synced = 0
     created = 0
     for plan_item in plans_data:
-        pc = plan_item.get("plan_code") or plan_item.get("code") or plan_item.get("id")
+        # Ta Telecom format: {id: 15, quantity: {dados: 2000, sms: 100, telefonia: 100}, description: "..."}
+        pc = plan_item.get("id") or plan_item.get("plan_code") or plan_item.get("code")
         if not pc:
             continue
-        existing = await db.planos.find_one({"plan_code": str(pc)})
-        desc = plan_item.get("description") or plan_item.get("nome") or plan_item.get("name") or str(pc)
-        franquia = plan_item.get("data_limit") or plan_item.get("franquia") or ""
+        pc_str = str(pc)
+        desc = plan_item.get("description") or plan_item.get("nome") or plan_item.get("name") or pc_str
+        # Extract franquia from quantity.dados (in MB) or direct field
+        quantity = plan_item.get("quantity")
+        if isinstance(quantity, dict) and quantity.get("dados"):
+            dados_mb = quantity["dados"]
+            if dados_mb >= 1000:
+                franquia = f"{dados_mb // 1000}GB"
+            else:
+                franquia = f"{dados_mb}MB"
+        else:
+            franquia = plan_item.get("data_limit") or plan_item.get("franquia") or ""
+        existing = await db.planos.find_one({"plan_code": pc_str})
         if existing:
             await db.planos.update_one({"_id": existing["_id"]}, {"$set": {
-                "nome": desc, "franquia": franquia, "descricao": plan_item.get("description", ""),
+                "nome": desc, "franquia": franquia, "descricao": desc,
             }})
             synced += 1
         else:
             await db.planos.insert_one({
                 "nome": desc, "franquia": franquia,
-                "descricao": plan_item.get("description", ""),
-                "plan_code": str(pc),
+                "descricao": desc,
+                "plan_code": pc_str,
                 "created_at": datetime.now(timezone.utc),
             })
             created += 1
@@ -1164,18 +1175,34 @@ async def sync_stock_from_operator(request: Request):
     result = await operadora_service.listar_estoque(db=db, user_id=user["id"], user_name=user["name"])
     if not result.success:
         raise HTTPException(status_code=502, detail=f"Erro ao buscar estoque da operadora: {result.message}")
-    items = result.data.get("items", result.data.get("data", []))
+    # Ta Telecom estoque format: {codigo_status_tip, results: [{data, sim_card, status}]}
+    items = result.data.get("results", result.data.get("items", result.data.get("data", [])))
     if isinstance(items, dict):
-        items = items.get("items", [])
+        items = items.get("results", items.get("items", []))
+    # Status text mapping
+    status_text_map = {
+        "DISPONÍVEL": "disponivel", "DISPONIVEL": "disponivel",
+        "CANCELADO": "cancelado", "CANCELADA": "cancelado",
+        "EM USO": "ativado", "ATIVADO": "ativado", "ATIVA": "ativado", "ATIVO": "ativado",
+        "BLOQUEADO": "bloqueado", "BLOQUEADA": "bloqueado",
+        "SUSPENSA": "bloqueado", "SUSPENSO": "bloqueado",
+    }
     synced = 0
     created = 0
     for item in items:
-        iccid = item.get("iccid") or item.get("ICCID")
+        # Try different field names for ICCID
+        iccid = item.get("sim_card") or item.get("iccid") or item.get("ICCID")
         if not iccid:
             continue
-        op_status = item.get("status", 1)
-        local_status = STOCK_STATUS_MAP.get(op_status, "disponivel")
-        msisdn = item.get("msisdn") or item.get("MSISDN")
+        # Map status - can be text string or numeric
+        raw_status = item.get("status", "")
+        if isinstance(raw_status, str):
+            local_status = status_text_map.get(raw_status.upper().strip(), "disponivel")
+        elif isinstance(raw_status, int):
+            local_status = STOCK_STATUS_MAP.get(raw_status, "disponivel")
+        else:
+            local_status = "disponivel"
+        msisdn = item.get("msisdn") or item.get("MSISDN") or item.get("telefone")
         existing = await db.chips.find_one({"iccid": str(iccid)})
         if existing:
             update_fields = {"status": local_status}
