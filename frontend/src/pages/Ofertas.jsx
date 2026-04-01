@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Tag, Edit, Trash2, Package, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Tag, Edit, Trash2, Package, CheckCircle, XCircle, Code } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -235,7 +235,7 @@ export function Ofertas() {
                   <p className="text-xs text-zinc-500">por mes</p>
                 </div>
 
-                <div className="pt-3 border-t border-zinc-800">
+                <div className="pt-3 border-t border-zinc-800 space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-sm bg-amber-500/10 flex items-center justify-center">
                       <Package className="w-4 h-4 text-amber-500" />
@@ -249,6 +249,12 @@ export function Ofertas() {
                       </p>
                     </div>
                   </div>
+                  {oferta.plan_code && (
+                    <div className="flex items-center gap-1.5">
+                      <Code className="w-3 h-3 text-zinc-500" />
+                      <span className="text-xs font-mono text-zinc-500">{oferta.plan_code}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

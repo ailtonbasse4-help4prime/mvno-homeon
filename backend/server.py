@@ -809,6 +809,7 @@ async def activate_line(data: ActivationRequest, request: Request):
         "document_number": clean_document(cliente.get("documento", "")),
         "phone_number": telefone_clean,
         "date_of_birth": cliente.get("data_nascimento", ""),
+        "type_of_street": "",
         "address": cliente.get("endereco", ""),
         "address_number": cliente.get("numero_endereco", ""),
         "neighborhood": cliente.get("bairro", ""),
@@ -818,6 +819,7 @@ async def activate_line(data: ActivationRequest, request: Request):
         "plan_code": plano["plan_code"],
         "portability": False,
         "cn_contract_line": ddd,
+        "contract_line": "",
     }
 
     # Call operadora service
@@ -829,7 +831,8 @@ async def activate_line(data: ActivationRequest, request: Request):
 
     if result.success:
         status_str = result.status if isinstance(result.status, str) else result.status.value
-        chip_status = ChipStatus.ativado.value if status_str == "ativo" else ChipStatus.ativado.value
+        # Pendente = reservado (aguardando confirmacao), Ativo = ativado
+        chip_status = ChipStatus.ativado.value if status_str == "ativo" else ChipStatus.reservado.value
         msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
 
         await db.chips.update_one({"_id": ObjectId(data.chip_id)}, {"$set": {

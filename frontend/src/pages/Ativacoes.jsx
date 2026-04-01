@@ -201,6 +201,12 @@ export function Ativacoes() {
                     <p className="text-xs text-zinc-500">Franquia</p>
                     <p className="text-sm text-white">{selectedChipData.franquia || '—'}</p>
                   </div>
+                  {selectedChipData.plan_code && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-zinc-500">Codigo do Plano (plan_code)</p>
+                      <p className="text-sm text-zinc-300 font-mono">{selectedChipData.plan_code}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

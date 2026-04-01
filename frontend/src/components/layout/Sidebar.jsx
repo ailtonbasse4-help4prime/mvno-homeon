@@ -1,4 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
@@ -10,7 +12,9 @@ import {
   Phone,
   FileText,
   LogOut,
-  Signal
+  Signal,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 const navItems = [
@@ -24,9 +28,18 @@ const navItems = [
   { path: '/logs', icon: FileText, label: 'Logs' },
 ];
 
+const API_URL = process.env.REACT_APP_BACKEND_URL;
+
 export function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [operadoraMode, setOperadoraMode] = useState(null);
+
+  useEffect(() => {
+    axios.get(`${API_URL}/api/operadora/config`, { withCredentials: true })
+      .then(r => setOperadoraMode(r.data.mode))
+      .catch(() => {});
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -42,9 +55,22 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-white">MVNO</h1>
-            <p className="text-xs text-zinc-500">Sistema de Gestão</p>
+            <p className="text-xs text-zinc-500">Ta Telecom</p>
           </div>
         </div>
+        {operadoraMode && (
+          <div
+            className={`mt-3 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-sm text-xs font-semibold ${
+              operadoraMode === 'real'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+            }`}
+            data-testid="sidebar-mode-badge"
+          >
+            {operadoraMode === 'real' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+            {operadoraMode === 'real' ? 'API REAL' : 'MOCK'}
+          </div>
+        )}
       </div>
 
       <nav className="py-4">

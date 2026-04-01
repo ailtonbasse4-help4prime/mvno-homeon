@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock, Wifi, WifiOff } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -62,9 +62,28 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
-      <div>
-        <h1 className="page-title">Dashboard</h1>
-        <p className="text-zinc-400 text-sm -mt-4">Visão geral do sistema MVNO</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="text-zinc-400 text-sm -mt-4">Visao geral do sistema MVNO</p>
+        </div>
+        {/* Indicador Mock/Real */}
+        {stats?.operadora && (
+          <div
+            className={`flex items-center gap-2 px-4 py-2 rounded-sm border text-sm font-medium ${
+              stats.operadora.mode === 'real'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+            }`}
+            data-testid="operadora-mode-indicator"
+          >
+            {stats.operadora.mode === 'real' ? (
+              <><Wifi className="w-4 h-4" />API REAL</>
+            ) : (
+              <><WifiOff className="w-4 h-4" />MODO MOCK</>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Stats */}
