@@ -216,6 +216,9 @@ class ChipCreate(BaseModel):
     iccid: str
     oferta_id: str
 
+class ChipUpdate(BaseModel):
+    oferta_id: str
+
 class ChipResponse(BaseModel):
     id: str
     iccid: str
@@ -852,6 +855,26 @@ async def delete_chip(chip_id: str, request: Request):
     await db.chips.delete_one({"_id": ObjectId(chip_id)})
     await create_log("cadastro", f"Chip removido: {chip['iccid']}", user["id"], user["name"])
     return {"message": "Chip removido com sucesso"}
+
+@api_router.put("/chips/{chip_id}", response_model=ChipResponse)
+async def update_chip(chip_id: str, data: ChipUpdate, request: Request):
+    user = await require_admin(request)
+    chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip["status"] == ChipStatus.ativado.value:
+        raise HTTPException(status_code=400, detail="Nao e possivel alterar oferta de um chip ativado")
+    if chip["status"] not in [ChipStatus.disponivel.value, ChipStatus.reservado.value]:
+        raise HTTPException(status_code=400, detail=f"Chip com status '{chip['status']}' nao pode ter a oferta alterada")
+    oferta = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta nao encontrada")
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta nao esta ativa")
+    await db.chips.update_one({"_id": ObjectId(chip_id)}, {"$set": {"oferta_id": data.oferta_id}})
+    await create_log("cadastro", f"Oferta do chip {chip['iccid']} alterada para: {oferta['nome']}", user["id"], user["name"])
+    updated = await db.chips.find_one({"_id": ObjectId(chip_id)})
+    return await build_chip_response(updated)
 
 # ==================== ACTIVATION ROUTE ====================
 @api_router.post("/ativacao", response_model=ActivationResponse)
