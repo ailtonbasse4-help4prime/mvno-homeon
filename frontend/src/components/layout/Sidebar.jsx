@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard, Users, CreditCard, Package, Tag, Zap,
   Phone, FileText, LogOut, Wifi, WifiOff, UserCog, KeyRound,
+  Wallet, RefreshCw,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -24,6 +25,8 @@ const allNavItems = [
   { path: '/chips', icon: CreditCard, label: 'Chips', roles: ['admin', 'atendente'] },
   { path: '/ativacoes', icon: Zap, label: 'Ativacoes', roles: ['admin', 'atendente'] },
   { path: '/linhas', icon: Phone, label: 'Linhas', roles: ['admin', 'atendente'] },
+  { path: '/carteira', icon: Wallet, label: 'Carteira Movel', roles: ['admin'] },
+  { path: '/assinaturas', icon: RefreshCw, label: 'Assinaturas', roles: ['admin'] },
   { path: '/usuarios', icon: UserCog, label: 'Usuarios', roles: ['admin'] },
   { path: '/logs', icon: FileText, label: 'Logs', roles: ['admin'] },
 ];

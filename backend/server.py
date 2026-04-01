@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP
+from services.asaas_service import asaas_service, AsaasNotConfiguredError, AsaasApiError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -72,6 +73,26 @@ class LogAction(str, Enum):
     consulta = "consulta"
     alteracao_plano = "alteracao_plano"
     sincronizacao = "sincronizacao"
+    financeiro = "financeiro"
+
+class BillingType(str, Enum):
+    boleto = "BOLETO"
+    pix = "PIX"
+    credit_card = "CREDIT_CARD"
+    undefined = "UNDEFINED"
+
+class PaymentStatus(str, Enum):
+    pendente = "PENDING"
+    confirmado = "CONFIRMED"
+    recebido = "RECEIVED"
+    vencido = "OVERDUE"
+    reembolsado = "REFUNDED"
+    cancelado = "CANCELLED"
+
+class SubscriptionStatus(str, Enum):
+    ativa = "ACTIVE"
+    expirada = "EXPIRED"
+    cancelada = "CANCELLED"
 
 # ==================== VALIDATION UTILS ====================
 def validate_cpf(cpf: str) -> bool:
@@ -287,6 +308,59 @@ class LogEntry(BaseModel):
     api_request: Optional[dict] = None
     api_response: Optional[dict] = None
     is_mock: Optional[bool] = None
+
+# ==================== CARTEIRA MOVEL MODELS ====================
+class CobrancaCreate(BaseModel):
+    cliente_id: str
+    linha_id: Optional[str] = None
+    billing_type: BillingType = BillingType.pix
+    valor: float
+    vencimento: str  # YYYY-MM-DD
+    descricao: Optional[str] = None
+
+class CobrancaResponse(BaseModel):
+    id: str
+    cliente_id: str
+    cliente_nome: Optional[str] = None
+    linha_id: Optional[str] = None
+    msisdn: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    billing_type: str
+    valor: float
+    vencimento: str
+    descricao: Optional[str] = None
+    status: str
+    asaas_payment_id: Optional[str] = None
+    asaas_invoice_url: Optional[str] = None
+    asaas_pix_code: Optional[str] = None
+    paid_at: Optional[str] = None
+    created_at: datetime
+
+class AssinaturaCreate(BaseModel):
+    cliente_id: str
+    linha_id: Optional[str] = None
+    billing_type: BillingType = BillingType.pix
+    valor: float
+    proximo_vencimento: str  # YYYY-MM-DD
+    ciclo: str = "MONTHLY"
+    descricao: Optional[str] = None
+
+class AssinaturaResponse(BaseModel):
+    id: str
+    cliente_id: str
+    cliente_nome: Optional[str] = None
+    linha_id: Optional[str] = None
+    msisdn: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    billing_type: str
+    valor: float
+    ciclo: str
+    proximo_vencimento: Optional[str] = None
+    descricao: Optional[str] = None
+    status: str
+    asaas_subscription_id: Optional[str] = None
+    asaas_customer_id: Optional[str] = None
+    created_at: datetime
 
 # ==================== PASSWORD UTILS ====================
 def hash_password(password: str) -> str:
@@ -1290,6 +1364,350 @@ async def list_logs(request: Request, action: Optional[str] = None, limit: int =
         is_mock=log.get("is_mock"),
     ) for log in logs]
 
+# ==================== CARTEIRA MOVEL ROUTES ====================
+
+async def _get_asaas_customer_id(cliente: dict, user: dict) -> str:
+    """Obtem ou cria o customer_id do Asaas para o cliente."""
+    if cliente.get("asaas_customer_id"):
+        return cliente["asaas_customer_id"]
+    result = await asaas_service.create_customer(
+        name=cliente["nome"],
+        cpf_cnpj=cliente.get("documento", ""),
+        email=cliente.get("email"),
+        phone=cliente.get("telefone"),
+        address=cliente.get("endereco"),
+        address_number=cliente.get("numero_endereco"),
+        province=cliente.get("bairro"),
+        postal_code=cliente.get("cep"),
+    )
+    asaas_id = result.get("id")
+    await db.clientes.update_one({"_id": cliente["_id"]}, {"$set": {"asaas_customer_id": asaas_id}})
+    await create_log("financeiro", f"Cliente sincronizado com Asaas: {cliente['nome']} -> {asaas_id}", user["id"], user["name"])
+    return asaas_id
+
+async def _build_cobranca_response(doc: dict) -> CobrancaResponse:
+    cliente_nome, msisdn, oferta_nome = None, None, None
+    if doc.get("cliente_id"):
+        cl = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+        if cl:
+            cliente_nome = cl["nome"]
+    if doc.get("linha_id"):
+        ln = await db.linhas.find_one({"_id": ObjectId(doc["linha_id"])})
+        if ln:
+            msisdn = ln.get("msisdn")
+            if ln.get("oferta_id"):
+                of = await db.ofertas.find_one({"_id": ObjectId(ln["oferta_id"])})
+                if of:
+                    oferta_nome = of["nome"]
+    return CobrancaResponse(
+        id=str(doc["_id"]), cliente_id=doc["cliente_id"],
+        cliente_nome=cliente_nome, linha_id=doc.get("linha_id"),
+        msisdn=msisdn, oferta_nome=oferta_nome,
+        billing_type=doc["billing_type"], valor=doc["valor"],
+        vencimento=doc["vencimento"], descricao=doc.get("descricao"),
+        status=doc.get("status", "PENDING"),
+        asaas_payment_id=doc.get("asaas_payment_id"),
+        asaas_invoice_url=doc.get("asaas_invoice_url"),
+        asaas_pix_code=doc.get("asaas_pix_code"),
+        paid_at=doc.get("paid_at"),
+        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+    )
+
+async def _build_assinatura_response(doc: dict) -> AssinaturaResponse:
+    cliente_nome, msisdn, oferta_nome = None, None, None
+    if doc.get("cliente_id"):
+        cl = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+        if cl:
+            cliente_nome = cl["nome"]
+    if doc.get("linha_id"):
+        ln = await db.linhas.find_one({"_id": ObjectId(doc["linha_id"])})
+        if ln:
+            msisdn = ln.get("msisdn")
+            if ln.get("oferta_id"):
+                of = await db.ofertas.find_one({"_id": ObjectId(ln["oferta_id"])})
+                if of:
+                    oferta_nome = of["nome"]
+    return AssinaturaResponse(
+        id=str(doc["_id"]), cliente_id=doc["cliente_id"],
+        cliente_nome=cliente_nome, linha_id=doc.get("linha_id"),
+        msisdn=msisdn, oferta_nome=oferta_nome,
+        billing_type=doc["billing_type"], valor=doc["valor"],
+        ciclo=doc.get("ciclo", "MONTHLY"),
+        proximo_vencimento=doc.get("proximo_vencimento"),
+        descricao=doc.get("descricao"),
+        status=doc.get("status", "ACTIVE"),
+        asaas_subscription_id=doc.get("asaas_subscription_id"),
+        asaas_customer_id=doc.get("asaas_customer_id"),
+        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+    )
+
+@api_router.get("/carteira/config")
+async def get_carteira_config(request: Request):
+    await get_current_user(request)
+    return asaas_service.get_config_status()
+
+@api_router.get("/carteira/resumo")
+async def get_carteira_resumo(request: Request):
+    await get_current_user(request)
+    total_cobrancas = await db.cobrancas.count_documents({})
+    cobrancas_pendentes = await db.cobrancas.count_documents({"status": "PENDING"})
+    cobrancas_pagas = await db.cobrancas.count_documents({"status": {"$in": ["CONFIRMED", "RECEIVED"]}})
+    cobrancas_vencidas = await db.cobrancas.count_documents({"status": "OVERDUE"})
+    total_assinaturas = await db.assinaturas.count_documents({})
+    assinaturas_ativas = await db.assinaturas.count_documents({"status": "ACTIVE"})
+
+    pipeline_receita = [
+        {"$match": {"status": {"$in": ["CONFIRMED", "RECEIVED"]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$valor"}}}
+    ]
+    receita = await db.cobrancas.aggregate(pipeline_receita).to_list(1)
+    receita_total = receita[0]["total"] if receita else 0
+
+    pipeline_pendente = [
+        {"$match": {"status": "PENDING"}},
+        {"$group": {"_id": None, "total": {"$sum": "$valor"}}}
+    ]
+    pendente = await db.cobrancas.aggregate(pipeline_pendente).to_list(1)
+    pendente_total = pendente[0]["total"] if pendente else 0
+
+    pipeline_vencido = [
+        {"$match": {"status": "OVERDUE"}},
+        {"$group": {"_id": None, "total": {"$sum": "$valor"}}}
+    ]
+    vencido = await db.cobrancas.aggregate(pipeline_vencido).to_list(1)
+    vencido_total = vencido[0]["total"] if vencido else 0
+
+    return {
+        "cobrancas": {
+            "total": total_cobrancas,
+            "pendentes": cobrancas_pendentes,
+            "pagas": cobrancas_pagas,
+            "vencidas": cobrancas_vencidas,
+        },
+        "assinaturas": {
+            "total": total_assinaturas,
+            "ativas": assinaturas_ativas,
+        },
+        "financeiro": {
+            "receita_total": receita_total,
+            "pendente_total": pendente_total,
+            "vencido_total": vencido_total,
+        },
+        "asaas": asaas_service.get_config_status(),
+    }
+
+# --- Cobrancas ---
+@api_router.get("/carteira/cobrancas", response_model=List[CobrancaResponse])
+async def list_cobrancas(request: Request, cliente_id: Optional[str] = None,
+                         status: Optional[str] = None, limit: int = 100):
+    await get_current_user(request)
+    query = {}
+    if cliente_id:
+        query["cliente_id"] = cliente_id
+    if status:
+        query["status"] = status
+    docs = await db.cobrancas.find(query).sort("created_at", -1).limit(limit).to_list(limit)
+    return [await _build_cobranca_response(d) for d in docs]
+
+@api_router.post("/carteira/cobrancas", response_model=CobrancaResponse)
+async def create_cobranca(data: CobrancaCreate, request: Request):
+    user = await require_admin(request)
+    cliente = await db.clientes.find_one({"_id": ObjectId(data.cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    doc = {
+        "cliente_id": data.cliente_id,
+        "linha_id": data.linha_id,
+        "billing_type": data.billing_type.value,
+        "valor": data.valor,
+        "vencimento": data.vencimento,
+        "descricao": data.descricao,
+        "status": "PENDING",
+        "asaas_payment_id": None,
+        "asaas_invoice_url": None,
+        "asaas_pix_code": None,
+        "paid_at": None,
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    if asaas_service.is_configured:
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            ref = f"cob-{data.cliente_id}"
+            if data.linha_id:
+                ref += f"-{data.linha_id}"
+            result = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type.value,
+                value=data.valor,
+                due_date=data.vencimento,
+                description=data.descricao or f"Cobranca movel - {cliente['nome']}",
+                external_reference=ref,
+            )
+            doc["asaas_payment_id"] = result.get("id")
+            doc["asaas_invoice_url"] = result.get("invoiceUrl")
+            doc["status"] = result.get("status", "PENDING")
+        except (AsaasNotConfiguredError, AsaasApiError) as e:
+            logger.warning(f"Asaas API error ao criar cobranca: {e}")
+
+    inserted = await db.cobrancas.insert_one(doc)
+    doc["_id"] = inserted.inserted_id
+    await create_log("financeiro", f"Cobranca criada: R$ {data.valor:.2f} para {cliente['nome']}", user["id"], user["name"])
+    return await _build_cobranca_response(doc)
+
+@api_router.delete("/carteira/cobrancas/{cobranca_id}")
+async def delete_cobranca(cobranca_id: str, request: Request):
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+    if doc.get("status") in ["CONFIRMED", "RECEIVED"]:
+        raise HTTPException(status_code=400, detail="Nao e possivel remover cobranca ja paga")
+    await db.cobrancas.delete_one({"_id": ObjectId(cobranca_id)})
+    await create_log("financeiro", f"Cobranca removida: R$ {doc['valor']:.2f}", user["id"], user["name"])
+    return {"message": "Cobranca removida"}
+
+@api_router.post("/carteira/cobrancas/{cobranca_id}/consultar")
+async def consultar_cobranca(cobranca_id: str, request: Request):
+    user = await get_current_user(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+    if not doc.get("asaas_payment_id"):
+        return {"message": "Cobranca sem ID Asaas vinculado", "status": doc.get("status", "PENDING")}
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+    try:
+        result = await asaas_service.get_payment(doc["asaas_payment_id"])
+        new_status = result.get("status", doc.get("status"))
+        update_fields = {"status": new_status}
+        if new_status in ["CONFIRMED", "RECEIVED"] and not doc.get("paid_at"):
+            update_fields["paid_at"] = result.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+        await db.cobrancas.update_one({"_id": ObjectId(cobranca_id)}, {"$set": update_fields})
+        return {"status": new_status, "asaas_data": result}
+    except AsaasApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+# --- Assinaturas ---
+@api_router.get("/carteira/assinaturas", response_model=List[AssinaturaResponse])
+async def list_assinaturas(request: Request, cliente_id: Optional[str] = None,
+                           status: Optional[str] = None, limit: int = 100):
+    await get_current_user(request)
+    query = {}
+    if cliente_id:
+        query["cliente_id"] = cliente_id
+    if status:
+        query["status"] = status
+    docs = await db.assinaturas.find(query).sort("created_at", -1).limit(limit).to_list(limit)
+    return [await _build_assinatura_response(d) for d in docs]
+
+@api_router.post("/carteira/assinaturas", response_model=AssinaturaResponse)
+async def create_assinatura(data: AssinaturaCreate, request: Request):
+    user = await require_admin(request)
+    cliente = await db.clientes.find_one({"_id": ObjectId(data.cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    doc = {
+        "cliente_id": data.cliente_id,
+        "linha_id": data.linha_id,
+        "billing_type": data.billing_type.value,
+        "valor": data.valor,
+        "ciclo": data.ciclo,
+        "proximo_vencimento": data.proximo_vencimento,
+        "descricao": data.descricao,
+        "status": "ACTIVE",
+        "asaas_subscription_id": None,
+        "asaas_customer_id": None,
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    if asaas_service.is_configured:
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            doc["asaas_customer_id"] = asaas_customer_id
+            result = await asaas_service.create_subscription(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type.value,
+                value=data.valor,
+                next_due_date=data.proximo_vencimento,
+                cycle=data.ciclo,
+                description=data.descricao or f"Assinatura movel - {cliente['nome']}",
+                external_reference=f"ass-{data.cliente_id}",
+            )
+            doc["asaas_subscription_id"] = result.get("id")
+            doc["status"] = result.get("status", "ACTIVE")
+        except (AsaasNotConfiguredError, AsaasApiError) as e:
+            logger.warning(f"Asaas API error ao criar assinatura: {e}")
+
+    inserted = await db.assinaturas.insert_one(doc)
+    doc["_id"] = inserted.inserted_id
+    await create_log("financeiro", f"Assinatura criada: R$ {data.valor:.2f}/mes para {cliente['nome']}", user["id"], user["name"])
+    return await _build_assinatura_response(doc)
+
+@api_router.post("/carteira/assinaturas/{assinatura_id}/cancelar")
+async def cancelar_assinatura(assinatura_id: str, request: Request):
+    user = await require_admin(request)
+    doc = await db.assinaturas.find_one({"_id": ObjectId(assinatura_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Assinatura nao encontrada")
+    if doc.get("status") == "CANCELLED":
+        raise HTTPException(status_code=400, detail="Assinatura ja esta cancelada")
+
+    if asaas_service.is_configured and doc.get("asaas_subscription_id"):
+        try:
+            await asaas_service.cancel_subscription(doc["asaas_subscription_id"])
+        except AsaasApiError as e:
+            logger.warning(f"Erro ao cancelar assinatura no Asaas: {e}")
+
+    await db.assinaturas.update_one({"_id": ObjectId(assinatura_id)}, {"$set": {"status": "CANCELLED"}})
+    await create_log("financeiro", f"Assinatura cancelada: {assinatura_id}", user["id"], user["name"])
+    return {"message": "Assinatura cancelada"}
+
+# --- Sincronizar cliente com Asaas ---
+@api_router.post("/carteira/clientes/{cliente_id}/sync-asaas")
+async def sync_cliente_asaas(cliente_id: str, request: Request):
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado. Defina ASAAS_API_KEY no .env")
+    cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+    try:
+        asaas_id = await _get_asaas_customer_id(cliente, user)
+        return {"message": f"Cliente sincronizado com Asaas", "asaas_customer_id": asaas_id}
+    except AsaasApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+# --- Webhook Asaas ---
+@api_router.post("/webhooks/asaas")
+async def asaas_webhook(request: Request):
+    """Recebe notificacoes de pagamento do Asaas."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payload invalido")
+
+    event = body.get("event")
+    payment = body.get("payment", {})
+    payment_id = payment.get("id")
+    status = payment.get("status")
+
+    logger.info(f"Asaas webhook: event={event} payment_id={payment_id} status={status}")
+
+    if payment_id and status:
+        cobranca = await db.cobrancas.find_one({"asaas_payment_id": payment_id})
+        if cobranca:
+            update_fields = {"status": status}
+            if status in ["CONFIRMED", "RECEIVED"]:
+                update_fields["paid_at"] = payment.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+            await db.cobrancas.update_one({"_id": cobranca["_id"]}, {"$set": update_fields})
+            await create_log("financeiro", f"Webhook Asaas: cobranca {payment_id} -> {status}", None, "Sistema")
+            logger.info(f"Cobranca {payment_id} atualizada para {status}")
+
+    return {"received": True}
+
 # ==================== DASHBOARD STATS ====================
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(request: Request):
@@ -1399,6 +1817,11 @@ async def startup_event():
     await db.chips.create_index("iccid", unique=True)
     await db.login_attempts.create_index("identifier")
     await db.logs.create_index([("created_at", -1)])
+    await db.cobrancas.create_index([("cliente_id", 1)])
+    await db.cobrancas.create_index([("status", 1)])
+    await db.cobrancas.create_index("asaas_payment_id", sparse=True)
+    await db.assinaturas.create_index([("cliente_id", 1)])
+    await db.assinaturas.create_index([("status", 1)])
     await seed_admin()
     await seed_sample_data()
     logger.info("Application started successfully")
