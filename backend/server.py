@@ -447,6 +447,98 @@ async def refresh_token(request: Request, response: Response):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalido")
 
+
+# ==================== PASSWORD CHANGE ====================
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.post("/auth/change-password")
+async def change_password(data: PasswordChangeRequest, request: Request):
+    user = await get_current_user(request)
+    db_user = await db.usuarios.find_one({"_id": ObjectId(user["id"])})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    if not verify_password(data.current_password, db_user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    if len(data.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Nova senha deve ter pelo menos 4 caracteres")
+    await db.usuarios.update_one({"_id": ObjectId(user["id"])}, {"$set": {"password_hash": hash_password(data.new_password)}})
+    await create_log("cadastro", f"Senha alterada: {user['email']}", user["id"], user["name"])
+    return {"message": "Senha alterada com sucesso"}
+
+# ==================== USER MANAGEMENT (Admin Only) ====================
+class UserManageCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    role: UserRole = UserRole.atendente
+
+class UserManageUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[UserRole] = None
+    password: Optional[str] = None
+
+@api_router.get("/usuarios", response_model=List[UserResponse])
+async def list_users(request: Request):
+    await require_admin(request)
+    users = await db.usuarios.find({}).to_list(1000)
+    return [UserResponse(
+        id=str(u["_id"]), email=u["email"], name=u["name"],
+        role=u["role"], created_at=u.get("created_at", datetime.now(timezone.utc))
+    ) for u in users]
+
+@api_router.post("/usuarios", response_model=UserResponse)
+async def create_user(data: UserManageCreate, request: Request):
+    admin = await require_admin(request)
+    email = data.email.lower()
+    existing = await db.usuarios.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email ja cadastrado")
+    if len(data.password) < 4:
+        raise HTTPException(status_code=400, detail="Senha deve ter pelo menos 4 caracteres")
+    user_doc = {
+        "email": email, "password_hash": hash_password(data.password),
+        "name": data.name, "role": data.role.value,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.usuarios.insert_one(user_doc)
+    await create_log("cadastro", f"Usuario criado: {email} ({data.role.value})", admin["id"], admin["name"])
+    return UserResponse(id=str(result.inserted_id), email=email, name=data.name, role=data.role.value, created_at=user_doc["created_at"])
+
+@api_router.put("/usuarios/{user_id}", response_model=UserResponse)
+async def update_user(user_id: str, data: UserManageUpdate, request: Request):
+    admin = await require_admin(request)
+    u = await db.usuarios.find_one({"_id": ObjectId(user_id)})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    update_fields = {}
+    if data.name is not None:
+        update_fields["name"] = data.name
+    if data.role is not None:
+        update_fields["role"] = data.role.value
+    if data.password is not None:
+        if len(data.password) < 4:
+            raise HTTPException(status_code=400, detail="Senha deve ter pelo menos 4 caracteres")
+        update_fields["password_hash"] = hash_password(data.password)
+    if update_fields:
+        await db.usuarios.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    await create_log("cadastro", f"Usuario atualizado: {u['email']}", admin["id"], admin["name"])
+    updated = await db.usuarios.find_one({"_id": ObjectId(user_id)})
+    return UserResponse(id=str(updated["_id"]), email=updated["email"], name=updated["name"], role=updated["role"], created_at=updated.get("created_at", datetime.now(timezone.utc)))
+
+@api_router.delete("/usuarios/{user_id}")
+async def delete_user(user_id: str, request: Request):
+    admin = await require_admin(request)
+    if admin["id"] == user_id:
+        raise HTTPException(status_code=400, detail="Nao e possivel remover seu proprio usuario")
+    u = await db.usuarios.find_one({"_id": ObjectId(user_id)})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    await db.usuarios.delete_one({"_id": ObjectId(user_id)})
+    await create_log("cadastro", f"Usuario removido: {u['email']}", admin["id"], admin["name"])
+    return {"message": "Usuario removido com sucesso"}
+
 # ==================== CLIENTS ROUTES ====================
 @api_router.get("/clientes", response_model=List[ClientResponse])
 async def list_clients(request: Request, search: Optional[str] = None):
@@ -716,7 +808,7 @@ async def list_chips(request: Request, status: Optional[str] = None, oferta_id: 
 
 @api_router.post("/chips", response_model=ChipResponse)
 async def create_chip(data: ChipCreate, request: Request):
-    user = await get_current_user(request)
+    user = await require_admin(request)
     existing = await db.chips.find_one({"iccid": data.iccid})
     if existing:
         raise HTTPException(status_code=400, detail="ICCID ja cadastrado")
@@ -906,7 +998,7 @@ async def list_lines(request: Request, status: Optional[str] = None):
 
 @api_router.get("/linhas/{line_id}/consultar")
 async def query_line_from_operator(line_id: str, request: Request):
-    user = await get_current_user(request)
+    user = await require_admin(request)
     line = await db.linhas.find_one({"_id": ObjectId(line_id)})
     if not line:
         raise HTTPException(status_code=404, detail="Linha nao encontrada")
@@ -926,7 +1018,7 @@ async def query_line_from_operator(line_id: str, request: Request):
 
 @api_router.post("/linhas/{line_id}/bloquear-parcial")
 async def block_line_partial(line_id: str, request: Request):
-    user = await get_current_user(request)
+    user = await require_admin(request)
     line = await db.linhas.find_one({"_id": ObjectId(line_id)})
     if not line:
         raise HTTPException(status_code=404, detail="Linha nao encontrada")
@@ -949,7 +1041,7 @@ async def block_line_partial(line_id: str, request: Request):
 
 @api_router.post("/linhas/{line_id}/bloquear-total")
 async def block_line_total(line_id: str, data: BlockTotalRequest, request: Request):
-    user = await get_current_user(request)
+    user = await require_admin(request)
     line = await db.linhas.find_one({"_id": ObjectId(line_id)})
     if not line:
         raise HTTPException(status_code=404, detail="Linha nao encontrada")
@@ -972,7 +1064,7 @@ async def block_line_total(line_id: str, data: BlockTotalRequest, request: Reque
 
 @api_router.post("/linhas/{line_id}/desbloquear")
 async def unblock_line(line_id: str, request: Request):
-    user = await get_current_user(request)
+    user = await require_admin(request)
     line = await db.linhas.find_one({"_id": ObjectId(line_id)})
     if not line:
         raise HTTPException(status_code=404, detail="Linha nao encontrada")
@@ -995,7 +1087,7 @@ async def unblock_line(line_id: str, request: Request):
 
 @api_router.post("/linhas/{line_id}/alterar-plano")
 async def change_plan(line_id: str, data: PlanChangeRequest, request: Request):
-    user = await get_current_user(request)
+    user = await require_admin(request)
     line = await db.linhas.find_one({"_id": ObjectId(line_id)})
     if not line:
         raise HTTPException(status_code=404, detail="Linha nao encontrada")
@@ -1121,7 +1213,7 @@ async def test_operadora_connection(request: Request):
 # ==================== LOGS ROUTES ====================
 @api_router.get("/logs", response_model=List[LogEntry])
 async def list_logs(request: Request, action: Optional[str] = None, limit: int = 100):
-    await get_current_user(request)
+    await require_admin(request)
     query = {}
     if action:
         query["action"] = action

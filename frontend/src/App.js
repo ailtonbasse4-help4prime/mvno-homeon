@@ -11,6 +11,7 @@ import { Ofertas } from "./pages/Ofertas";
 import { Ativacoes } from "./pages/Ativacoes";
 import { Linhas } from "./pages/Linhas";
 import { Logs } from "./pages/Logs";
+import { Usuarios } from "./pages/Usuarios";
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
             <Route path="/ofertas" element={<Ofertas />} />
             <Route path="/ativacoes" element={<Ativacoes />} />
             <Route path="/linhas" element={<Linhas />} />
+            <Route path="/usuarios" element={<Usuarios />} />
             <Route path="/logs" element={<Logs />} />
           </Route>
         </Routes>

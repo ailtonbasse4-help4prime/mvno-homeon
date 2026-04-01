@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -13,6 +14,7 @@ import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, Ar
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export function Linhas() {
+  const { isAdmin } = useAuth();
   const [linhas, setLinhas] = useState([]);
   const [ofertas, setOfertas] = useState([]);
   const [blockReasons, setBlockReasons] = useState([]);
@@ -208,10 +210,12 @@ export function Linhas() {
                   <td>{getStatusBadge(linha.status)}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleCheckStatus(linha)} className="text-zinc-400 hover:text-blue-400" title="Consultar" data-testid={`check-status-${linha.id}`}>
-                        <Info className="w-4 h-4" />
-                      </Button>
-                      {linha.status === 'ativo' && (
+                      {isAdmin && (
+                        <Button variant="ghost" size="sm" onClick={() => handleCheckStatus(linha)} className="text-zinc-400 hover:text-blue-400" title="Consultar" data-testid={`check-status-${linha.id}`}>
+                          <Info className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {isAdmin && linha.status === 'ativo' && (
                         <>
                           <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setBlockPartialDialog(true); }} className="text-zinc-400 hover:text-amber-400" title="Bloqueio Parcial" data-testid={`block-partial-${linha.id}`}>
                             <Lock className="w-4 h-4" />
@@ -224,7 +228,7 @@ export function Linhas() {
                           </Button>
                         </>
                       )}
-                      {linha.status === 'bloqueado' && (
+                      {isAdmin && linha.status === 'bloqueado' && (
                         <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setUnblockDialog(true); }} className="text-zinc-400 hover:text-emerald-400" title="Desbloquear" data-testid={`unblock-${linha.id}`}>
                           <Unlock className="w-4 h-4" />
                         </Button>

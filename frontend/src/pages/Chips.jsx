@@ -151,13 +151,17 @@ export function Chips() {
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de chips vinculados a ofertas</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2" disabled={syncing} data-testid="sync-estoque-button">
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Sincronizando...' : 'Sincronizar Estoque'}
-          </Button>
-          <Button onClick={() => { setFormData({ iccid: '', oferta_id: '' }); setDialogOpen(true); }} className="btn-primary flex items-center gap-2" data-testid="add-chip-button">
-            <Plus className="w-4 h-4" />Novo Chip
-          </Button>
+          {isAdmin && (
+            <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2" disabled={syncing} data-testid="sync-estoque-button">
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar Estoque'}
+            </Button>
+          )}
+          {isAdmin && (
+            <Button onClick={() => { setFormData({ iccid: '', oferta_id: '' }); setDialogOpen(true); }} className="btn-primary flex items-center gap-2" data-testid="add-chip-button">
+              <Plus className="w-4 h-4" />Novo Chip
+            </Button>
+          )}
         </div>
       </div>
 
