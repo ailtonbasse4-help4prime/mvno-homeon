@@ -10,101 +10,103 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - **Autenticacao**: JWT com httpOnly cookies
 - **Integracao**: OperadoraService com padrao Adapter (Mock/Real Ta Telecom)
 
+## Perfis de Acesso
+
+### Admin
+- Gerenciar usuarios
+- Sincronizar operadora
+- Ativar, bloquear, desbloquear linhas
+- Alterar plano
+- Gerenciar planos, ofertas e chips
+- Ver logs completos
+
+### Atendente
+- Cadastrar e editar clientes
+- Consultar chips e linhas
+- Ativar linha
+- Sem acesso a configuracoes
+- Sem gestao de usuarios
+- Sem acesso a logs
+
 ## Modelo de Dados
 
 ### Planos (Tecnicos)
-- id, nome, franquia, descricao, **plan_code** (codigo na Ta Telecom), created_at
+- id, nome, franquia, descricao, plan_code, created_at
 
 ### Ofertas (Comerciais)
 - id, nome, plano_id, valor, descricao, ativo, created_at
 
 ### Clientes (Expandido para Ta Telecom)
-- id, nome, **tipo_pessoa** (pf/pj), **documento** (CPF/CNPJ), telefone
-- **data_nascimento**, **cep**, **endereco**, **numero_endereco**
-- **bairro**, **cidade**, **estado**, **city_code**, **complemento**
-- status, **dados_completos** (calculado), created_at
+- id, nome, tipo_pessoa, documento, telefone, data_nascimento
+- cep, endereco, numero_endereco, bairro, cidade, estado, city_code, complemento
+- status, dados_completos (calculado), created_at
 
 ### Chips
 - id, iccid, status (disponivel/reservado/ativado/bloqueado/cancelado)
-- oferta_id, cliente_id, **msisdn**, created_at
+- oferta_id, cliente_id, msisdn, created_at
 
 ### Linhas
 - id, numero, status, cliente_id, chip_id, plano_id, oferta_id, msisdn, created_at
 
-## OperadoraService - Integracao Ta Telecom
-
-### Metodos
-- listarPlanos() - GET /planos?user_token={token}
-- listarEstoque() - GET /estoque/listar?user_token={token}
-- ativarChip(iccid, payload) - POST /simcard/{iccid}/ativar?user_token={token}
-- consultarLinha(iccid) - GET /estoque/{iccid}?user_token={token}
-- bloquearParcial(iccid) - POST /simcard/{iccid}/bloquear/parcial
-- bloquearTotal(iccid, reason) - POST /simcard/{iccid}/bloquear/total
-- desbloquear(iccid) - POST /simcard/{iccid}/desbloquear
-- alterarPlano(iccid, plan_code) - POST /simcard/{iccid}/plano/alterar
-
-### Configuracao (.env)
-```
-USE_MOCK_API=true
-TATELECOM_API_URL=http://sistema.tatelecom.com.br/api/public
-TATELECOM_USER_TOKEN=
-TATELECOM_TIMEOUT=30
-```
-
-### Mapeamento Status Estoque
-- 1 = disponivel
-- 2 = cancelado
-- 3 = ativado
-
-### Motivos Bloqueio Total
-- 1 = Roubo
-- 2 = Perda
-- 3 = Uso indevido
-- 4 = Inadimplencia
-- 5 = Suspensao temporaria
+### Usuarios
+- id, email, password_hash, name, role (admin/atendente), created_at
 
 ## Endpoints da API
 
 ### Auth
 - POST /api/auth/login, /api/auth/register, /api/auth/logout
 - GET /api/auth/me, POST /api/auth/refresh
+- POST /api/auth/change-password
 
-### Clientes (expandido)
-- GET/POST /api/clientes, GET/PUT/DELETE /api/clientes/{id}
-- Validacao: CPF, CNPJ, CEP, dados_completos
+### Usuarios (admin only)
+- GET/POST /api/usuarios, PUT/DELETE /api/usuarios/{id}
 
-### Planos (com plan_code)
-- GET/POST /api/planos, PUT/DELETE /api/planos/{id}
+### Clientes
+- GET/POST /api/clientes (both roles), PUT /api/clientes/{id} (both)
+- DELETE /api/clientes/{id} (admin only)
+
+### Planos
+- GET /api/planos (both), POST/PUT/DELETE (admin only)
 
 ### Ofertas
-- GET/POST /api/ofertas, GET/PUT/DELETE /api/ofertas/{id}
+- GET /api/ofertas (both), POST/PUT/DELETE (admin only)
 
-### Chips (com msisdn)
-- GET/POST /api/chips, DELETE /api/chips/{id}
+### Chips
+- GET /api/chips (both), POST/DELETE (admin only)
 
 ### Ativacao
-- POST /api/ativacao (cliente_id + chip_id)
-  - Valida dados completos do cliente
-  - Valida plan_code no plano vinculado
-  - Monta payload completo para Ta Telecom
+- POST /api/ativacao (both roles)
 
 ### Linhas
-- GET /api/linhas
-- GET /api/linhas/{id}/consultar (consulta operadora)
-- POST /api/linhas/{id}/bloquear-parcial
-- POST /api/linhas/{id}/bloquear-total (body: {reason: 1-5})
-- POST /api/linhas/{id}/desbloquear
-- POST /api/linhas/{id}/alterar-plano (body: {oferta_id})
+- GET /api/linhas (both)
+- GET /api/linhas/{id}/consultar (admin only)
+- POST /api/linhas/{id}/bloquear-parcial (admin only)
+- POST /api/linhas/{id}/bloquear-total (admin only)
+- POST /api/linhas/{id}/desbloquear (admin only)
+- POST /api/linhas/{id}/alterar-plano (admin only)
 
-### Operadora
+### Operadora (admin only)
 - POST /api/operadora/sincronizar-planos
 - POST /api/operadora/sincronizar-estoque
 - GET /api/operadora/config
 - POST /api/operadora/test
-- GET /api/operadora/motivos-bloqueio
+
+### Logs (admin only)
+- GET /api/logs
+
+## Seguranca Implementada
+- JWT httpOnly cookies
+- Brute force protection (5 tentativas, 15 min lockout)
+- Session timeout 30 min inatividade (frontend)
+- Hash bcrypt para senhas
+- Token operadora apenas no backend
+- Role-based access control em todas as rotas
+- Validacao CPF/CNPJ/CEP
+- Audit logs completos
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
+- **Atendente**: carlos@mvno.com / nova456
 
 ## Implementado
 
@@ -118,33 +120,33 @@ TATELECOM_TIMEOUT=30
 - [x] Separacao tecnico/comercial, ativacao automatica
 
 ### Integracao Ta Telecom (01/04/2026)
-- [x] OperadoraService reescrito para API Ta Telecom
-- [x] Modelo cliente expandido (endereco, DOB, tipo_pessoa)
-- [x] plan_code nos planos, msisdn nos chips
-- [x] Sincronizacao de planos e estoque
-- [x] Ativacao com validacao de dados completos
-- [x] Bloqueio parcial e total com motivos
-- [x] Desbloqueio e alteracao de plano
-- [x] Consulta de linha via operadora
-- [x] Validacao CPF/CNPJ/CEP
-- [x] Frontend completo com formularios expandidos
-- [x] Logs detalhados de API
-- [x] Backend 100% (23/23 testes), Frontend 100%
+- [x] OperadoraService real, modelo expandido, sincronizacao, bloqueio/desbloqueio
+
+### Hardening Producao (01/04/2026)
+- [x] Indicador Mock/Real, payload completo, validacoes
+
+### Seguranca e Controle de Acesso (01/04/2026)
+- [x] Perfis admin/atendente com permissoes distintas
+- [x] Gestao de usuarios (CRUD admin only)
+- [x] Troca de senha com validacao
+- [x] Session timeout 30 min inatividade
+- [x] Role-based UI (sidebar, botoes, acoes)
+- [x] Audit logs com usuario responsavel
+- [x] Brute force protection
+- [x] Backend 100% (33/33), Frontend 100%
 
 ## Backlog
 
 ### P0 - Configurar Token Real
-- [ ] Inserir TATELECOM_USER_TOKEN no .env
+- [ ] Inserir TATELECOM_USER_TOKEN
 - [ ] Mudar USE_MOCK_API=false
-- [ ] Testar integracao real
 
 ### P1 - Alta Prioridade
-- [ ] Leitor de codigo de barras/QR code para ICCID
+- [ ] Leitor codigo de barras/QR code para ICCID
 - [ ] Webhooks para callbacks da operadora
-- [ ] Consulta de saldo e consumo (servico preparado)
+- [ ] Retry automatico para ativacoes pendentes
 
 ### P2 - Media Prioridade
 - [ ] Historico de ativacoes recentes
-- [ ] Dashboard de metricas de API
-- [ ] Retry automatico em falhas
-- [ ] Cache de consultas
+- [ ] Consulta de saldo e consumo
+- [ ] Dashboard metricas API
