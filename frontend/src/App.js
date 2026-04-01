@@ -7,6 +7,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Clientes } from "./pages/Clientes";
 import { Chips } from "./pages/Chips";
 import { Planos } from "./pages/Planos";
+import { Ofertas } from "./pages/Ofertas";
 import { Ativacoes } from "./pages/Ativacoes";
 import { Linhas } from "./pages/Linhas";
 import { Logs } from "./pages/Logs";
@@ -22,6 +23,7 @@ function App() {
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/chips" element={<Chips />} />
             <Route path="/planos" element={<Planos />} />
+            <Route path="/ofertas" element={<Ofertas />} />
             <Route path="/ativacoes" element={<Ativacoes />} />
             <Route path="/linhas" element={<Linhas />} />
             <Route path="/logs" element={<Logs />} />

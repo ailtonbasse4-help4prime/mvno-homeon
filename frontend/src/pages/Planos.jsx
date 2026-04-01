@@ -26,15 +26,15 @@ export function Planos() {
   const [planoToDelete, setPlanoToDelete] = useState(null);
   const [formData, setFormData] = useState({
     nome: '',
-    valor: '',
-    franquia: ''
+    franquia: '',
+    descricao: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
   const fetchPlanos = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/api/planos`, {
-        withCredentials: true
+        withCredentials: true,
       });
       setPlanos(response.data);
     } catch (error) {
@@ -54,12 +54,12 @@ export function Planos() {
       setEditingPlano(plano);
       setFormData({
         nome: plano.nome,
-        valor: plano.valor.toString(),
-        franquia: plano.franquia
+        franquia: plano.franquia,
+        descricao: plano.descricao || '',
       });
     } else {
       setEditingPlano(null);
-      setFormData({ nome: '', valor: '', franquia: '' });
+      setFormData({ nome: '', franquia: '', descricao: '' });
     }
     setDialogOpen(true);
   };
@@ -70,21 +70,19 @@ export function Planos() {
 
     const payload = {
       nome: formData.nome,
-      valor: parseFloat(formData.valor),
-      franquia: formData.franquia
+      franquia: formData.franquia,
+      descricao: formData.descricao || null,
     };
 
     try {
       if (editingPlano) {
-        await axios.put(
-          `${API_URL}/api/planos/${editingPlano.id}`,
-          payload,
-          { withCredentials: true }
-        );
+        await axios.put(`${API_URL}/api/planos/${editingPlano.id}`, payload, {
+          withCredentials: true,
+        });
         toast.success('Plano atualizado com sucesso');
       } else {
         await axios.post(`${API_URL}/api/planos`, payload, {
-          withCredentials: true
+          withCredentials: true,
         });
         toast.success('Plano cadastrado com sucesso');
       }
@@ -103,7 +101,7 @@ export function Planos() {
 
     try {
       await axios.delete(`${API_URL}/api/planos/${planoToDelete.id}`, {
-        withCredentials: true
+        withCredentials: true,
       });
       toast.success('Plano removido com sucesso');
       setDeleteDialogOpen(false);
@@ -113,13 +111,6 @@ export function Planos() {
       const message = error.response?.data?.detail || 'Erro ao remover plano';
       toast.error(typeof message === 'string' ? message : 'Erro ao remover plano');
     }
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
   };
 
   if (loading) {
@@ -136,9 +127,11 @@ export function Planos() {
         <div>
           <h1 className="page-title flex items-center gap-3">
             <Package className="w-7 h-7 text-amber-500" />
-            Planos
+            Planos Tecnicos
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de planos</p>
+          <p className="text-zinc-400 text-sm -mt-4">
+            Gerenciamento de planos tecnicos (sem valor comercial)
+          </p>
         </div>
         {isAdmin && (
           <Button
@@ -190,28 +183,22 @@ export function Planos() {
                   </Button>
                 </div>
               )}
-              
+
               <div className="mb-4">
                 <h3 className="text-lg font-semibold text-white">{plano.nome}</h3>
+                {plano.descricao && (
+                  <p className="text-xs text-zinc-500 mt-1">{plano.descricao}</p>
+                )}
               </div>
-              
-              <div className="space-y-3">
-                <div>
-                  <p className="text-3xl font-bold text-blue-400 font-mono">
-                    {formatCurrency(plano.valor)}
-                  </p>
-                  <p className="text-xs text-zinc-500">por mês</p>
-                </div>
-                
-                <div className="pt-3 border-t border-zinc-800">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-sm bg-emerald-500/10 flex items-center justify-center">
-                      <span className="text-emerald-500 text-sm font-bold">GB</span>
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-white">{plano.franquia}</p>
-                      <p className="text-xs text-zinc-500">de franquia</p>
-                    </div>
+
+              <div className="pt-3 border-t border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-sm bg-emerald-500/10 flex items-center justify-center">
+                    <span className="text-emerald-500 text-sm font-bold">GB</span>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-white">{plano.franquia}</p>
+                    <p className="text-xs text-zinc-500">de franquia</p>
                   </div>
                 </div>
               </div>
@@ -225,39 +212,28 @@ export function Planos() {
         <DialogContent className="bg-zinc-900 border-zinc-800">
           <DialogHeader>
             <DialogTitle className="text-white">
-              {editingPlano ? 'Editar Plano' : 'Novo Plano'}
+              {editingPlano ? 'Editar Plano' : 'Novo Plano Tecnico'}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="nome" className="text-zinc-300">Nome do Plano</Label>
+              <Label htmlFor="nome" className="text-zinc-300">
+                Nome do Plano
+              </Label>
               <Input
                 id="nome"
                 value={formData.nome}
                 onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 className="form-input"
-                placeholder="Ex: Básico 5GB"
+                placeholder="Ex: Plano 10GB"
                 required
                 data-testid="plano-nome-input"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="valor" className="text-zinc-300">Valor (R$)</Label>
-              <Input
-                id="valor"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.valor}
-                onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                className="form-input font-mono"
-                placeholder="29.90"
-                required
-                data-testid="plano-valor-input"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="franquia" className="text-zinc-300">Franquia</Label>
+              <Label htmlFor="franquia" className="text-zinc-300">
+                Franquia
+              </Label>
               <Input
                 id="franquia"
                 value={formData.franquia}
@@ -266,6 +242,19 @@ export function Planos() {
                 placeholder="Ex: 10GB"
                 required
                 data-testid="plano-franquia-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="descricao" className="text-zinc-300">
+                Descricao (opcional)
+              </Label>
+              <Input
+                id="descricao"
+                value={formData.descricao}
+                onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                className="form-input"
+                placeholder="Ex: Plano basico com 10GB de dados"
+                data-testid="plano-descricao-input"
               />
             </div>
             <DialogFooter>
@@ -294,11 +283,14 @@ export function Planos() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="bg-zinc-900 border-zinc-800">
           <DialogHeader>
-            <DialogTitle className="text-white">Confirmar Exclusão</DialogTitle>
+            <DialogTitle className="text-white">Confirmar Exclusao</DialogTitle>
           </DialogHeader>
           <p className="text-zinc-400">
             Tem certeza que deseja remover o plano{' '}
             <span className="text-white font-medium">{planoToDelete?.nome}</span>?
+          </p>
+          <p className="text-xs text-amber-400 mt-1">
+            Planos vinculados a ofertas nao podem ser removidos.
           </p>
           <DialogFooter>
             <Button

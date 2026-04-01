@@ -306,18 +306,30 @@ export function IccidInput({
                   type="button"
                   onClick={() => handleSelectChip(chip)}
                   className={cn(
-                    "w-full px-3 py-2.5 text-left hover:bg-zinc-800/50 transition-colors flex items-center justify-between group",
+                    "w-full px-3 py-2.5 text-left hover:bg-zinc-800/50 transition-colors group",
                     selectedChipData?.id === chip.id && "bg-blue-500/10"
                   )}
                   data-testid={`iccid-option-${chip.id}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <CreditCard className="w-4 h-4 text-zinc-500 group-hover:text-emerald-500" />
-                    <span className="font-mono text-sm text-white">{chip.iccid}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-4 h-4 text-zinc-500 group-hover:text-emerald-500" />
+                      <span className="font-mono text-sm text-white">{chip.iccid}</span>
+                    </div>
+                    <span className="text-xs text-emerald-500 px-2 py-0.5 bg-emerald-500/10 rounded">
+                      disponivel
+                    </span>
                   </div>
-                  <span className="text-xs text-emerald-500 px-2 py-0.5 bg-emerald-500/10 rounded">
-                    disponível
-                  </span>
+                  {chip.oferta_nome && (
+                    <div className="ml-7 mt-1 text-xs text-zinc-500">
+                      {chip.oferta_nome} - {chip.franquia || '—'}
+                      {chip.valor != null && (
+                        <span className="text-emerald-500 ml-1">
+                          R$ {chip.valor.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>

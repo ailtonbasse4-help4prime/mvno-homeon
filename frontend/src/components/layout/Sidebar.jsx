@@ -5,6 +5,7 @@ import {
   Users,
   CreditCard,
   Package,
+  Tag,
   Zap,
   Phone,
   FileText,
@@ -15,9 +16,10 @@ import {
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/clientes', icon: Users, label: 'Clientes' },
-  { path: '/chips', icon: CreditCard, label: 'Chips' },
   { path: '/planos', icon: Package, label: 'Planos' },
-  { path: '/ativacoes', icon: Zap, label: 'Ativações' },
+  { path: '/ofertas', icon: Tag, label: 'Ofertas' },
+  { path: '/chips', icon: CreditCard, label: 'Chips' },
+  { path: '/ativacoes', icon: Zap, label: 'Ativacoes' },
   { path: '/linhas', icon: Phone, label: 'Linhas' },
   { path: '/logs', icon: FileText, label: 'Logs' },
 ];

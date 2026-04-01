@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Users, CreditCard, Package, Phone, Zap, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -68,7 +68,7 @@ export function Dashboard() {
       </div>
 
       {/* Main Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           icon={Users}
           label="Total de Clientes"
@@ -95,6 +95,13 @@ export function Dashboard() {
           label="Planos"
           value={stats?.planos?.total || 0}
           color="amber"
+        />
+        <StatCard
+          icon={Tag}
+          label="Ofertas Ativas"
+          value={stats?.ofertas?.ativas || 0}
+          subValue={`${stats?.ofertas?.total || 0} total`}
+          color="blue"
         />
       </div>
 
