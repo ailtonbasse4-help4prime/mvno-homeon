@@ -5,23 +5,24 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Users } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+
+const emptyForm = {
+  nome: '', tipo_pessoa: 'pf', documento: '', telefone: '',
+  data_nascimento: '', cep: '', endereco: '', numero_endereco: '',
+  bairro: '', cidade: '', estado: '', city_code: '', complemento: '',
+  status: 'ativo',
+};
 
 export function Clientes() {
   const { isAdmin } = useAuth();
@@ -32,46 +33,39 @@ export function Clientes() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState(null);
   const [clienteToDelete, setClienteToDelete] = useState(null);
-  const [formData, setFormData] = useState({
-    nome: '',
-    cpf: '',
-    telefone: '',
-    status: 'ativo'
-  });
+  const [formData, setFormData] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
 
   const fetchClientes = useCallback(async () => {
     try {
       const params = search ? { search } : {};
-      const response = await axios.get(`${API_URL}/api/clientes`, {
-        params,
-        withCredentials: true
-      });
+      const response = await axios.get(`${API_URL}/api/clientes`, { params, withCredentials: true });
       setClientes(response.data);
     } catch (error) {
       toast.error('Erro ao carregar clientes');
-      console.error(error);
     } finally {
       setLoading(false);
     }
   }, [search]);
 
-  useEffect(() => {
-    fetchClientes();
-  }, [fetchClientes]);
+  useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
   const handleOpenDialog = (cliente = null) => {
     if (cliente) {
       setEditingCliente(cliente);
       setFormData({
-        nome: cliente.nome,
-        cpf: cliente.cpf,
-        telefone: cliente.telefone,
-        status: cliente.status
+        nome: cliente.nome, tipo_pessoa: cliente.tipo_pessoa || 'pf',
+        documento: cliente.documento, telefone: cliente.telefone,
+        data_nascimento: cliente.data_nascimento || '',
+        cep: cliente.cep || '', endereco: cliente.endereco || '',
+        numero_endereco: cliente.numero_endereco || '',
+        bairro: cliente.bairro || '', cidade: cliente.cidade || '',
+        estado: cliente.estado || '', city_code: cliente.city_code || '',
+        complemento: cliente.complemento || '', status: cliente.status,
       });
     } else {
       setEditingCliente(null);
-      setFormData({ nome: '', cpf: '', telefone: '', status: 'ativo' });
+      setFormData(emptyForm);
     }
     setDialogOpen(true);
   };
@@ -79,19 +73,13 @@ export function Clientes() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-
     try {
+      const payload = { ...formData };
       if (editingCliente) {
-        await axios.put(
-          `${API_URL}/api/clientes/${editingCliente.id}`,
-          formData,
-          { withCredentials: true }
-        );
+        await axios.put(`${API_URL}/api/clientes/${editingCliente.id}`, payload, { withCredentials: true });
         toast.success('Cliente atualizado com sucesso');
       } else {
-        await axios.post(`${API_URL}/api/clientes`, formData, {
-          withCredentials: true
-        });
+        await axios.post(`${API_URL}/api/clientes`, payload, { withCredentials: true });
         toast.success('Cliente cadastrado com sucesso');
       }
       setDialogOpen(false);
@@ -106,138 +94,102 @@ export function Clientes() {
 
   const handleDelete = async () => {
     if (!clienteToDelete) return;
-
     try {
-      await axios.delete(`${API_URL}/api/clientes/${clienteToDelete.id}`, {
-        withCredentials: true
-      });
+      await axios.delete(`${API_URL}/api/clientes/${clienteToDelete.id}`, { withCredentials: true });
       toast.success('Cliente removido com sucesso');
       setDeleteDialogOpen(false);
       setClienteToDelete(null);
       fetchClientes();
     } catch (error) {
-      const message = error.response?.data?.detail || 'Erro ao remover cliente';
-      toast.error(typeof message === 'string' ? message : 'Erro ao remover cliente');
+      const msg = error.response?.data?.detail || 'Erro ao remover';
+      toast.error(typeof msg === 'string' ? msg : 'Erro ao remover');
     }
   };
 
-  const formatCPF = (value) => {
-    const numbers = value.replace(/\D/g, '');
-    if (numbers.length <= 3) return numbers;
-    if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
-    if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
-    return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9, 11)}`;
+  const formatDoc = (val, tipo) => {
+    const n = val.replace(/\D/g, '');
+    if (tipo === 'pj') {
+      if (n.length <= 2) return n;
+      if (n.length <= 5) return `${n.slice(0,2)}.${n.slice(2)}`;
+      if (n.length <= 8) return `${n.slice(0,2)}.${n.slice(2,5)}.${n.slice(5)}`;
+      if (n.length <= 12) return `${n.slice(0,2)}.${n.slice(2,5)}.${n.slice(5,8)}/${n.slice(8)}`;
+      return `${n.slice(0,2)}.${n.slice(2,5)}.${n.slice(5,8)}/${n.slice(8,12)}-${n.slice(12,14)}`;
+    }
+    if (n.length <= 3) return n;
+    if (n.length <= 6) return `${n.slice(0,3)}.${n.slice(3)}`;
+    if (n.length <= 9) return `${n.slice(0,3)}.${n.slice(3,6)}.${n.slice(6)}`;
+    return `${n.slice(0,3)}.${n.slice(3,6)}.${n.slice(6,9)}-${n.slice(9,11)}`;
   };
 
-  const formatPhone = (value) => {
-    const numbers = value.replace(/\D/g, '');
-    if (numbers.length <= 2) return `(${numbers}`;
-    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+  const formatPhone = (val) => {
+    const n = val.replace(/\D/g, '');
+    if (n.length <= 2) return n.length ? `(${n}` : '';
+    if (n.length <= 7) return `(${n.slice(0,2)}) ${n.slice(2)}`;
+    return `(${n.slice(0,2)}) ${n.slice(2,7)}-${n.slice(7,11)}`;
   };
+
+  const f = (field, val) => setFormData(prev => ({ ...prev, [field]: val }));
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
   }
 
   return (
     <div className="space-y-6" data-testid="clientes-page">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title flex items-center gap-3">
-            <Users className="w-7 h-7 text-blue-500" />
-            Clientes
-          </h1>
+          <h1 className="page-title flex items-center gap-3"><Users className="w-7 h-7 text-blue-500" />Clientes</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de clientes</p>
         </div>
-        <Button
-          onClick={() => handleOpenDialog()}
-          className="btn-primary flex items-center gap-2"
-          data-testid="add-cliente-button"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Cliente
+        <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="add-cliente-button">
+          <Plus className="w-4 h-4" />Novo Cliente
         </Button>
       </div>
 
-      {/* Search */}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <Input
-          type="text"
-          placeholder="Buscar por nome, CPF ou telefone..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="form-input pl-10"
-          data-testid="search-clientes"
-        />
+        <Input type="text" placeholder="Buscar por nome, documento ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} className="form-input pl-10" data-testid="search-clientes" />
       </div>
 
-      {/* Table */}
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table" data-testid="clientes-table">
             <thead>
               <tr>
                 <th>Nome</th>
-                <th>CPF</th>
+                <th>Tipo</th>
+                <th>Documento</th>
                 <th>Telefone</th>
+                <th>Dados</th>
                 <th>Status</th>
-                <th className="text-right">Ações</th>
+                <th className="text-right">Acoes</th>
               </tr>
             </thead>
             <tbody>
               {clientes.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-center text-zinc-500 py-8">
-                    Nenhum cliente encontrado
+                <tr><td colSpan={7} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
+              ) : clientes.map((c) => (
+                <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
+                  <td className="font-medium text-white">{c.nome}</td>
+                  <td className="text-zinc-400 text-xs uppercase">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
+                  <td className="font-mono text-zinc-400 text-sm">{c.documento}</td>
+                  <td className="font-mono text-zinc-400 text-sm">{c.telefone}</td>
+                  <td>
+                    {c.dados_completos ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle className="w-3 h-3" />Completo</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-400"><AlertCircle className="w-3 h-3" />Incompleto</span>
+                    )}
+                  </td>
+                  <td><span className={c.status === 'ativo' ? 'badge-active' : 'badge-inactive'}>{c.status}</span></td>
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(c)} className="text-zinc-400 hover:text-white" data-testid={`edit-cliente-${c.id}`}><Edit className="w-4 h-4" /></Button>
+                      {isAdmin && <Button variant="ghost" size="sm" onClick={() => { setClienteToDelete(c); setDeleteDialogOpen(true); }} className="text-zinc-400 hover:text-red-400" data-testid={`delete-cliente-${c.id}`}><Trash2 className="w-4 h-4" /></Button>}
+                    </div>
                   </td>
                 </tr>
-              ) : (
-                clientes.map((cliente) => (
-                  <tr key={cliente.id} data-testid={`cliente-row-${cliente.id}`}>
-                    <td className="font-medium text-white">{cliente.nome}</td>
-                    <td className="font-mono text-zinc-400">{cliente.cpf}</td>
-                    <td className="font-mono text-zinc-400">{cliente.telefone}</td>
-                    <td>
-                      <span className={cliente.status === 'ativo' ? 'badge-active' : 'badge-inactive'}>
-                        {cliente.status}
-                      </span>
-                    </td>
-                    <td className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenDialog(cliente)}
-                          className="text-zinc-400 hover:text-white"
-                          data-testid={`edit-cliente-${cliente.id}`}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setClienteToDelete(cliente);
-                              setDeleteDialogOpen(true);
-                            }}
-                            className="text-zinc-400 hover:text-red-400"
-                            data-testid={`delete-cliente-${cliente.id}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
@@ -245,112 +197,120 @@ export function Clientes() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-white">
-              {editingCliente ? 'Editar Cliente' : 'Novo Cliente'}
-            </DialogTitle>
+            <DialogTitle className="text-white">{editingCliente ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nome" className="text-zinc-300">Nome Completo</Label>
-              <Input
-                id="nome"
-                value={formData.nome}
-                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                className="form-input"
-                required
-                data-testid="cliente-nome-input"
-              />
+            {/* Dados Pessoais */}
+            <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-zinc-300 mb-2">Dados Pessoais</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Tipo de Pessoa</Label>
+                  <Select value={formData.tipo_pessoa} onValueChange={(v) => f('tipo_pessoa', v)}>
+                    <SelectTrigger className="form-input" data-testid="cliente-tipo-pessoa"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800">
+                      <SelectItem value="pf">Pessoa Fisica (PF)</SelectItem>
+                      <SelectItem value="pj">Pessoa Juridica (PJ)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Status</Label>
+                  <Select value={formData.status} onValueChange={(v) => f('status', v)}>
+                    <SelectTrigger className="form-input" data-testid="cliente-status-select"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800">
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="inativo">Inativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-zinc-400 text-xs">{formData.tipo_pessoa === 'pj' ? 'Razao Social' : 'Nome Completo'}</Label>
+                <Input value={formData.nome} onChange={(e) => f('nome', e.target.value)} className="form-input" required data-testid="cliente-nome-input" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">{formData.tipo_pessoa === 'pj' ? 'CNPJ' : 'CPF'}</Label>
+                  <Input value={formData.documento} onChange={(e) => f('documento', formatDoc(e.target.value, formData.tipo_pessoa))} className="form-input font-mono" placeholder={formData.tipo_pessoa === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'} maxLength={formData.tipo_pessoa === 'pj' ? 18 : 14} required data-testid="cliente-documento-input" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Telefone</Label>
+                  <Input value={formData.telefone} onChange={(e) => f('telefone', formatPhone(e.target.value))} className="form-input font-mono" placeholder="(00) 00000-0000" maxLength={15} required data-testid="cliente-telefone-input" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-zinc-400 text-xs">Data de Nascimento</Label>
+                <Input type="date" value={formData.data_nascimento} onChange={(e) => f('data_nascimento', e.target.value)} className="form-input" data-testid="cliente-nascimento-input" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cpf" className="text-zinc-300">CPF</Label>
-              <Input
-                id="cpf"
-                value={formData.cpf}
-                onChange={(e) => setFormData({ ...formData, cpf: formatCPF(e.target.value) })}
-                className="form-input font-mono"
-                placeholder="000.000.000-00"
-                maxLength={14}
-                required
-                data-testid="cliente-cpf-input"
-              />
+
+            {/* Endereco */}
+            <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-zinc-300 mb-2">Endereco</h3>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">CEP</Label>
+                  <Input value={formData.cep} onChange={(e) => f('cep', e.target.value.replace(/\D/g, '').slice(0, 8))} className="form-input font-mono" placeholder="00000000" maxLength={8} data-testid="cliente-cep-input" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Numero</Label>
+                  <Input value={formData.numero_endereco} onChange={(e) => f('numero_endereco', e.target.value)} className="form-input" placeholder="123" data-testid="cliente-numero-input" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Estado</Label>
+                  <Select value={formData.estado} onValueChange={(v) => f('estado', v)}>
+                    <SelectTrigger className="form-input" data-testid="cliente-estado-select"><SelectValue placeholder="UF" /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 max-h-48">
+                      {ESTADOS.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-zinc-400 text-xs">Endereco</Label>
+                <Input value={formData.endereco} onChange={(e) => f('endereco', e.target.value)} className="form-input" placeholder="Rua, Avenida..." data-testid="cliente-endereco-input" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Bairro</Label>
+                  <Input value={formData.bairro} onChange={(e) => f('bairro', e.target.value)} className="form-input" data-testid="cliente-bairro-input" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Cidade</Label>
+                  <Input value={formData.cidade} onChange={(e) => f('cidade', e.target.value)} className="form-input" data-testid="cliente-cidade-input" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Codigo da Cidade</Label>
+                  <Input value={formData.city_code} onChange={(e) => f('city_code', e.target.value)} className="form-input font-mono" placeholder="3550308" data-testid="cliente-citycode-input" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-400 text-xs">Complemento</Label>
+                  <Input value={formData.complemento} onChange={(e) => f('complemento', e.target.value)} className="form-input" placeholder="Apto, Sala..." data-testid="cliente-complemento-input" />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="telefone" className="text-zinc-300">Telefone</Label>
-              <Input
-                id="telefone"
-                value={formData.telefone}
-                onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
-                className="form-input font-mono"
-                placeholder="(00) 00000-0000"
-                maxLength={15}
-                required
-                data-testid="cliente-telefone-input"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status" className="text-zinc-300">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value })}
-              >
-                <SelectTrigger className="form-input" data-testid="cliente-status-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800">
-                  <SelectItem value="ativo">Ativo</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                className="btn-secondary"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting}
-                className="btn-primary"
-                data-testid="cliente-submit-button"
-              >
-                {submitting ? 'Salvando...' : 'Salvar'}
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="btn-secondary">Cancelar</Button>
+              <Button type="submit" disabled={submitting} className="btn-primary" data-testid="cliente-submit-button">{submitting ? 'Salvando...' : 'Salvar'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="bg-zinc-900 border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-white">Confirmar Exclusão</DialogTitle>
-          </DialogHeader>
-          <p className="text-zinc-400">
-            Tem certeza que deseja remover o cliente{' '}
-            <span className="text-white font-medium">{clienteToDelete?.nome}</span>?
-          </p>
+          <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
+          <p className="text-zinc-400">Tem certeza que deseja remover o cliente <span className="text-white font-medium">{clienteToDelete?.nome}</span>?</p>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              className="btn-secondary"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleDelete}
-              className="btn-danger"
-              data-testid="confirm-delete-button"
-            >
-              Remover
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="btn-secondary">Cancelar</Button>
+            <Button onClick={handleDelete} className="btn-danger" data-testid="confirm-delete-button">Remover</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

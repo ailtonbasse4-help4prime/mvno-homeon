@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, CreditCard, Trash2, Filter, Tag } from 'lucide-react';
+import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -34,6 +34,18 @@ export function Chips() {
   const [chipToDelete, setChipToDelete] = useState(null);
   const [formData, setFormData] = useState({ iccid: '', oferta_id: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/operadora/sincronizar-estoque`, {}, { withCredentials: true });
+      toast.success(r.data.message);
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao sincronizar estoque');
+    } finally { setSyncing(false); }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -103,6 +115,10 @@ export function Chips() {
         return <span className="badge-active">Ativado</span>;
       case 'bloqueado':
         return <span className="badge-blocked">Bloqueado</span>;
+      case 'cancelado':
+        return <span className="badge-inactive">Cancelado</span>;
+      case 'reservado':
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">Reservado</span>;
       default:
         return <span className="badge-inactive">{status}</span>;
     }
@@ -134,17 +150,15 @@ export function Chips() {
           </h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de chips vinculados a ofertas</p>
         </div>
-        <Button
-          onClick={() => {
-            setFormData({ iccid: '', oferta_id: '' });
-            setDialogOpen(true);
-          }}
-          className="btn-primary flex items-center gap-2"
-          data-testid="add-chip-button"
-        >
-          <Plus className="w-4 h-4" />
-          Novo Chip
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2" disabled={syncing} data-testid="sync-estoque-button">
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar Estoque'}
+          </Button>
+          <Button onClick={() => { setFormData({ iccid: '', oferta_id: '' }); setDialogOpen(true); }} className="btn-primary flex items-center gap-2" data-testid="add-chip-button">
+            <Plus className="w-4 h-4" />Novo Chip
+          </Button>
+        </div>
       </div>
 
       {/* Filter */}
@@ -173,6 +187,7 @@ export function Chips() {
             <thead>
               <tr>
                 <th>ICCID</th>
+                <th>MSISDN</th>
                 <th>Status</th>
                 <th>Oferta</th>
                 <th>Plano / Franquia</th>
@@ -185,7 +200,7 @@ export function Chips() {
             <tbody>
               {chips.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 8 : 7} className="text-center text-zinc-500 py-8">
+                  <td colSpan={isAdmin ? 9 : 8} className="text-center text-zinc-500 py-8">
                     Nenhum chip encontrado
                   </td>
                 </tr>
@@ -193,6 +208,7 @@ export function Chips() {
                 chips.map((chip) => (
                   <tr key={chip.id} data-testid={`chip-row-${chip.id}`}>
                     <td className="font-mono text-white">{chip.iccid}</td>
+                    <td className="font-mono text-zinc-400 text-sm">{chip.msisdn || '-'}</td>
                     <td>{getStatusBadge(chip.status)}</td>
                     <td className="text-zinc-300 text-sm">{chip.oferta_nome || '—'}</td>
                     <td className="text-zinc-400 text-sm">

@@ -12,7 +12,7 @@ import {
   DialogFooter,
 } from '../components/ui/dialog';
 import { toast } from 'sonner';
-import { Plus, Package, Edit, Trash2 } from 'lucide-react';
+import { Plus, Package, Edit, Trash2, RefreshCw, Code } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -28,8 +28,21 @@ export function Planos() {
     nome: '',
     franquia: '',
     descricao: '',
+    plan_code: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/operadora/sincronizar-planos`, {}, { withCredentials: true });
+      toast.success(r.data.message);
+      fetchPlanos();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao sincronizar');
+    } finally { setSyncing(false); }
+  };
 
   const fetchPlanos = useCallback(async () => {
     try {
@@ -56,10 +69,11 @@ export function Planos() {
         nome: plano.nome,
         franquia: plano.franquia,
         descricao: plano.descricao || '',
+        plan_code: plano.plan_code || '',
       });
     } else {
       setEditingPlano(null);
-      setFormData({ nome: '', franquia: '', descricao: '' });
+      setFormData({ nome: '', franquia: '', descricao: '', plan_code: '' });
     }
     setDialogOpen(true);
   };
@@ -72,6 +86,7 @@ export function Planos() {
       nome: formData.nome,
       franquia: formData.franquia,
       descricao: formData.descricao || null,
+      plan_code: formData.plan_code || null,
     };
 
     try {
@@ -133,16 +148,19 @@ export function Planos() {
             Gerenciamento de planos tecnicos (sem valor comercial)
           </p>
         </div>
-        {isAdmin && (
-          <Button
-            onClick={() => handleOpenDialog()}
-            className="btn-primary flex items-center gap-2"
-            data-testid="add-plano-button"
-          >
-            <Plus className="w-4 h-4" />
-            Novo Plano
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2" disabled={syncing} data-testid="sync-planos-button">
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar Operadora'}
+            </Button>
+          )}
+          {isAdmin && (
+            <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="add-plano-button">
+              <Plus className="w-4 h-4" />Novo Plano
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Cards Grid */}
@@ -191,7 +209,7 @@ export function Planos() {
                 )}
               </div>
 
-              <div className="pt-3 border-t border-zinc-800">
+              <div className="pt-3 border-t border-zinc-800 space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-sm bg-emerald-500/10 flex items-center justify-center">
                     <span className="text-emerald-500 text-sm font-bold">GB</span>
@@ -201,6 +219,12 @@ export function Planos() {
                     <p className="text-xs text-zinc-500">de franquia</p>
                   </div>
                 </div>
+                {plano.plan_code && (
+                  <div className="flex items-center gap-1.5">
+                    <Code className="w-3 h-3 text-zinc-500" />
+                    <span className="text-xs font-mono text-zinc-500">{plano.plan_code}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))
@@ -257,23 +281,23 @@ export function Planos() {
                 data-testid="plano-descricao-input"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="plan_code" className="text-zinc-300">
+                Codigo do Plano na Operadora (plan_code)
+              </Label>
+              <Input
+                id="plan_code"
+                value={formData.plan_code}
+                onChange={(e) => setFormData({ ...formData, plan_code: e.target.value })}
+                className="form-input font-mono"
+                placeholder="Ex: PLAN_10GB"
+                data-testid="plano-plancode-input"
+              />
+              <p className="text-xs text-zinc-500">Codigo usado pela operadora para identificar o plano</p>
+            </div>
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                className="btn-secondary"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting}
-                className="btn-primary"
-                data-testid="plano-submit-button"
-              >
-                {submitting ? 'Salvando...' : 'Salvar'}
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="btn-secondary">Cancelar</Button>
+              <Button type="submit" disabled={submitting} className="btn-primary" data-testid="plano-submit-button">{submitting ? 'Salvando...' : 'Salvar'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -2,32 +2,33 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export function Linhas() {
   const [linhas, setLinhas] = useState([]);
+  const [ofertas, setOfertas] = useState([]);
+  const [blockReasons, setBlockReasons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
-  const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+
+  // Dialogs
+  const [blockPartialDialog, setBlockPartialDialog] = useState(false);
+  const [blockTotalDialog, setBlockTotalDialog] = useState(false);
+  const [unblockDialog, setUnblockDialog] = useState(false);
+  const [statusDialog, setStatusDialog] = useState(false);
+  const [planChangeDialog, setPlanChangeDialog] = useState(false);
+
   const [selectedLinha, setSelectedLinha] = useState(null);
-  const [actionType, setActionType] = useState(null); // 'bloquear' or 'desbloquear'
+  const [selectedReason, setSelectedReason] = useState('');
+  const [selectedNewOferta, setSelectedNewOferta] = useState('');
   const [lineStatus, setLineStatus] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -35,190 +36,148 @@ export function Linhas() {
   const fetchLinhas = useCallback(async () => {
     try {
       const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
-      const response = await axios.get(`${API_URL}/api/linhas`, {
-        params,
-        withCredentials: true
-      });
-      setLinhas(response.data);
+      const [linhasRes, ofertasRes, reasonsRes] = await Promise.all([
+        axios.get(`${API_URL}/api/linhas`, { params, withCredentials: true }),
+        axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/operadora/motivos-bloqueio`, { withCredentials: true }),
+      ]);
+      setLinhas(linhasRes.data);
+      setOfertas(ofertasRes.data);
+      setBlockReasons(reasonsRes.data.reasons || []);
     } catch (error) {
       toast.error('Erro ao carregar linhas');
-      console.error(error);
     } finally {
       setLoading(false);
     }
   }, [statusFilter]);
 
-  useEffect(() => {
-    fetchLinhas();
-  }, [fetchLinhas]);
+  useEffect(() => { fetchLinhas(); }, [fetchLinhas]);
 
-  const handleAction = async () => {
-    if (!selectedLinha || !actionType) return;
-
+  // Block Partial
+  const handleBlockPartial = async () => {
+    if (!selectedLinha) return;
     setProcessing(true);
     try {
-      const endpoint = actionType === 'bloquear' ? 'bloquear' : 'desbloquear';
-      const response = await axios.post(
-        `${API_URL}/api/linhas/${selectedLinha.id}/${endpoint}`,
-        {},
-        { withCredentials: true }
-      );
-
-      if (response.data.success) {
-        toast.success(response.data.message);
-        setActionDialogOpen(false);
-        fetchLinhas();
-      } else {
-        toast.error(response.data.message || 'Erro ao processar ação');
-      }
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Erro ao processar ação';
-      toast.error(typeof message === 'string' ? message : 'Erro ao processar ação');
-    } finally {
-      setProcessing(false);
-    }
+      const r = await axios.post(`${API_URL}/api/linhas/${selectedLinha.id}/bloquear-parcial`, {}, { withCredentials: true });
+      if (r.data.success) { toast.success(r.data.message); setBlockPartialDialog(false); fetchLinhas(); }
+      else toast.error(r.data.message);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao bloquear');
+    } finally { setProcessing(false); }
   };
 
+  // Block Total
+  const handleBlockTotal = async () => {
+    if (!selectedLinha || !selectedReason) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/linhas/${selectedLinha.id}/bloquear-total`, { reason: parseInt(selectedReason) }, { withCredentials: true });
+      if (r.data.success) { toast.success(r.data.message); setBlockTotalDialog(false); fetchLinhas(); }
+      else toast.error(r.data.message);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao bloquear');
+    } finally { setProcessing(false); }
+  };
+
+  // Unblock
+  const handleUnblock = async () => {
+    if (!selectedLinha) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/linhas/${selectedLinha.id}/desbloquear`, {}, { withCredentials: true });
+      if (r.data.success) { toast.success(r.data.message); setUnblockDialog(false); fetchLinhas(); }
+      else toast.error(r.data.message);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao desbloquear');
+    } finally { setProcessing(false); }
+  };
+
+  // Check Status
   const handleCheckStatus = async (linha) => {
     setSelectedLinha(linha);
     setLineStatus(null);
-    setStatusDialogOpen(true);
+    setStatusDialog(true);
     setCheckingStatus(true);
-
     try {
-      const response = await axios.get(
-        `${API_URL}/api/linhas/${linha.id}/status`,
-        { withCredentials: true }
-      );
-      setLineStatus(response.data);
-    } catch (error) {
+      const r = await axios.get(`${API_URL}/api/linhas/${linha.id}/consultar`, { withCredentials: true });
+      setLineStatus(r.data);
+    } catch (e) {
       toast.error('Erro ao consultar status');
-      setStatusDialogOpen(false);
-    } finally {
-      setCheckingStatus(false);
-    }
+      setStatusDialog(false);
+    } finally { setCheckingStatus(false); }
+  };
+
+  // Change Plan
+  const handleChangePlan = async () => {
+    if (!selectedLinha || !selectedNewOferta) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/linhas/${selectedLinha.id}/alterar-plano`, { oferta_id: selectedNewOferta }, { withCredentials: true });
+      if (r.data.success) {
+        toast.success(`Plano alterado para ${r.data.new_plan}`);
+        setPlanChangeDialog(false);
+        fetchLinhas();
+      } else toast.error(r.data.message);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao alterar plano');
+    } finally { setProcessing(false); }
   };
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'ativo':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            Ativo
-          </span>
-        );
-      case 'bloqueado':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
-            <Lock className="w-3 h-3" />
-            Bloqueado
-          </span>
-        );
-      case 'pendente':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <RefreshCw className="w-3 h-3 animate-spin" />
-            Pendente
-          </span>
-        );
-      case 'erro':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <Activity className="w-3 h-3" />
-            Erro
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
-            {status}
-          </span>
-        );
-    }
-  };
-
-  const canBlock = (status) => {
-    return status === 'ativo';
-  };
-
-  const canUnblock = (status) => {
-    return status === 'bloqueado';
+    const styles = {
+      ativo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      bloqueado: 'bg-red-500/10 text-red-400 border-red-500/20',
+      pendente: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      erro: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    };
+    const icons = {
+      ativo: <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />,
+      bloqueado: <Lock className="w-3 h-3" />,
+      pendente: <RefreshCw className="w-3 h-3 animate-spin" />,
+      erro: <Activity className="w-3 h-3" />,
+    };
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium border ${styles[status] || 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'}`}>
+        {icons[status]}{status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
   }
 
   return (
     <div className="space-y-6" data-testid="linhas-page">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title flex items-center gap-3">
-            <Phone className="w-7 h-7 text-purple-500" />
-            Linhas
-          </h1>
+          <h1 className="page-title flex items-center gap-3"><Phone className="w-7 h-7 text-purple-500" />Linhas</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de linhas ativas</p>
         </div>
-        <Button
-          onClick={fetchLinhas}
-          variant="outline"
-          className="btn-secondary flex items-center gap-2"
-          data-testid="refresh-linhas"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Atualizar
+        <Button onClick={fetchLinhas} variant="outline" className="btn-secondary flex items-center gap-2" data-testid="refresh-linhas">
+          <RefreshCw className="w-4 h-4" />Atualizar
         </Button>
       </div>
 
-      {/* Filter */}
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-zinc-500" />
-          <span className="text-sm text-zinc-400">Filtrar por status:</span>
-        </div>
+        <Filter className="w-4 h-4 text-zinc-500" />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48 form-input" data-testid="linha-status-filter">
-            <SelectValue placeholder="Todos" />
-          </SelectTrigger>
+          <SelectTrigger className="w-48 form-input" data-testid="linha-status-filter"><SelectValue placeholder="Todos" /></SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="ativo">Ativo</SelectItem>
             <SelectItem value="pendente">Pendente</SelectItem>
             <SelectItem value="bloqueado">Bloqueado</SelectItem>
-            <SelectItem value="erro">Erro</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4">
-          <p className="text-2xl font-bold text-white font-mono">{linhas.length}</p>
-          <p className="text-xs text-zinc-500">Total de Linhas</p>
-        </div>
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-4">
-          <p className="text-2xl font-bold text-emerald-400 font-mono">
-            {linhas.filter(l => l.status === 'ativo').length}
-          </p>
-          <p className="text-xs text-zinc-500">Ativas</p>
-        </div>
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-4">
-          <p className="text-2xl font-bold text-amber-400 font-mono">
-            {linhas.filter(l => l.status === 'pendente').length}
-          </p>
-          <p className="text-xs text-zinc-500">Pendentes</p>
-        </div>
-        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-4">
-          <p className="text-2xl font-bold text-red-400 font-mono">
-            {linhas.filter(l => l.status === 'bloqueado').length}
-          </p>
-          <p className="text-xs text-zinc-500">Bloqueadas</p>
-        </div>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4"><p className="text-2xl font-bold text-white font-mono">{linhas.length}</p><p className="text-xs text-zinc-500">Total</p></div>
+        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-4"><p className="text-2xl font-bold text-emerald-400 font-mono">{linhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-500">Ativas</p></div>
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-4"><p className="text-2xl font-bold text-amber-400 font-mono">{linhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-500">Pendentes</p></div>
+        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-4"><p className="text-2xl font-bold text-red-400 font-mono">{linhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-500">Bloqueadas</p></div>
       </div>
 
       {/* Table */}
@@ -227,235 +186,206 @@ export function Linhas() {
           <table className="data-table" data-testid="linhas-table">
             <thead>
               <tr>
-                <th>Número</th>
+                <th>Numero</th>
                 <th>Cliente</th>
                 <th>ICCID</th>
                 <th>Plano</th>
+                <th>Oferta</th>
                 <th>Status</th>
-                <th className="text-right">Ações</th>
+                <th className="text-right">Acoes</th>
               </tr>
             </thead>
             <tbody>
               {linhas.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center text-zinc-500 py-8">
-                    Nenhuma linha encontrada
-                  </td>
-                </tr>
-              ) : (
-                linhas.map((linha) => (
-                  <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
-                    <td className="font-mono text-white font-semibold">{linha.numero}</td>
-                    <td className="text-zinc-300">{linha.cliente_nome || '—'}</td>
-                    <td className="font-mono text-zinc-400 text-sm">{linha.iccid || '—'}</td>
-                    <td className="text-zinc-300">{linha.plano_nome || '—'}</td>
-                    <td>{getStatusBadge(linha.status)}</td>
-                    <td className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* Consultar Status */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCheckStatus(linha)}
-                          className="text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10"
-                          title="Consultar Status"
-                          data-testid={`check-status-${linha.id}`}
-                        >
-                          <Info className="w-4 h-4" />
-                        </Button>
-                        
-                        {/* Bloquear */}
-                        {canBlock(linha.status) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedLinha(linha);
-                              setActionType('bloquear');
-                              setActionDialogOpen(true);
-                            }}
-                            className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
-                            title="Bloquear Linha"
-                            data-testid={`block-linha-${linha.id}`}
-                          >
+                <tr><td colSpan={7} className="text-center text-zinc-500 py-8">Nenhuma linha encontrada</td></tr>
+              ) : linhas.map((linha) => (
+                <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
+                  <td className="font-mono text-white font-semibold">{linha.msisdn || linha.numero}</td>
+                  <td className="text-zinc-300">{linha.cliente_nome || '-'}</td>
+                  <td className="font-mono text-zinc-400 text-sm">{linha.iccid || '-'}</td>
+                  <td className="text-zinc-300 text-sm">{linha.plano_nome || '-'}</td>
+                  <td className="text-zinc-400 text-sm">{linha.oferta_nome || '-'}</td>
+                  <td>{getStatusBadge(linha.status)}</td>
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => handleCheckStatus(linha)} className="text-zinc-400 hover:text-blue-400" title="Consultar" data-testid={`check-status-${linha.id}`}>
+                        <Info className="w-4 h-4" />
+                      </Button>
+                      {linha.status === 'ativo' && (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setBlockPartialDialog(true); }} className="text-zinc-400 hover:text-amber-400" title="Bloqueio Parcial" data-testid={`block-partial-${linha.id}`}>
                             <Lock className="w-4 h-4" />
                           </Button>
-                        )}
-                        
-                        {/* Desbloquear */}
-                        {canUnblock(linha.status) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedLinha(linha);
-                              setActionType('desbloquear');
-                              setActionDialogOpen(true);
-                            }}
-                            className="text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                            title="Desbloquear Linha"
-                            data-testid={`unblock-linha-${linha.id}`}
-                          >
-                            <Unlock className="w-4 h-4" />
+                          <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setSelectedReason(''); setBlockTotalDialog(true); }} className="text-zinc-400 hover:text-red-400" title="Bloqueio Total" data-testid={`block-total-${linha.id}`}>
+                            <ShieldAlert className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                          <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setSelectedNewOferta(''); setPlanChangeDialog(true); }} className="text-zinc-400 hover:text-blue-400" title="Alterar Plano" data-testid={`change-plan-${linha.id}`}>
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                      {linha.status === 'bloqueado' && (
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setUnblockDialog(true); }} className="text-zinc-400 hover:text-emerald-400" title="Desbloquear" data-testid={`unblock-${linha.id}`}>
+                          <Unlock className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Action Confirmation Dialog */}
-      <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+      {/* Block Partial Dialog */}
+      <Dialog open={blockPartialDialog} onOpenChange={setBlockPartialDialog}>
         <DialogContent className="bg-zinc-900 border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              {actionType === 'bloquear' ? (
-                <>
-                  <Lock className="w-5 h-5 text-red-400" />
-                  Bloquear Linha
-                </>
-              ) : (
-                <>
-                  <Unlock className="w-5 h-5 text-emerald-400" />
-                  Desbloquear Linha
-                </>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 bg-zinc-800/50 rounded-sm mb-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-zinc-500 mb-1">Número</p>
-                  <p className="text-white font-mono font-semibold">{selectedLinha?.numero}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-zinc-500 mb-1">Cliente</p>
-                  <p className="text-white">{selectedLinha?.cliente_nome || '—'}</p>
-                </div>
-              </div>
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Lock className="w-5 h-5 text-amber-400" />Bloqueio Parcial</DialogTitle></DialogHeader>
+          <div className="py-2">
+            <div className="p-3 bg-zinc-800/50 rounded-sm mb-3">
+              <p className="text-xs text-zinc-500">Numero</p>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+              <p className="text-xs text-zinc-500 mt-1">Cliente: {selectedLinha?.cliente_nome}</p>
             </div>
-            
-            <p className="text-zinc-400">
-              {actionType === 'bloquear' ? (
-                <>
-                  Tem certeza que deseja <span className="text-red-400 font-medium">bloquear</span> esta linha?
-                  A linha será suspensa imediatamente.
-                </>
-              ) : (
-                <>
-                  Tem certeza que deseja <span className="text-emerald-400 font-medium">desbloquear</span> esta linha?
-                  A linha será reativada imediatamente.
-                </>
-              )}
-            </p>
+            <p className="text-zinc-400 text-sm">Bloquear parcialmente esta linha? O usuario nao podera fazer chamadas mas ainda recebera.</p>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setActionDialogOpen(false)}
-              className="btn-secondary"
-              disabled={processing}
-            >
-              Cancelar
+            <Button variant="outline" onClick={() => setBlockPartialDialog(false)} className="btn-secondary" disabled={processing}>Cancelar</Button>
+            <Button onClick={handleBlockPartial} disabled={processing} className="bg-amber-600 hover:bg-amber-700 text-white" data-testid="confirm-block-partial">
+              {processing ? 'Processando...' : 'Bloquear Parcial'}
             </Button>
-            <Button
-              onClick={handleAction}
-              disabled={processing}
-              className={actionType === 'bloquear' ? 'btn-danger' : 'btn-success'}
-              data-testid="confirm-action-button"
-            >
-              {processing ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Processando...</span>
-                </div>
-              ) : actionType === 'bloquear' ? (
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  <span>Bloquear</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Unlock className="w-4 h-4" />
-                  <span>Desbloquear</span>
-                </div>
-              )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Block Total Dialog */}
+      <Dialog open={blockTotalDialog} onOpenChange={setBlockTotalDialog}>
+        <DialogContent className="bg-zinc-900 border-zinc-800">
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><ShieldAlert className="w-5 h-5 text-red-400" />Bloqueio Total</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="p-3 bg-zinc-800/50 rounded-sm">
+              <p className="text-xs text-zinc-500">Numero</p>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+              <p className="text-xs text-zinc-500 mt-1">Cliente: {selectedLinha?.cliente_nome}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-zinc-300">Motivo do bloqueio:</p>
+              <Select value={selectedReason} onValueChange={setSelectedReason}>
+                <SelectTrigger className="form-input" data-testid="block-reason-select"><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-800">
+                  {blockReasons.map(r => (
+                    <SelectItem key={r.code} value={String(r.code)}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-red-400 text-xs">Bloqueio total suspende completamente a linha.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBlockTotalDialog(false)} className="btn-secondary" disabled={processing}>Cancelar</Button>
+            <Button onClick={handleBlockTotal} disabled={processing || !selectedReason} className="btn-danger" data-testid="confirm-block-total">
+              {processing ? 'Processando...' : 'Bloquear Total'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unblock Dialog */}
+      <Dialog open={unblockDialog} onOpenChange={setUnblockDialog}>
+        <DialogContent className="bg-zinc-900 border-zinc-800">
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Unlock className="w-5 h-5 text-emerald-400" />Desbloquear Linha</DialogTitle></DialogHeader>
+          <div className="py-2">
+            <div className="p-3 bg-zinc-800/50 rounded-sm mb-3">
+              <p className="text-xs text-zinc-500">Numero</p>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+              <p className="text-xs text-zinc-500 mt-1">Cliente: {selectedLinha?.cliente_nome}</p>
+            </div>
+            <p className="text-zinc-400 text-sm">Desbloquear esta linha? A linha sera reativada imediatamente.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnblockDialog(false)} className="btn-secondary" disabled={processing}>Cancelar</Button>
+            <Button onClick={handleUnblock} disabled={processing} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="confirm-unblock">
+              {processing ? 'Processando...' : 'Desbloquear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan Change Dialog */}
+      <Dialog open={planChangeDialog} onOpenChange={setPlanChangeDialog}>
+        <DialogContent className="bg-zinc-900 border-zinc-800">
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><ArrowRightLeft className="w-5 h-5 text-blue-400" />Alterar Plano</DialogTitle></DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="p-3 bg-zinc-800/50 rounded-sm">
+              <p className="text-xs text-zinc-500">Numero / Plano Atual</p>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+              <p className="text-sm text-zinc-400 mt-1">{selectedLinha?.plano_nome} - {selectedLinha?.oferta_nome}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-zinc-300">Nova Oferta / Plano:</p>
+              <Select value={selectedNewOferta} onValueChange={setSelectedNewOferta}>
+                <SelectTrigger className="form-input" data-testid="new-oferta-select"><SelectValue placeholder="Selecione a nova oferta" /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
+                  {ofertas.filter(o => o.id !== selectedLinha?.oferta_id).map(o => (
+                    <SelectItem key={o.id} value={o.id}>
+                      <span className="flex items-center gap-2">
+                        <Tag className="w-3 h-3 text-blue-400" />
+                        {o.nome} - R$ {o.valor?.toFixed(2)} ({o.franquia})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPlanChangeDialog(false)} className="btn-secondary" disabled={processing}>Cancelar</Button>
+            <Button onClick={handleChangePlan} disabled={processing || !selectedNewOferta} className="btn-primary" data-testid="confirm-plan-change">
+              {processing ? 'Processando...' : 'Alterar Plano'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Status Dialog */}
-      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+      <Dialog open={statusDialog} onOpenChange={setStatusDialog}>
         <DialogContent className="bg-zinc-900 border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-400" />
-              Status da Linha
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Activity className="w-5 h-5 text-blue-400" />Consulta da Linha</DialogTitle></DialogHeader>
+          <div className="py-2">
             {checkingStatus ? (
-              <div className="flex flex-col items-center justify-center py-8 gap-4">
+              <div className="flex flex-col items-center py-8 gap-4">
                 <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 <p className="text-sm text-zinc-400">Consultando operadora...</p>
               </div>
             ) : lineStatus ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-zinc-800/50 rounded-sm">
-                  <p className="text-xs text-zinc-500 mb-1">Número</p>
-                  <p className="text-xl font-mono font-bold text-white">{lineStatus.numero}</p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-zinc-800/50 rounded-sm">
-                    <p className="text-xs text-zinc-500 mb-1">Status</p>
-                    {getStatusBadge(lineStatus.status)}
-                  </div>
-                  <div className="p-4 bg-zinc-800/50 rounded-sm">
-                    <p className="text-xs text-zinc-500 mb-1">Saldo de Dados</p>
-                    <p className="text-lg font-semibold text-emerald-400">{lineStatus.saldo_dados || '—'}</p>
-                  </div>
-                </div>
-                
-                <div className="p-4 bg-zinc-800/50 rounded-sm">
-                  <p className="text-xs text-zinc-500 mb-1">Validade</p>
-                  <p className="text-white">
-                    {lineStatus.validade 
-                      ? new Date(lineStatus.validade).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric'
-                        })
-                      : '—'
-                    }
+              <div className="space-y-3">
+                <div className={`p-3 rounded-sm ${lineStatus.success ? 'bg-emerald-500/5 border border-emerald-500/20' : 'bg-red-500/5 border border-red-500/20'}`}>
+                  <p className="text-xs text-zinc-500 mb-1">Status</p>
+                  <p className={`text-sm font-semibold ${lineStatus.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {lineStatus.success ? 'Consulta realizada' : 'Erro na consulta'}
                   </p>
+                  <p className="text-xs text-zinc-400 mt-1">{lineStatus.message}</p>
                 </div>
-
+                {lineStatus.data && (
+                  <div className="space-y-2 text-sm">
+                    {Object.entries(lineStatus.data).filter(([k]) => !['raw'].includes(k)).map(([key, val]) => (
+                      <div key={key} className="flex justify-between p-2 bg-zinc-800/50 rounded-sm">
+                        <span className="text-zinc-500">{key}</span>
+                        <span className="text-white font-mono text-xs">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {lineStatus.response_time_ms && (
-                  <p className="text-xs text-zinc-600 text-center">
-                    Tempo de resposta: {lineStatus.response_time_ms}ms
-                  </p>
+                  <p className="text-xs text-zinc-600 text-center">Tempo: {lineStatus.response_time_ms}ms</p>
                 )}
               </div>
             ) : (
-              <p className="text-center text-zinc-500 py-8">Erro ao carregar status</p>
+              <p className="text-center text-zinc-500 py-8">Erro ao carregar dados</p>
             )}
           </div>
-          <DialogFooter>
-            <Button
-              onClick={() => setStatusDialogOpen(false)}
-              className="btn-secondary"
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={() => setStatusDialog(false)} className="btn-secondary">Fechar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
