@@ -1,52 +1,67 @@
-# PRD - Sistema MVNO Manager
+# PRD - Sistema MVNO Manager - Ta Telecom
 
 ## Problema Original
-Criar um sistema web completo para gestão de telefonia móvel (MVNO), independente de qualquer ERP externo, com backend próprio e preparado para integração com API de operadora (como Surf Telecom).
+Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom para ativacao, consulta, bloqueio/desbloqueio e alteracao de planos.
 
 ## Arquitetura
 - **Frontend**: React 19 + Tailwind CSS + Shadcn/UI
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
-- **Autenticação**: JWT com httpOnly cookies
-- **Integração**: OperadoraService com padrão Adapter (Mock/Real)
+- **Autenticacao**: JWT com httpOnly cookies
+- **Integracao**: OperadoraService com padrao Adapter (Mock/Real Ta Telecom)
 
-## Modelo de Dados (Planos vs Ofertas)
+## Modelo de Dados
 
-### Planos (Técnicos - sem valor comercial)
-- id, nome, franquia, descricao, created_at
-- Exemplo: "Plano 10GB" com franquia "10GB"
+### Planos (Tecnicos)
+- id, nome, franquia, descricao, **plan_code** (codigo na Ta Telecom), created_at
 
-### Ofertas (Comerciais - com valor)
-- id, nome, plano_id (referência ao plano técnico), valor, descricao, ativo, created_at
-- Exemplo: "Chip 10GB Essencial" R$ 49,90 vinculado ao "Plano 10GB"
+### Ofertas (Comerciais)
+- id, nome, plano_id, valor, descricao, ativo, created_at
 
-### Chips (vinculados a Ofertas)
-- id, iccid, status, oferta_id (obrigatório), cliente_id, created_at
-- Cada chip DEVE estar vinculado a uma oferta
+### Clientes (Expandido para Ta Telecom)
+- id, nome, **tipo_pessoa** (pf/pj), **documento** (CPF/CNPJ), telefone
+- **data_nascimento**, **cep**, **endereco**, **numero_endereco**
+- **bairro**, **cidade**, **estado**, **city_code**, **complemento**
+- status, **dados_completos** (calculado), created_at
 
-### Ativação (automatizada)
-- Entrada: cliente_id + chip_id (SEM plano_id manual)
-- O sistema detecta automaticamente: chip -> oferta -> plano
-- Resultado: linha criada com número, status, oferta e plano
+### Chips
+- id, iccid, status (disponivel/reservado/ativado/bloqueado/cancelado)
+- oferta_id, cliente_id, **msisdn**, created_at
 
-## OperadoraService - Arquitetura
+### Linhas
+- id, numero, status, cliente_id, chip_id, plano_id, oferta_id, msisdn, created_at
 
-### Estrutura
+## OperadoraService - Integracao Ta Telecom
+
+### Metodos
+- listarPlanos() - GET /planos?user_token={token}
+- listarEstoque() - GET /estoque/listar?user_token={token}
+- ativarChip(iccid, payload) - POST /simcard/{iccid}/ativar?user_token={token}
+- consultarLinha(iccid) - GET /estoque/{iccid}?user_token={token}
+- bloquearParcial(iccid) - POST /simcard/{iccid}/bloquear/parcial
+- bloquearTotal(iccid, reason) - POST /simcard/{iccid}/bloquear/total
+- desbloquear(iccid) - POST /simcard/{iccid}/desbloquear
+- alterarPlano(iccid, plan_code) - POST /simcard/{iccid}/plano/alterar
+
+### Configuracao (.env)
 ```
-/app/backend/services/operadora_service.py
-├── IOperadoraAdapter (Interface abstrata)
-├── MockOperadoraAdapter (Para desenvolvimento/testes)
-├── RealOperadoraAdapter (Para produção - HTTP com httpx)
-└── OperadoraService (Serviço principal com logs)
+USE_MOCK_API=true
+TATELECOM_API_URL=http://sistema.tatelecom.com.br/api/public
+TATELECOM_USER_TOKEN=
+TATELECOM_TIMEOUT=30
 ```
 
-### Configuração (.env)
-```
-USE_MOCK_API="true"
-OPERADORA_API_URL="https://api.surftelecom.com.br"
-OPERADORA_API_TOKEN=""
-OPERADORA_TIMEOUT="30"
-```
+### Mapeamento Status Estoque
+- 1 = disponivel
+- 2 = cancelado
+- 3 = ativado
+
+### Motivos Bloqueio Total
+- 1 = Roubo
+- 2 = Perda
+- 3 = Uso indevido
+- 4 = Inadimplencia
+- 5 = Suspensao temporaria
 
 ## Endpoints da API
 
@@ -54,66 +69,82 @@ OPERADORA_TIMEOUT="30"
 - POST /api/auth/login, /api/auth/register, /api/auth/logout
 - GET /api/auth/me, POST /api/auth/refresh
 
-### Planos (técnicos)
+### Clientes (expandido)
+- GET/POST /api/clientes, GET/PUT/DELETE /api/clientes/{id}
+- Validacao: CPF, CNPJ, CEP, dados_completos
+
+### Planos (com plan_code)
 - GET/POST /api/planos, PUT/DELETE /api/planos/{id}
 
-### Ofertas (comerciais)
+### Ofertas
 - GET/POST /api/ofertas, GET/PUT/DELETE /api/ofertas/{id}
 
-### Chips
+### Chips (com msisdn)
 - GET/POST /api/chips, DELETE /api/chips/{id}
 
-### Ativação
+### Ativacao
 - POST /api/ativacao (cliente_id + chip_id)
+  - Valida dados completos do cliente
+  - Valida plan_code no plano vinculado
+  - Monta payload completo para Ta Telecom
 
 ### Linhas
-- GET /api/linhas, GET /api/linhas/{id}/status
-- POST /api/linhas/{id}/bloquear, POST /api/linhas/{id}/desbloquear
+- GET /api/linhas
+- GET /api/linhas/{id}/consultar (consulta operadora)
+- POST /api/linhas/{id}/bloquear-parcial
+- POST /api/linhas/{id}/bloquear-total (body: {reason: 1-5})
+- POST /api/linhas/{id}/desbloquear
+- POST /api/linhas/{id}/alterar-plano (body: {oferta_id})
 
-### Logs, Dashboard, Operadora
-- GET /api/logs, GET /api/dashboard/stats
-- GET /api/operadora/config, POST /api/operadora/test
+### Operadora
+- POST /api/operadora/sincronizar-planos
+- POST /api/operadora/sincronizar-estoque
+- GET /api/operadora/config
+- POST /api/operadora/test
+- GET /api/operadora/motivos-bloqueio
 
-## Credenciais de Teste
+## Credenciais
 - **Admin**: admin@mvno.com / admin123
 
-## O que foi implementado
+## Implementado
 
 ### MVP Inicial (31/03/2026)
-- [x] JWT Auth com cookies httpOnly + brute force protection
-- [x] CRUD completo: Clientes, Chips, Planos
-- [x] Sistema de ativação de linhas
-- [x] Gerenciamento de linhas (bloquear/desbloquear)
-- [x] Logs detalhados com payloads de API
-- [x] Dashboard com estatísticas
-- [x] IccidInput inteligente com autocomplete
+- [x] JWT Auth, dark theme, CRUD completo
 
 ### OperadoraService v2 (31/03/2026)
-- [x] Interface abstrata com Mock e Real adapters
-- [x] Configuração via .env
-- [x] Tratamento completo de erros
-- [x] Logs de API com tempo de resposta
+- [x] Interface com Mock/Real adapters
 
-### Reestruturação Planos vs Ofertas (01/04/2026)
-- [x] Backend reescrito: Planos (técnico) e Ofertas (comercial)
-- [x] Nova página Ofertas CRUD
-- [x] Planos sem campo de valor
-- [x] Chips vinculados obrigatoriamente a ofertas
-- [x] Ativação automática: detecta oferta/plano pelo ICCID
-- [x] IccidInput mostra info da oferta nas sugestões
-- [x] Dashboard com stats de ofertas
-- [x] Testes: Backend 100% (19/19), Frontend 100%
+### Reestruturacao Planos vs Ofertas (01/04/2026)
+- [x] Separacao tecnico/comercial, ativacao automatica
+
+### Integracao Ta Telecom (01/04/2026)
+- [x] OperadoraService reescrito para API Ta Telecom
+- [x] Modelo cliente expandido (endereco, DOB, tipo_pessoa)
+- [x] plan_code nos planos, msisdn nos chips
+- [x] Sincronizacao de planos e estoque
+- [x] Ativacao com validacao de dados completos
+- [x] Bloqueio parcial e total com motivos
+- [x] Desbloqueio e alteracao de plano
+- [x] Consulta de linha via operadora
+- [x] Validacao CPF/CNPJ/CEP
+- [x] Frontend completo com formularios expandidos
+- [x] Logs detalhados de API
+- [x] Backend 100% (23/23 testes), Frontend 100%
 
 ## Backlog
 
-### P1 - Alta Prioridade
-- [ ] Leitor de código de barras/QR code para ICCID na ativação
-- [ ] Webhooks para callbacks da operadora (auto-update status)
-- [ ] Integração real com Surf Telecom
+### P0 - Configurar Token Real
+- [ ] Inserir TATELECOM_USER_TOKEN no .env
+- [ ] Mudar USE_MOCK_API=false
+- [ ] Testar integracao real
 
-### P2 - Média Prioridade
-- [ ] Histórico de ativações recentes
+### P1 - Alta Prioridade
+- [ ] Leitor de codigo de barras/QR code para ICCID
+- [ ] Webhooks para callbacks da operadora
+- [ ] Consulta de saldo e consumo (servico preparado)
+
+### P2 - Media Prioridade
+- [ ] Historico de ativacoes recentes
+- [ ] Dashboard de metricas de API
+- [ ] Retry automatico em falhas
 - [ ] Cache de consultas
-- [ ] Rate limiting
-- [ ] Dashboard de métricas de API
-- [ ] Retry automático em falhas
