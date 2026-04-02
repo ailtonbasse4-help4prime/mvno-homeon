@@ -165,6 +165,17 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Sidebar atualizado com novos links
 - [x] Preparado para ativacao: basta definir ASAAS_API_KEY no .env
 
+### Layout Responsivo Mobile (02/04/2026)
+- [x] Menu hamburguer no mobile (slide-in com overlay)
+- [x] Sidebar fecha ao navegar ou clicar overlay
+- [x] Header mobile fixo com logo
+- [x] Botoes e inputs com min-h 44px (touch targets)
+- [x] Tabelas com scroll horizontal no mobile
+- [x] Grids adaptivos (1 col mobile -> 5 col desktop)
+- [x] Dialogs responsivos (max-width calc, scroll vertical)
+- [x] Todas as telas criticas adaptadas: Dashboard, Clientes, Chips, Ativacao, Linhas, Carteira Movel, Assinaturas
+- [x] Viewport meta tag otimizado para iOS/Android
+
 ## Backlog
 
 ### P0 - Concluido
