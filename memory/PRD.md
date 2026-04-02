@@ -176,6 +176,18 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Todas as telas criticas adaptadas: Dashboard, Clientes, Chips, Ativacao, Linhas, Carteira Movel, Assinaturas
 - [x] Viewport meta tag otimizado para iOS/Android
 
+### Deploy VPS (02/04/2026)
+- [x] Dockerizacao completa (backend + frontend + MongoDB)
+- [x] docker-compose.yml com healthchecks
+- [x] Dockerfile backend (Python 3.11 + uvicorn workers)
+- [x] Dockerfile frontend (build React + nginx)
+- [x] nginx.conf com proxy reverso e cache de assets
+- [x] .env.example com todas as variaveis documentadas
+- [x] nginx-ssl.conf template para HTTPS/Certbot
+- [x] setup.sh script de instalacao automatica
+- [x] package.sh gera tar.gz pronto para deploy
+- [x] README_DEPLOY.md com guia completo (passo a passo)
+
 ## Backlog
 
 ### P0 - Concluido
