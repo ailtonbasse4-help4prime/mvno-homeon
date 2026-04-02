@@ -87,18 +87,18 @@ export function Usuarios() {
 
   return (
     <div className="space-y-6" data-testid="usuarios-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><UserCog className="w-7 h-7 text-violet-500" />Usuarios</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de usuarios e perfis de acesso</p>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="add-user-button">
+        <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-user-button">
           <Plus className="w-4 h-4" />Novo Usuario
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4">
           <p className="text-2xl font-bold text-white font-mono">{usuarios.length}</p>
           <p className="text-xs text-zinc-500">Total</p>

@@ -205,22 +205,23 @@ export function Chips() {
 
   return (
     <div className="space-y-6" data-testid="chips-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3">
             <CreditCard className="w-7 h-7 text-emerald-500" />Chips (SIM Cards)
           </h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de chips vinculados a ofertas</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
-            <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2" disabled={syncing} data-testid="sync-estoque-button">
+            <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2 flex-1 sm:flex-initial" disabled={syncing} data-testid="sync-estoque-button">
               <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Sincronizando...' : 'Sincronizar Estoque'}
+              <span className="hidden sm:inline">{syncing ? 'Sincronizando...' : 'Sincronizar Estoque'}</span>
+              <span className="sm:hidden">{syncing ? 'Sync...' : 'Sync'}</span>
             </Button>
           )}
           {isAdmin && (
-            <Button onClick={() => { setFormData({ iccid: '', oferta_id: '' }); setDialogOpen(true); }} className="btn-primary flex items-center gap-2" data-testid="add-chip-button">
+            <Button onClick={() => { setFormData({ iccid: '', oferta_id: '' }); setDialogOpen(true); }} className="btn-primary flex items-center gap-2 flex-1 sm:flex-initial" data-testid="add-chip-button">
               <Plus className="w-4 h-4" />Novo Chip
             </Button>
           )}

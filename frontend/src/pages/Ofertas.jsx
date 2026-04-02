@@ -120,20 +120,20 @@ export function Ofertas() {
 
   return (
     <div className="space-y-6" data-testid="ofertas-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><Tag className="w-7 h-7 text-blue-500" />Ofertas Comerciais</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de ofertas por categoria</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="add-oferta-button">
+          <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-oferta-button">
             <Plus className="w-4 h-4" />Nova Oferta
           </Button>
         )}
       </div>
 
       {/* Category Tabs */}
-      <div className="flex items-center gap-2" data-testid="categoria-filter">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1" data-testid="categoria-filter">
         <button
           onClick={() => setCategoriaFilter('all')}
           className={`px-4 py-2 rounded-sm text-sm font-medium transition-colors border ${

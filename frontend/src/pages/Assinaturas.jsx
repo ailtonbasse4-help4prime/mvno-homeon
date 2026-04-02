@@ -129,7 +129,7 @@ export function Assinaturas() {
 
   return (
     <div className="space-y-6" data-testid="assinaturas-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3">
             <RefreshCw className="w-7 h-7 text-blue-500" />Assinaturas
@@ -140,7 +140,7 @@ export function Assinaturas() {
           <Button onClick={() => {
             setFormData({ cliente_id: '', linha_id: '', billing_type: 'PIX', valor: '', proximo_vencimento: '', ciclo: 'MONTHLY', descricao: '' });
             setDialogOpen(true);
-          }} className="btn-primary flex items-center gap-2" data-testid="add-assinatura-button">
+          }} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-assinatura-button">
             <Plus className="w-4 h-4" />Nova Assinatura
           </Button>
         )}

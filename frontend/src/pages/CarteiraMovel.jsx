@@ -134,14 +134,14 @@ export function CarteiraMovel() {
 
   return (
     <div className="space-y-6" data-testid="carteira-movel-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3">
             <Wallet className="w-7 h-7 text-emerald-500" />Carteira Movel
           </h1>
           <p className="text-zinc-400 text-sm -mt-4">Gestao financeira exclusiva para planos moveis</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium border ${
             asaasConfigured
               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
@@ -154,7 +154,7 @@ export function CarteiraMovel() {
             <Button onClick={() => {
               setFormData({ cliente_id: '', linha_id: '', billing_type: 'PIX', valor: '', vencimento: '', descricao: '' });
               setDialogOpen(true);
-            }} className="btn-primary flex items-center gap-2" data-testid="add-cobranca-button">
+            }} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-cobranca-button">
               <Plus className="w-4 h-4" />Nova Cobranca
             </Button>
           )}
@@ -163,7 +163,7 @@ export function CarteiraMovel() {
 
       {/* Summary Cards */}
       {resumo && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-testid="carteira-resumo">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" data-testid="carteira-resumo">
           <div className="dashboard-card">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-sm bg-emerald-500/10 flex items-center justify-center">

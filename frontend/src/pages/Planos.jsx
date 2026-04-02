@@ -138,7 +138,7 @@ export function Planos() {
 
   return (
     <div className="space-y-6" data-testid="planos-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3">
             <Package className="w-7 h-7 text-amber-500" />
@@ -148,15 +148,16 @@ export function Planos() {
             Gerenciamento de planos tecnicos (sem valor comercial)
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
-            <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2" disabled={syncing} data-testid="sync-planos-button">
+            <Button onClick={handleSync} variant="outline" className="btn-secondary flex items-center gap-2 flex-1 sm:flex-initial" disabled={syncing} data-testid="sync-planos-button">
               <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Sincronizando...' : 'Sincronizar Operadora'}
+              <span className="hidden sm:inline">{syncing ? 'Sincronizando...' : 'Sincronizar Operadora'}</span>
+              <span className="sm:hidden">{syncing ? 'Sync...' : 'Sync'}</span>
             </Button>
           )}
           {isAdmin && (
-            <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="add-plano-button">
+            <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 flex-1 sm:flex-initial" data-testid="add-plano-button">
               <Plus className="w-4 h-4" />Novo Plano
             </Button>
           )}

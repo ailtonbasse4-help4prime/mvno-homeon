@@ -144,7 +144,7 @@ export function Login() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full btn-primary h-11"
+                className="w-full btn-primary h-12 text-base"
                 data-testid="login-submit-button"
               >
                 {loading ? (

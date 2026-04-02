@@ -151,17 +151,17 @@ export function Linhas() {
 
   return (
     <div className="space-y-6" data-testid="linhas-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><Phone className="w-7 h-7 text-purple-500" />Linhas</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de linhas ativas</p>
         </div>
-        <Button onClick={fetchLinhas} variant="outline" className="btn-secondary flex items-center gap-2" data-testid="refresh-linhas">
+        <Button onClick={fetchLinhas} variant="outline" className="btn-secondary flex items-center gap-2 w-full sm:w-auto" data-testid="refresh-linhas">
           <RefreshCw className="w-4 h-4" />Atualizar
         </Button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 overflow-x-auto">
         <Filter className="w-4 h-4 text-zinc-500" />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-48 form-input" data-testid="linha-status-filter"><SelectValue placeholder="Todos" /></SelectTrigger>

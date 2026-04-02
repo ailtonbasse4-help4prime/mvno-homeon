@@ -125,7 +125,7 @@ export function Logs() {
 
   return (
     <div className="space-y-6" data-testid="logs-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3">
             <FileText className="w-7 h-7 text-zinc-400" />
@@ -136,7 +136,7 @@ export function Logs() {
         <Button
           onClick={fetchLogs}
           variant="outline"
-          className="btn-secondary flex items-center gap-2"
+          className="btn-secondary flex items-center gap-2 w-full sm:w-auto"
         >
           <RefreshCw className="w-4 h-4" />
           Atualizar
@@ -144,13 +144,13 @@ export function Logs() {
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-zinc-500" />
-          <span className="text-sm text-zinc-400">Filtrar por ação:</span>
+          <span className="text-sm text-zinc-400">Filtrar:</span>
         </div>
         <Select value={actionFilter} onValueChange={setActionFilter}>
-          <SelectTrigger className="w-48 form-input" data-testid="log-action-filter">
+          <SelectTrigger className="w-44 sm:w-48 form-input" data-testid="log-action-filter">
             <SelectValue placeholder="Todas as ações" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-800">

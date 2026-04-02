@@ -62,7 +62,7 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title">Dashboard</h1>
           <p className="text-zinc-400 text-sm -mt-4">Visao geral do sistema MVNO</p>

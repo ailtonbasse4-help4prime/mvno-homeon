@@ -53,7 +53,17 @@
 
 @layer components {
     .sidebar {
-        @apply w-64 min-h-screen bg-zinc-950 border-r border-zinc-800 fixed left-0 top-0;
+        @apply w-64 min-h-screen bg-zinc-950 border-r border-zinc-800 fixed left-0 top-0 z-40;
+        @apply flex flex-col;
+    }
+
+    @media (max-width: 768px) {
+        .sidebar {
+            @apply w-72 -translate-x-full transition-transform duration-300 ease-in-out;
+        }
+        .sidebar.sidebar-open {
+            @apply translate-x-0;
+        }
     }
 
     .sidebar-link {
@@ -68,8 +78,28 @@
         @apply ml-64 p-6 min-h-screen;
     }
 
+    @media (max-width: 768px) {
+        .main-content {
+            @apply ml-0 p-4 pt-16;
+        }
+    }
+
+    .sidebar-overlay {
+        @apply fixed inset-0 bg-black/60 z-30 md:hidden;
+    }
+
+    .mobile-header {
+        @apply fixed top-0 left-0 right-0 z-20 bg-zinc-950 border-b border-zinc-800 px-4 py-3 flex items-center gap-3 md:hidden;
+    }
+
     .dashboard-card {
         @apply bg-zinc-900 border border-zinc-800 rounded-sm p-6 hover:border-zinc-700 transition-colors;
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-card {
+            @apply p-4;
+        }
     }
 
     .data-table {
@@ -77,11 +107,17 @@
     }
 
     .data-table th {
-        @apply text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 px-4 py-3 border-b border-zinc-800;
+        @apply text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 px-4 py-3 border-b border-zinc-800 whitespace-nowrap;
     }
 
     .data-table td {
-        @apply px-4 py-3 border-b border-zinc-800 text-sm;
+        @apply px-4 py-3 border-b border-zinc-800 text-sm whitespace-nowrap;
+    }
+
+    @media (max-width: 768px) {
+        .data-table th, .data-table td {
+            @apply px-3 py-2.5;
+        }
     }
 
     .data-table tr:hover {
@@ -112,9 +148,21 @@
         @apply bg-zinc-900 border border-zinc-800 rounded-sm p-5 flex flex-col;
     }
 
+    @media (max-width: 768px) {
+        .stat-card {
+            @apply p-4;
+        }
+    }
+
     .stat-value {
         @apply text-3xl font-bold text-white;
         font-family: 'JetBrains Mono', monospace;
+    }
+
+    @media (max-width: 768px) {
+        .stat-value {
+            @apply text-2xl;
+        }
     }
 
     .stat-label {
@@ -123,26 +171,39 @@
 
     .form-input {
         @apply w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-sm text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors;
+        @apply min-h-[44px] text-base;
+    }
+
+    @media (min-width: 769px) {
+        .form-input {
+            @apply min-h-0 text-sm;
+        }
     }
 
     .btn-primary {
-        @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-sm transition-all;
+        @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-sm transition-all min-h-[44px];
     }
 
     .btn-secondary {
-        @apply px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-sm transition-all;
+        @apply px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-sm transition-all min-h-[44px];
     }
 
     .btn-danger {
-        @apply px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-sm transition-all;
+        @apply px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-sm transition-all min-h-[44px];
     }
 
     .btn-success {
-        @apply px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-sm transition-all;
+        @apply px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-sm transition-all min-h-[44px];
     }
 
     .page-title {
         @apply text-2xl font-bold text-white mb-6;
+    }
+
+    @media (max-width: 768px) {
+        .page-title {
+            @apply text-xl mb-4;
+        }
     }
 
     .section-title {

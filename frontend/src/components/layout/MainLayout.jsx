@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Sidebar } from './Sidebar';
 import { Toaster } from '../ui/sonner';
+import { Menu } from 'lucide-react';
 
 export function MainLayout() {
   const { user, loading } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) {
     return (
@@ -23,7 +26,24 @@ export function MainLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar />
+      {/* Mobile Header */}
+      <div className="mobile-header" data-testid="mobile-header">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 text-zinc-400 hover:text-white rounded-sm"
+          data-testid="mobile-menu-button"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-sm bg-blue-600 flex items-center justify-center">
+            <span className="text-white font-bold text-sm">M</span>
+          </div>
+          <span className="text-white font-bold text-sm">MVNO Manager</span>
+        </div>
+      </div>
+
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="main-content">
         <Outlet />
       </main>

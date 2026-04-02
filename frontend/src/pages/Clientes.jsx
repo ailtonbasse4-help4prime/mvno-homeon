@@ -136,17 +136,17 @@ export function Clientes() {
 
   return (
     <div className="space-y-6" data-testid="clientes-page">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><Users className="w-7 h-7 text-blue-500" />Clientes</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de clientes</p>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="add-cliente-button">
+        <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-cliente-button">
           <Plus className="w-4 h-4" />Novo Cliente
         </Button>
       </div>
 
-      <div className="relative max-w-md">
+      <div className="relative max-w-full sm:max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
         <Input type="text" placeholder="Buscar por nome, documento ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} className="form-input pl-10" data-testid="search-clientes" />
       </div>
@@ -197,7 +197,7 @@ export function Clientes() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-white">{editingCliente ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
           </DialogHeader>
@@ -250,7 +250,7 @@ export function Clientes() {
             {/* Endereco */}
             <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Endereco</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-zinc-400 text-xs">CEP</Label>
                   <Input value={formData.cep} onChange={(e) => f('cep', e.target.value.replace(/\D/g, '').slice(0, 8))} className="form-input font-mono" placeholder="00000000" maxLength={8} data-testid="cliente-cep-input" />
@@ -295,9 +295,9 @@ export function Clientes() {
               </div>
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="btn-secondary">Cancelar</Button>
-              <Button type="submit" disabled={submitting} className="btn-primary" data-testid="cliente-submit-button">{submitting ? 'Salvando...' : 'Salvar'}</Button>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="btn-secondary w-full sm:w-auto">Cancelar</Button>
+              <Button type="submit" disabled={submitting} className="btn-primary w-full sm:w-auto" data-testid="cliente-submit-button">{submitting ? 'Salvando...' : 'Salvar'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
