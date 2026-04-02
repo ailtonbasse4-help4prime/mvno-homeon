@@ -14,6 +14,7 @@ import { Logs } from "./pages/Logs";
 import { Usuarios } from "./pages/Usuarios";
 import { CarteiraMovel } from "./pages/CarteiraMovel";
 import { Assinaturas } from "./pages/Assinaturas";
+import { AtivarChip } from "./pages/AtivarChip";
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/planos" element={<Planos />} />
             <Route path="/ofertas" element={<Ofertas />} />
             <Route path="/ativacoes" element={<Ativacoes />} />
+            <Route path="/ativar-chip" element={<AtivarChip />} />
             <Route path="/linhas" element={<Linhas />} />
             <Route path="/carteira" element={<CarteiraMovel />} />
             <Route path="/assinaturas" element={<Assinaturas />} />

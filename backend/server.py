@@ -1708,6 +1708,30 @@ async def asaas_webhook(request: Request):
 
     return {"received": True}
 
+# ==================== ATIVAR CHIP (PROXY EXTERNO) ====================
+
+class AtivarChipRequest(BaseModel):
+    nome: str
+    cpf: str
+    iccid: str
+    plano: str
+
+@api_router.post("/ativar-chip")
+async def ativar_chip_proxy(data: AtivarChipRequest, request: Request):
+    user = await get_current_user(request)
+    import httpx
+    payload = {"nome": data.nome, "cpf": data.cpf, "iccid": data.iccid, "plano": data.plano}
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post("http://187.127.11.235/ativar-chip", json=payload)
+            resp.raise_for_status()
+        await create_log("ativacao", f"Chip ativado via API externa: ICCID {data.iccid} para {data.nome}", user["id"], user["name"])
+        return {"message": "Chip ativado com sucesso"}
+    except Exception as e:
+        logger.error(f"Erro ao ativar chip via API externa: {e}")
+        await create_log("erro", f"Falha ativacao externa: ICCID {data.iccid} - {str(e)}", user["id"], user["name"])
+        raise HTTPException(status_code=502, detail="Erro ao ativar chip")
+
 # ==================== DASHBOARD STATS ====================
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(request: Request):

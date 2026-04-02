@@ -188,6 +188,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] package.sh gera tar.gz pronto para deploy
 - [x] README_DEPLOY.md com guia completo (passo a passo)
 
+### Tela Ativar Chip - API Externa (02/04/2026)
+- [x] Pagina /ativar-chip com campos: Nome, CPF, ICCID, Plano
+- [x] Botao ATIVAR CHIP envia POST para http://187.127.11.235/ativar-chip
+- [x] Mensagem de sucesso/erro apos envio
+- [x] Proxy backend para evitar CORS
+- [x] Layout mobile-first com botao grande
+- [x] Link no sidebar (Ativar Chip)
+
 ## Backlog
 
 ### P0 - Concluido
