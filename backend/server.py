@@ -32,7 +32,7 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
-COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "none")
 
 app = FastAPI(title="MVNO Management System - Ta Telecom")
 api_router = APIRouter(prefix="/api")
