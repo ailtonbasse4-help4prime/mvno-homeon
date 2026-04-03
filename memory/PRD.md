@@ -34,7 +34,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - id, nome, franquia, descricao, plan_code, created_at
 
 ### Ofertas (Comerciais)
-- id, nome, plano_id, valor, descricao, ativo, created_at
+- id, nome, plano_id, valor, descricao, categoria (movel/m2m), ativo, created_at
 
 ### Clientes (Expandido para Ta Telecom)
 - id, nome, tipo_pessoa, documento, telefone, data_nascimento
@@ -50,6 +50,12 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ### Usuarios
 - id, email, password_hash, name, role (admin/atendente), created_at
+
+### Asaas Cobrancas
+- id, client_id, linha_id, valor, status_financeiro, due_date, asaas_payment_id
+
+### Asaas Assinaturas
+- id, client_id, linha_id, valor, ciclo, asaas_subscription_id
 
 ## Endpoints da API
 
@@ -73,9 +79,11 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ### Chips
 - GET /api/chips (both), POST/DELETE (admin only)
+- PUT /api/chips/{chip_id} (alterar oferta)
 
 ### Ativacao
 - POST /api/ativacao (both roles)
+- POST /api/ativar-chip (proxy externo)
 
 ### Linhas
 - GET /api/linhas (both)
@@ -85,10 +93,21 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - POST /api/linhas/{id}/desbloquear (admin only)
 - POST /api/linhas/{id}/alterar-plano (admin only)
 
+### Carteira Movel
+- GET /api/carteira/resumo, /api/carteira/cobrancas, /api/carteira/assinaturas
+- POST /api/carteira/cobrancas, /api/carteira/assinaturas
+- DELETE /api/carteira/cobrancas/{id}
+- POST /api/carteira/cobrancas/{id}/consultar
+- POST /api/carteira/assinaturas/{id}/cancelar
+- POST /api/webhooks/asaas
+
+### Dashboard
+- GET /api/dashboard/stats
+
 ### Operadora (admin only)
 - POST /api/operadora/sincronizar-planos
 - POST /api/operadora/sincronizar-estoque
-- GET /api/operadora/config
+- GET /api/operadora/config, /api/operadora/motivos-bloqueio
 - POST /api/operadora/test
 
 ### Logs (admin only)
@@ -103,6 +122,8 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - Role-based access control em todas as rotas
 - Validacao CPF/CNPJ/CEP
 - Audit logs completos
+- ErrorBoundary React para fallback de crashes
+- safeArray/safeObject para programacao defensiva de API
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
@@ -133,74 +154,50 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Role-based UI (sidebar, botoes, acoes)
 - [x] Audit logs com usuario responsavel
 - [x] Brute force protection
-- [x] Backend 100% (33/33), Frontend 100%
 
-## Implementado (01/04/2026 - Continuacao)
-
-### Categorizacao de Ofertas (Movel vs M2M)
-- [x] Campo `categoria` (movel/m2m) no modelo de Ofertas
+### Categorizacao de Ofertas (01/04/2026)
+- [x] Campo categoria (movel/m2m) no modelo de Ofertas
 - [x] 7 ofertas reais vinculadas aos plan_codes da Ta Telecom
-- [x] Pagina Ofertas com abas filtro Todas/Movel/M2M com contadores
-- [x] Badges de categoria (azul=Movel, violeta=M2M) nos cards
+- [x] Pagina Ofertas com abas filtro Todas/Movel/M2M
 
-### Vinculacao de Oferta ao Chip
+### Vinculacao de Oferta ao Chip (01/04/2026)
 - [x] PUT /api/chips/{chip_id} para alterar oferta vinculada
-- [x] Regra: apenas chips disponiveis/reservados podem ter oferta alterada
-- [x] Regra: chips ativados bloqueados para alteracao
-- [x] Botao Editar na tabela de chips (apenas para disponiveis/reservados)
-- [x] Modal "Vincular Oferta ao Chip" com info do chip e dropdown
-- [x] Dropdown agrupado por categoria (Movel/M2M) em Chips e Novo Chip
-- [x] Coluna Categoria com badges na tabela de chips
-- [x] Indicacao "Sem oferta" em amarelo para chips sem vinculo
+- [x] Modal Vincular Oferta com dropdown agrupado
 
 ### Carteira Movel - Asaas (01/04/2026)
 - [x] Servico AsaasService com adapter (sandbox/production)
-- [x] Modelos: cobrancas, assinaturas no MongoDB
-- [x] CRUD cobrancas avulsas (PIX/Boleto/Cartao)
-- [x] CRUD assinaturas recorrentes (Mensal/Trimestral/etc)
-- [x] Dashboard financeiro (Receita, Pendente, Vencido, Assinaturas)
-- [x] Endpoint webhook para callbacks do Asaas
-- [x] Badge indicador de status Asaas (Pendente/Conectado)
-- [x] Paginas frontend: Carteira Movel + Assinaturas
-- [x] Sidebar atualizado com novos links
-- [x] Preparado para ativacao: basta definir ASAAS_API_KEY no .env
+- [x] CRUD cobrancas avulsas e assinaturas recorrentes
+- [x] Dashboard financeiro e webhook
+- [x] MOCK local ativo (aguardando chave real)
 
 ### Layout Responsivo Mobile (02/04/2026)
-- [x] Menu hamburguer no mobile (slide-in com overlay)
-- [x] Sidebar fecha ao navegar ou clicar overlay
-- [x] Header mobile fixo com logo
-- [x] Botoes e inputs com min-h 44px (touch targets)
-- [x] Tabelas com scroll horizontal no mobile
-- [x] Grids adaptivos (1 col mobile -> 5 col desktop)
-- [x] Dialogs responsivos (max-width calc, scroll vertical)
-- [x] Todas as telas criticas adaptadas: Dashboard, Clientes, Chips, Ativacao, Linhas, Carteira Movel, Assinaturas
-- [x] Viewport meta tag otimizado para iOS/Android
+- [x] Menu hamburguer, header mobile fixo
+- [x] Touch targets 44px, tabelas com scroll horizontal
+- [x] Grids adaptivos, dialogs responsivos
 
 ### Deploy VPS (02/04/2026)
-- [x] Dockerizacao completa (backend + frontend + MongoDB)
-- [x] docker-compose.yml com healthchecks
-- [x] Dockerfile backend (Python 3.11 + uvicorn workers)
-- [x] Dockerfile frontend (build React + nginx)
-- [x] nginx.conf com proxy reverso e cache de assets
-- [x] .env.example com todas as variaveis documentadas
-- [x] nginx-ssl.conf template para HTTPS/Certbot
-- [x] setup.sh script de instalacao automatica
-- [x] package.sh gera tar.gz pronto para deploy
-- [x] README_DEPLOY.md com guia completo (passo a passo)
+- [x] Docker + Nginx + Systemd scripts
+- [x] README_DEPLOY com guia completo
 
-### Tela Ativar Chip - API Externa (02/04/2026)
-- [x] Pagina /ativar-chip com campos: Nome, CPF, ICCID, Plano
-- [x] Botao ATIVAR CHIP envia POST para http://187.127.11.235/ativar-chip
-- [x] Mensagem de sucesso/erro apos envio
+### Tela Ativar Chip (02/04/2026)
+- [x] Pagina /ativar-chip mobile-first
 - [x] Proxy backend para evitar CORS
-- [x] Layout mobile-first com botao grande
-- [x] Link no sidebar (Ativar Chip)
+
+### Programacao Defensiva API (03/04/2026)
+- [x] ErrorBoundary React para catches globais
+- [x] safeArray() e safeObject() em /lib/api.js
+- [x] Todas as 12 paginas refatoradas com chamadas seguras
+- [x] Testado: 12/12 paginas passaram sem erros
+- [x] Build de producao gerado sem erros
+- [x] Pacote de deploy VPS atualizado: /app/deploy/mvno-vps-deploy.tar.gz
 
 ## Backlog
 
 ### P0 - Concluido
 - [x] Token real configurado (TATELECOM_USER_TOKEN)
 - [x] USE_MOCK_API=false ativo
+- [x] Programacao defensiva frontend (safeArray/safeObject)
+- [x] Build de producao + pacote deploy VPS
 
 ### P1 - Alta Prioridade
 - [ ] Configurar chave API do Asaas (sandbox/producao)
