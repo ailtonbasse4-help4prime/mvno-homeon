@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi.responses import FileResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
@@ -1991,6 +1992,14 @@ async def startup_event():
     logger.info("Application started successfully")
 
 app.include_router(api_router)
+
+# Download endpoint for VPS deploy package
+@app.get("/download/deploy-package")
+async def download_deploy_package():
+    file_path = Path(__file__).parent.parent / "deploy" / "mvno-vps-deploy.tar.gz"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Pacote de deploy nao encontrado")
+    return FileResponse(path=str(file_path), filename="mvno-vps-deploy.tar.gz", media_type="application/gzip")
 
 frontend_url = os.environ.get('FRONTEND_URL', os.environ.get('CORS_ORIGINS', '*'))
 origins = [frontend_url] if frontend_url != '*' else ["*"]
