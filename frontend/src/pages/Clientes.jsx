@@ -40,7 +40,7 @@ export function Clientes() {
     try {
       const params = search ? { search } : {};
       const response = await axios.get(`${API_URL}/api/clientes`, { params, withCredentials: true });
-      setClientes(response.data);
+      setClientes(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       toast.error('Erro ao carregar clientes');
     } finally {

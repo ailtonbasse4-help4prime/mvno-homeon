@@ -43,8 +43,8 @@ export function Linhas() {
         axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
         axios.get(`${API_URL}/api/operadora/motivos-bloqueio`, { withCredentials: true }),
       ]);
-      setLinhas(linhasRes.data);
-      setOfertas(ofertasRes.data);
+      setLinhas(Array.isArray(linhasRes.data) ? linhasRes.data : []);
+      setOfertas(Array.isArray(ofertasRes.data) ? ofertasRes.data : []);
       setBlockReasons(reasonsRes.data.reasons || []);
     } catch (error) {
       toast.error('Erro ao carregar linhas');

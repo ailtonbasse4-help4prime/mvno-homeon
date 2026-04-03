@@ -103,9 +103,18 @@ else
     exit 1
 fi
 
-# ===== 6. NGINX =====
+# ===== 6. NGINX + FRONTEND =====
 echo ""
-echo "[6/6] Atualizando Nginx..."
+echo "[6/6] Atualizando Nginx e Frontend..."
+
+# Atualizar frontend se o build estiver incluido
+if [ -d "frontend-build" ]; then
+    sudo mkdir -p /var/www/mvno/frontend
+    sudo cp -r frontend-build/* /var/www/mvno/frontend/
+    sudo chown -R www-data:www-data /var/www/mvno
+    echo "  Frontend atualizado em /var/www/mvno/frontend/"
+fi
+
 sudo cp nginx-mvno.conf /etc/nginx/sites-available/mvno
 sudo ln -sf /etc/nginx/sites-available/mvno /etc/nginx/sites-enabled/mvno
 

@@ -67,10 +67,10 @@ export function CarteiraMovel() {
         axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/linhas`, { withCredentials: true }),
       ]);
-      setResumo(resumoRes.data);
-      setCobrancas(cobrancasRes.data);
-      setClientes(clientesRes.data);
-      setLinhas(linhasRes.data);
+      setResumo(resumoRes.data && typeof resumoRes.data === 'object' ? resumoRes.data : null);
+      setCobrancas(Array.isArray(cobrancasRes.data) ? cobrancasRes.data : []);
+      setClientes(Array.isArray(clientesRes.data) ? clientesRes.data : []);
+      setLinhas(Array.isArray(linhasRes.data) ? linhasRes.data : []);
     } catch (error) {
       toast.error('Erro ao carregar dados da carteira');
     } finally { setLoading(false); }

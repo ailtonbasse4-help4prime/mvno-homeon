@@ -41,8 +41,8 @@ export function Ofertas() {
         axios.get(`${API_URL}/api/ofertas`, { withCredentials: true }),
         axios.get(`${API_URL}/api/planos`, { withCredentials: true }),
       ]);
-      setOfertas(ofertasRes.data);
-      setPlanos(planosRes.data);
+      setOfertas(Array.isArray(ofertasRes.data) ? ofertasRes.data : []);
+      setPlanos(Array.isArray(planosRes.data) ? planosRes.data : []);
     } catch (error) {
       toast.error('Erro ao carregar ofertas');
     } finally { setLoading(false); }

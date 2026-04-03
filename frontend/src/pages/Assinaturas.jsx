@@ -72,9 +72,9 @@ export function Assinaturas() {
         axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/linhas`, { withCredentials: true }),
       ]);
-      setAssinaturas(assRes.data);
-      setClientes(clientesRes.data);
-      setLinhas(linhasRes.data);
+      setAssinaturas(Array.isArray(assRes.data) ? assRes.data : []);
+      setClientes(Array.isArray(clientesRes.data) ? clientesRes.data : []);
+      setLinhas(Array.isArray(linhasRes.data) ? linhasRes.data : []);
     } catch (error) {
       toast.error('Erro ao carregar assinaturas');
     } finally { setLoading(false); }

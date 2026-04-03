@@ -39,7 +39,7 @@ export function Logs() {
         params,
         withCredentials: true
       });
-      setLogs(response.data);
+      setLogs(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       toast.error('Erro ao carregar logs');
       console.error(error);

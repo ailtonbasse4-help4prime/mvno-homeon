@@ -18,7 +18,12 @@ export function Dashboard() {
       const response = await axios.get(`${API_URL}/api/dashboard/stats`, {
         withCredentials: true
       });
-      setStats(response.data);
+      const data = response.data;
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        setStats(data);
+      } else {
+        setError('Backend nao disponivel');
+      }
     } catch (err) {
       setError('Erro ao carregar estatísticas');
       console.error(err);

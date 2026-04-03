@@ -49,7 +49,7 @@ export function Planos() {
       const response = await axios.get(`${API_URL}/api/planos`, {
         withCredentials: true,
       });
-      setPlanos(response.data);
+      setPlanos(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       toast.error('Erro ao carregar planos');
       console.error(error);

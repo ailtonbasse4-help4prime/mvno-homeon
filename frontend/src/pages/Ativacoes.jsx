@@ -35,9 +35,10 @@ export function Ativacoes() {
         axios.get(`${API_URL}/api/chips`, { withCredentials: true }),
       ]);
 
-      setClientes(clientesRes.data.filter(c => c.status === 'ativo'));
-      setChipsDisponiveis(chipsDisponiveisRes.data);
-      setAllChips(allChipsRes.data);
+      const clientesData = Array.isArray(clientesRes.data) ? clientesRes.data : [];
+      setClientes(clientesData.filter(c => c.status === 'ativo'));
+      setChipsDisponiveis(Array.isArray(chipsDisponiveisRes.data) ? chipsDisponiveisRes.data : []);
+      setAllChips(Array.isArray(allChipsRes.data) ? allChipsRes.data : []);
     } catch (error) {
       toast.error('Erro ao carregar dados');
       console.error(error);

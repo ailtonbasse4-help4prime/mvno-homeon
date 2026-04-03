@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { MainLayout } from "./components/layout/MainLayout";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Clientes } from "./pages/Clientes";
@@ -23,18 +24,18 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<MainLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/chips" element={<Chips />} />
-            <Route path="/planos" element={<Planos />} />
-            <Route path="/ofertas" element={<Ofertas />} />
-            <Route path="/ativacoes" element={<Ativacoes />} />
-            <Route path="/ativar-chip" element={<AtivarChip />} />
-            <Route path="/linhas" element={<Linhas />} />
-            <Route path="/carteira" element={<CarteiraMovel />} />
-            <Route path="/assinaturas" element={<Assinaturas />} />
-            <Route path="/usuarios" element={<Usuarios />} />
-            <Route path="/logs" element={<Logs />} />
+            <Route path="/" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+            <Route path="/clientes" element={<ErrorBoundary><Clientes /></ErrorBoundary>} />
+            <Route path="/chips" element={<ErrorBoundary><Chips /></ErrorBoundary>} />
+            <Route path="/planos" element={<ErrorBoundary><Planos /></ErrorBoundary>} />
+            <Route path="/ofertas" element={<ErrorBoundary><Ofertas /></ErrorBoundary>} />
+            <Route path="/ativacoes" element={<ErrorBoundary><Ativacoes /></ErrorBoundary>} />
+            <Route path="/ativar-chip" element={<ErrorBoundary><AtivarChip /></ErrorBoundary>} />
+            <Route path="/linhas" element={<ErrorBoundary><Linhas /></ErrorBoundary>} />
+            <Route path="/carteira" element={<ErrorBoundary><CarteiraMovel /></ErrorBoundary>} />
+            <Route path="/assinaturas" element={<ErrorBoundary><Assinaturas /></ErrorBoundary>} />
+            <Route path="/usuarios" element={<ErrorBoundary><Usuarios /></ErrorBoundary>} />
+            <Route path="/logs" element={<ErrorBoundary><Logs /></ErrorBoundary>} />
           </Route>
         </Routes>
       </BrowserRouter>

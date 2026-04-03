@@ -105,8 +105,8 @@ export function Chips() {
         axios.get(`${API_URL}/api/chips`, { params, withCredentials: true }),
         axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
       ]);
-      setChips(chipsRes.data);
-      setOfertas(ofertasRes.data);
+      setChips(Array.isArray(chipsRes.data) ? chipsRes.data : []);
+      setOfertas(Array.isArray(ofertasRes.data) ? ofertasRes.data : []);
     } catch (error) {
       toast.error('Erro ao carregar dados');
     } finally { setLoading(false); }

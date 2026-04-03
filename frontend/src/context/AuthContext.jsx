@@ -82,8 +82,12 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const response = await axios.post(`${API_URL}/api/auth/login`, { email, password }, { withCredentials: true });
-      setUser(response.data);
-      return { success: true };
+      const data = response.data;
+      if (data && typeof data === 'object' && data.id) {
+        setUser(data);
+        return { success: true };
+      }
+      return { success: false, error: 'Resposta invalida do servidor' };
     } catch (error) {
       return { success: false, error: formatApiErrorDetail(error.response?.data?.detail) || error.message };
     }

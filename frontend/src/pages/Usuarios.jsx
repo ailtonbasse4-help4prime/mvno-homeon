@@ -27,7 +27,7 @@ export function Usuarios() {
   const fetchUsuarios = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/api/usuarios`, { withCredentials: true });
-      setUsuarios(response.data);
+      setUsuarios(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       toast.error('Erro ao carregar usuarios');
     } finally { setLoading(false); }
