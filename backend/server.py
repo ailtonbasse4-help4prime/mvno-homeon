@@ -31,6 +31,8 @@ db = client[os.environ['DB_NAME']]
 
 JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
 
 app = FastAPI(title="MVNO Management System - Ta Telecom")
 api_router = APIRouter(prefix="/api")
@@ -460,8 +462,8 @@ async def register(data: UserCreate, response: Response):
     user_id = str(result.inserted_id)
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
     await create_log("cadastro", f"Novo usuario registrado: {email}", user_id, data.name)
     return UserResponse(id=user_id, email=email, name=data.name, role=data.role.value, created_at=user_doc["created_at"])
 
@@ -487,8 +489,8 @@ async def login(data: UserLogin, response: Response, request: Request):
     user_id = str(user["_id"])
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
     await create_log("login", f"Login realizado: {email}", user_id, user["name"])
     return UserResponse(id=user_id, email=user["email"], name=user["name"], role=user["role"], created_at=user.get("created_at", datetime.now(timezone.utc)))
 
@@ -524,7 +526,7 @@ async def refresh_token(request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Usuario nao encontrado")
         user_id = str(user["_id"])
         access_token = create_access_token(user_id, user["email"])
-        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
+        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
         return {"message": "Token renovado com sucesso"}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Refresh token expirado")

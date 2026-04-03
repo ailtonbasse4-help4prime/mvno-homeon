@@ -14,7 +14,7 @@ import { IccidInput } from '../components/IccidInput';
 import { toast } from 'sonner';
 import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Ativacoes() {
   const [clientes, setClientes] = useState([]);

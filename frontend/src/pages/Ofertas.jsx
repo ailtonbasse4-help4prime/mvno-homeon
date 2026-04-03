@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { Plus, Tag, Edit, Trash2, Package, CheckCircle, XCircle, Code, Smartphone, Radio } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const CATEGORIAS = [
   { value: 'movel', label: 'Movel', icon: Smartphone, color: 'blue' },

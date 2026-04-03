@@ -3,7 +3,7 @@ import axios from 'axios';
 import { safeObject } from '../lib/api';
 import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock, Wifi, WifiOff } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Dashboard() {
   const [stats, setStats] = useState(null);

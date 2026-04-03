@@ -6,7 +6,7 @@ import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
 import { Zap, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 function formatCPF(value) {
   const digits = value.replace(/\D/g, '').slice(0, 11);

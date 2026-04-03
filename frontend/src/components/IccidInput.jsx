@@ -4,7 +4,7 @@ import { Input } from './ui/input';
 import { cn } from '../lib/utils';
 import { CreditCard, Check, X, Loader2, Search, ChevronDown } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 /**
  * IccidInput - Componente inteligente para seleção/digitação de ICCID

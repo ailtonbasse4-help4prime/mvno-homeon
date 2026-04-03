@@ -22,7 +22,7 @@ import {
   UserPlus, Eye, Server, Clock, CheckCircle, XCircle, RefreshCw 
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Logs() {
   const [logs, setLogs] = useState([]);

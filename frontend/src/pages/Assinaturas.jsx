@@ -16,7 +16,7 @@ import {
   RefreshCw, Plus, Clock, CheckCircle, XCircle, AlertTriangle, Ban,
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const STATUS_MAP = {
   ACTIVE: { label: 'Ativa', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },

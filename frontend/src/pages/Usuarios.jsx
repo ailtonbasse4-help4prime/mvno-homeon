@@ -13,7 +13,7 @@ import {
 import { toast } from 'sonner';
 import { Plus, UserCog, Edit, Trash2, Shield, ShieldCheck } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);

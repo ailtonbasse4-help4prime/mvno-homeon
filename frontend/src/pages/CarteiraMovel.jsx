@@ -17,7 +17,7 @@ import {
   CheckCircle, XCircle, Receipt, TrendingUp, Ban,
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const STATUS_MAP = {
   PENDING: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Clock },

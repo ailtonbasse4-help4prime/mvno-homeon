@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 function OfertaGroupedSelect({ value, onValueChange, ofertas, testId }) {
   const movelOfertas = ofertas.filter(o => o.categoria === 'movel');

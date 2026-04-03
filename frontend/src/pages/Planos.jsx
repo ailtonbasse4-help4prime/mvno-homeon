@@ -15,7 +15,7 @@ import {
 import { toast } from 'sonner';
 import { Plus, Package, Edit, Trash2, RefreshCw, Code } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Planos() {
   const { isAdmin } = useAuth();

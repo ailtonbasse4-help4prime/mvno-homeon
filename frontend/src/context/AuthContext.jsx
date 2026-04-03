@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutos
 
 const AuthContext = createContext(null);

@@ -12,7 +12,7 @@ import {
 import { toast } from 'sonner';
 import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Linhas() {
   const { isAdmin } = useAuth();

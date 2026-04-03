@@ -15,7 +15,7 @@ import {
   Wallet, RefreshCw, X, Send,
 } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const allNavItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'atendente'] },
