@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -36,6 +36,7 @@ export function Clientes() {
   const [clienteToDelete, setClienteToDelete] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchClientes = useCallback(async () => {
     try {
@@ -107,6 +108,24 @@ export function Clientes() {
     }
   };
 
+  const handleSyncClients = async () => {
+    setSyncing(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/operadora/sincronizar-clientes`, {}, { withCredentials: true });
+      const d = response.data;
+      toast.success(`${d.clients_created} clientes importados, ${d.clients_updated} atualizados, ${d.lines_created} linhas criadas`);
+      if (d.errors && d.errors.length > 0) {
+        toast.warning(`${d.errors.length} erros durante a sincronizacao`);
+      }
+      fetchClientes();
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Erro ao sincronizar clientes';
+      toast.error(typeof msg === 'string' ? msg : 'Erro ao sincronizar');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const formatDoc = (val, tipo) => {
     const n = val.replace(/\D/g, '');
     if (tipo === 'pj') {
@@ -142,9 +161,17 @@ export function Clientes() {
           <h1 className="page-title flex items-center gap-3"><Users className="w-7 h-7 text-blue-500" />Clientes</h1>
           <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de clientes</p>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-cliente-button">
-          <Plus className="w-4 h-4" />Novo Cliente
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {isAdmin && (
+            <Button onClick={handleSyncClients} disabled={syncing} variant="outline" className="flex items-center gap-2 w-full sm:w-auto border-zinc-700 hover:bg-zinc-800" data-testid="sync-clientes-button">
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar Clientes'}
+            </Button>
+          )}
+          <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-cliente-button">
+            <Plus className="w-4 h-4" />Novo Cliente
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-full sm:max-w-md">

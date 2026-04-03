@@ -1334,6 +1334,144 @@ async def sync_stock_from_operator(request: Request):
     await create_log("sincronizacao", f"Estoque sincronizado: {synced} atualizados, {created} importados", user["id"], user["name"])
     return {"success": True, "message": f"Sincronizacao concluida: {synced} atualizados, {created} importados", "synced": synced, "created": created}
 
+@api_router.post("/operadora/sincronizar-clientes")
+async def sync_clients_from_operator(request: Request):
+    user = await require_admin(request)
+    # 1. Get stock from Tá Telecom
+    result = await operadora_service.listar_estoque(db=db, user_id=user["id"], user_name=user["name"])
+    if not result.success:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar estoque: {result.message}")
+    items = result.data.get("results", result.data.get("items", []))
+    if isinstance(items, dict):
+        items = items.get("results", items.get("items", []))
+    # Filter only active chips (EM USO / ATIVADO / ATIVO)
+    active_statuses = {"EM USO", "ATIVADO", "ATIVA", "ATIVO"}
+    active_chips = [
+        item for item in items
+        if isinstance(item.get("status"), str) and item["status"].upper().strip() in active_statuses
+    ]
+    clients_created = 0
+    clients_updated = 0
+    lines_created = 0
+    chips_linked = 0
+    errors = []
+    for item in active_chips:
+        iccid = item.get("sim_card") or item.get("iccid")
+        if not iccid:
+            continue
+        iccid = str(iccid)
+        # 2. Query subscriber details from Tá Telecom
+        try:
+            detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+        except Exception as e:
+            errors.append(f"Erro ao consultar {iccid}: {str(e)}")
+            continue
+        if not detail_resp.success or not detail_resp.data:
+            errors.append(f"Sem dados para ICCID {iccid}")
+            continue
+        d = detail_resp.data
+        cpf = d.get("cpf") or d.get("document_number") or ""
+        nome = d.get("nome") or d.get("subscriber_name") or ""
+        if not cpf or not nome:
+            continue
+        cpf_clean = re.sub(r'\D', '', cpf)
+        telefone = d.get("numero") or d.get("msisdn") or ""
+        telefone_clean = re.sub(r'\D', '', str(telefone))
+        cidade = d.get("cidade") or ""
+        data_ativacao = d.get("data_ativacao") or ""
+        plano_nome = d.get("plano") or ""
+        numero_contrato = d.get("numero_contrato") or ""
+        status_ta = (d.get("status") or "").lower().strip()
+        msisdn = str(d.get("numero") or "")
+        # Determine local status
+        local_status = "ativo"
+        if status_ta in ("bloqueado", "bloqueada", "suspenso", "suspensa"):
+            local_status = "inativo"
+        # 3. Create or update client by CPF
+        existing_client = await db.clientes.find_one({"documento": cpf_clean})
+        if existing_client:
+            update_fields = {}
+            if not existing_client.get("telefone") and telefone_clean:
+                update_fields["telefone"] = telefone_clean
+            if not existing_client.get("cidade") and cidade:
+                update_fields["cidade"] = cidade
+            if update_fields:
+                await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": update_fields})
+            client_id = str(existing_client["_id"])
+            clients_updated += 1
+        else:
+            client_doc = {
+                "nome": nome.title(),
+                "tipo_pessoa": "pf",
+                "documento": cpf_clean,
+                "telefone": telefone_clean,
+                "data_nascimento": None,
+                "cep": None,
+                "endereco": None,
+                "numero_endereco": None,
+                "bairro": None,
+                "cidade": cidade.title() if cidade else None,
+                "estado": None,
+                "city_code": None,
+                "complemento": None,
+                "status": local_status,
+                "created_at": datetime.now(timezone.utc),
+            }
+            insert_result = await db.clientes.insert_one(client_doc)
+            client_id = str(insert_result.inserted_id)
+            clients_created += 1
+        # 4. Update chip in local DB
+        local_chip = await db.chips.find_one({"iccid": iccid})
+        chip_status = "ativado" if local_status == "ativo" else "bloqueado"
+        if local_chip:
+            chip_update = {"status": chip_status, "cliente_id": client_id}
+            if msisdn:
+                chip_update["msisdn"] = msisdn
+            await db.chips.update_one({"_id": local_chip["_id"]}, {"$set": chip_update})
+            chip_id = str(local_chip["_id"])
+            chips_linked += 1
+        else:
+            chip_doc = {
+                "iccid": iccid, "status": chip_status,
+                "oferta_id": None, "cliente_id": client_id,
+                "msisdn": msisdn or None,
+                "created_at": datetime.now(timezone.utc),
+            }
+            insert_result = await db.chips.insert_one(chip_doc)
+            chip_id = str(insert_result.inserted_id)
+            chips_linked += 1
+        # 5. Create line if not exists
+        existing_line = await db.linhas.find_one({"chip_id": chip_id})
+        if not existing_line and msisdn:
+            # Try to find matching plan
+            plano_id = None
+            if plano_nome:
+                plano = await db.planos.find_one({"nome": {"$regex": re.escape(plano_nome), "$options": "i"}})
+                if plano:
+                    plano_id = str(plano["_id"])
+            line_doc = {
+                "numero": msisdn,
+                "status": local_status,
+                "cliente_id": client_id,
+                "chip_id": chip_id,
+                "plano_id": plano_id,
+                "oferta_id": local_chip.get("oferta_id") if local_chip else None,
+                "msisdn": msisdn,
+                "created_at": datetime.now(timezone.utc),
+            }
+            await db.linhas.insert_one(line_doc)
+            lines_created += 1
+    msg = f"Clientes: {clients_created} criados, {clients_updated} atualizados. Linhas: {lines_created} criadas. Chips vinculados: {chips_linked}."
+    if errors:
+        msg += f" Erros: {len(errors)}"
+    await create_log("sincronizacao", f"Sincronizacao de clientes: {msg}", user["id"], user["name"])
+    return {
+        "success": True, "message": msg,
+        "clients_created": clients_created, "clients_updated": clients_updated,
+        "lines_created": lines_created, "chips_linked": chips_linked,
+        "total_active": len(active_chips), "errors": errors[:10],
+    }
+
 @api_router.get("/operadora/config")
 async def get_operadora_config(request: Request):
     await require_admin(request)
