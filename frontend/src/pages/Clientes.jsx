@@ -205,7 +205,7 @@ export function Clientes() {
             {/* Dados Pessoais */}
             <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Dados Pessoais</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={`grid gap-3 ${editingCliente ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div className="space-y-1">
                   <Label className="text-zinc-400 text-xs">Tipo de Pessoa</Label>
                   <Select value={formData.tipo_pessoa} onValueChange={(v) => f('tipo_pessoa', v)}>
@@ -216,16 +216,18 @@ export function Clientes() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Status</Label>
-                  <Select value={formData.status} onValueChange={(v) => f('status', v)}>
-                    <SelectTrigger className="form-input" data-testid="cliente-status-select"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800">
-                      <SelectItem value="ativo">Ativo</SelectItem>
-                      <SelectItem value="inativo">Inativo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {editingCliente && (
+                  <div className="space-y-1">
+                    <Label className="text-zinc-400 text-xs">Status</Label>
+                    <Select value={formData.status} onValueChange={(v) => f('status', v)}>
+                      <SelectTrigger className="form-input" data-testid="cliente-status-select"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="ativo">Ativo</SelectItem>
+                        <SelectItem value="inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-zinc-400 text-xs">{formData.tipo_pessoa === 'pj' ? 'Razao Social' : 'Nome Completo'}</Label>

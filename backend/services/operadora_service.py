@@ -424,7 +424,7 @@ class OperadoraService:
                           db=None, user_id=None, user_name=None) -> OperadoraResponse:
         req, resp = await self.adapter.ativar_chip(iccid, activation_payload)
         action = "ativacao" if resp.success else "erro"
-        details = f"Ativacao ICCID: {iccid} - {'Sucesso' if resp.success else 'Erro: ' + resp.message}"
+        details = f"Ativacao ICCID: {iccid} - {'Sucesso' if resp.success else 'Erro: ' + str(resp.message)}"
         await self._save_log(db, action, req, resp, user_id, user_name, details)
         return resp
 

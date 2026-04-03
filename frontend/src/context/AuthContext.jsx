@@ -10,6 +10,12 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const inactivityTimer = useRef(null);
+  const userRef = useRef(null);
+
+  // Keep userRef in sync
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const formatApiErrorDetail = (detail) => {
     if (detail == null) return "Algo deu errado. Tente novamente.";
@@ -24,7 +30,7 @@ export function AuthProvider({ children }) {
     try {
       await axios.post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true });
     } catch (error) {
-      console.error('Logout error:', error);
+      // ignore
     } finally {
       setUser(false);
       if (inactivityTimer.current) {
@@ -39,19 +45,18 @@ export function AuthProvider({ children }) {
       clearTimeout(inactivityTimer.current);
     }
     inactivityTimer.current = setTimeout(() => {
-      if (user) {
+      if (userRef.current) {
         performLogout();
       }
     }, INACTIVITY_TIMEOUT);
-  }, [user, performLogout]);
+  }, [performLogout]);
 
-  // Track user activity
+  // Track user activity - only attach once when user is truthy
   useEffect(() => {
     if (!user) return;
 
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
     const handler = () => resetInactivityTimer();
-
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
     events.forEach(event => window.addEventListener(event, handler, { passive: true }));
     resetInactivityTimer();
 
@@ -59,7 +64,7 @@ export function AuthProvider({ children }) {
       events.forEach(event => window.removeEventListener(event, handler));
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
-  }, [user, resetInactivityTimer]);
+  }, [!!user, resetInactivityTimer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const checkAuth = useCallback(async () => {
     try {

@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard, Users, CreditCard, Package, Tag, Zap,
   Phone, FileText, LogOut, Wifi, WifiOff, UserCog, KeyRound,
-  Wallet, RefreshCw, Menu, X, Send,
+  Wallet, RefreshCw, X, Send,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -35,7 +35,6 @@ const allNavItems = [
 export function Sidebar({ isOpen, onClose }) {
   const { user, logout, changePassword, isAdmin } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [operadoraMode, setOperadoraMode] = useState(null);
   const [pwdDialogOpen, setPwdDialogOpen] = useState(false);
   const [pwdForm, setPwdForm] = useState({ current: '', new_pwd: '', confirm: '' });
@@ -49,14 +48,13 @@ export function Sidebar({ isOpen, onClose }) {
     }
   }, [isAdmin]);
 
-  // Close sidebar on route change (mobile)
-  useEffect(() => {
-    if (onClose) onClose();
-  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleNavClick = () => {
+    if (onClose) onClose();
   };
 
   const handlePasswordChange = async (e) => {
@@ -82,13 +80,15 @@ export function Sidebar({ isOpen, onClose }) {
 
   return (
     <>
-      {/* Overlay for mobile */}
       {isOpen && (
-        <div className="sidebar-overlay" onClick={onClose} data-testid="sidebar-overlay" />
+        <div
+          className="sidebar-overlay"
+          onClick={onClose}
+          data-testid="sidebar-overlay"
+        />
       )}
 
       <aside className={`sidebar ${isOpen ? 'sidebar-open' : ''}`} data-testid="sidebar">
-        {/* Close button mobile */}
         <div className="md:hidden flex justify-end p-3 pb-0">
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white" data-testid="sidebar-close">
             <X className="w-5 h-5" />
@@ -126,10 +126,11 @@ export function Sidebar({ isOpen, onClose }) {
               key={item.path}
               to={item.path}
               end={item.path === '/'}
+              onClick={handleNavClick}
               className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
+                `sidebar-link ${isActive ? 'active' : ''}`
               }
-              data-testid={`nav-${item.label.toLowerCase()}`}
+              data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
             >
               <item.icon className="w-5 h-5 shrink-0" />
               <span className="truncate">{item.label}</span>
@@ -167,7 +168,6 @@ export function Sidebar({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Password Change Dialog */}
         <Dialog open={pwdDialogOpen} onOpenChange={setPwdDialogOpen}>
           <DialogContent className="bg-zinc-900 border-zinc-800 max-w-[calc(100vw-2rem)] sm:max-w-lg">
             <DialogHeader><DialogTitle className="text-white">Alterar Senha</DialogTitle></DialogHeader>
