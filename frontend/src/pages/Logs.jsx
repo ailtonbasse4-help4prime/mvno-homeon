@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -39,7 +40,7 @@ export function Logs() {
         params,
         withCredentials: true
       });
-      setLogs(Array.isArray(response.data) ? response.data : []);
+      setLogs(safeArray(response.data));
     } catch (error) {
       toast.error('Erro ao carregar logs');
       console.error(error);

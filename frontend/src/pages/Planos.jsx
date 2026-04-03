@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -49,7 +50,7 @@ export function Planos() {
       const response = await axios.get(`${API_URL}/api/planos`, {
         withCredentials: true,
       });
-      setPlanos(Array.isArray(response.data) ? response.data : []);
+      setPlanos(safeArray(response.data));
     } catch (error) {
       toast.error('Erro ao carregar planos');
       console.error(error);

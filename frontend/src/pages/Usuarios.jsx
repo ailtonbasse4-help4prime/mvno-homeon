@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -27,7 +28,7 @@ export function Usuarios() {
   const fetchUsuarios = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/api/usuarios`, { withCredentials: true });
-      setUsuarios(Array.isArray(response.data) ? response.data : []);
+      setUsuarios(safeArray(response.data));
     } catch (error) {
       toast.error('Erro ao carregar usuarios');
     } finally { setLoading(false); }

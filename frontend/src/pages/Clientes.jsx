@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -40,7 +41,7 @@ export function Clientes() {
     try {
       const params = search ? { search } : {};
       const response = await axios.get(`${API_URL}/api/clientes`, { params, withCredentials: true });
-      setClientes(Array.isArray(response.data) ? response.data : []);
+      setClientes(safeArray(response.data));
     } catch (error) {
       toast.error('Erro ao carregar clientes');
     } finally {

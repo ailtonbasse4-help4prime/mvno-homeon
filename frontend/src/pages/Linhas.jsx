@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray, safeObject } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import {
@@ -43,9 +44,9 @@ export function Linhas() {
         axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
         axios.get(`${API_URL}/api/operadora/motivos-bloqueio`, { withCredentials: true }),
       ]);
-      setLinhas(Array.isArray(linhasRes.data) ? linhasRes.data : []);
-      setOfertas(Array.isArray(ofertasRes.data) ? ofertasRes.data : []);
-      setBlockReasons(reasonsRes.data.reasons || []);
+      setLinhas(safeArray(linhasRes.data));
+      setOfertas(safeArray(ofertasRes.data));
+      setBlockReasons(safeArray(reasonsRes.data?.reasons));
     } catch (error) {
       toast.error('Erro ao carregar linhas');
     } finally {
@@ -102,7 +103,7 @@ export function Linhas() {
     setCheckingStatus(true);
     try {
       const r = await axios.get(`${API_URL}/api/linhas/${linha.id}/consultar`, { withCredentials: true });
-      setLineStatus(r.data);
+      setLineStatus(safeObject(r.data, {}));
     } catch (e) {
       toast.error('Erro ao consultar status');
       setStatusDialog(false);

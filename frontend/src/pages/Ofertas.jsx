@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -41,8 +42,8 @@ export function Ofertas() {
         axios.get(`${API_URL}/api/ofertas`, { withCredentials: true }),
         axios.get(`${API_URL}/api/planos`, { withCredentials: true }),
       ]);
-      setOfertas(Array.isArray(ofertasRes.data) ? ofertasRes.data : []);
-      setPlanos(Array.isArray(planosRes.data) ? planosRes.data : []);
+      setOfertas(safeArray(ofertasRes.data));
+      setPlanos(safeArray(planosRes.data));
     } catch (error) {
       toast.error('Erro ao carregar ofertas');
     } finally { setLoading(false); }

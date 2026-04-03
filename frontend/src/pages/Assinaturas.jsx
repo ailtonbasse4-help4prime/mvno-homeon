@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -72,9 +73,9 @@ export function Assinaturas() {
         axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/linhas`, { withCredentials: true }),
       ]);
-      setAssinaturas(Array.isArray(assRes.data) ? assRes.data : []);
-      setClientes(Array.isArray(clientesRes.data) ? clientesRes.data : []);
-      setLinhas(Array.isArray(linhasRes.data) ? linhasRes.data : []);
+      setAssinaturas(safeArray(assRes.data));
+      setClientes(safeArray(clientesRes.data));
+      setLinhas(safeArray(linhasRes.data));
     } catch (error) {
       toast.error('Erro ao carregar assinaturas');
     } finally { setLoading(false); }

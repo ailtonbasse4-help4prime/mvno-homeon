@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { safeObject } from '../lib/api';
 import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock, Wifi, WifiOff } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -15,18 +16,15 @@ export function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/dashboard/stats`, {
-        withCredentials: true
-      });
-      const data = response.data;
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const response = await axios.get(`${API_URL}/api/dashboard/stats`, { withCredentials: true });
+      const data = safeObject(response.data);
+      if (data) {
         setStats(data);
       } else {
         setError('Backend nao disponivel');
       }
     } catch (err) {
-      setError('Erro ao carregar estatísticas');
-      console.error(err);
+      setError('Erro ao carregar estatisticas');
     } finally {
       setLoading(false);
     }

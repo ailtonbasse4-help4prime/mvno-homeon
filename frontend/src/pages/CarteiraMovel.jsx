@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray, safeObject } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -67,10 +68,10 @@ export function CarteiraMovel() {
         axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/linhas`, { withCredentials: true }),
       ]);
-      setResumo(resumoRes.data && typeof resumoRes.data === 'object' ? resumoRes.data : null);
-      setCobrancas(Array.isArray(cobrancasRes.data) ? cobrancasRes.data : []);
-      setClientes(Array.isArray(clientesRes.data) ? clientesRes.data : []);
-      setLinhas(Array.isArray(linhasRes.data) ? linhasRes.data : []);
+      setResumo(safeObject(resumoRes.data));
+      setCobrancas(safeArray(cobrancasRes.data));
+      setClientes(safeArray(clientesRes.data));
+      setLinhas(safeArray(linhasRes.data));
     } catch (error) {
       toast.error('Erro ao carregar dados da carteira');
     } finally { setLoading(false); }

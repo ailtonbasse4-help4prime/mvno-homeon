@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import {
@@ -35,10 +36,10 @@ export function Ativacoes() {
         axios.get(`${API_URL}/api/chips`, { withCredentials: true }),
       ]);
 
-      const clientesData = Array.isArray(clientesRes.data) ? clientesRes.data : [];
+      const clientesData = safeArray(clientesRes.data);
       setClientes(clientesData.filter(c => c.status === 'ativo'));
-      setChipsDisponiveis(Array.isArray(chipsDisponiveisRes.data) ? chipsDisponiveisRes.data : []);
-      setAllChips(Array.isArray(allChipsRes.data) ? allChipsRes.data : []);
+      setChipsDisponiveis(safeArray(chipsDisponiveisRes.data));
+      setAllChips(safeArray(allChipsRes.data));
     } catch (error) {
       toast.error('Erro ao carregar dados');
       console.error(error);
@@ -70,10 +71,11 @@ export function Ativacoes() {
         { withCredentials: true }
       );
 
-      setActivationResult(response.data);
+      const result = response.data && typeof response.data === 'object' ? response.data : { success: false, message: 'Resposta invalida' };
+      setActivationResult(result);
 
-      if (response.data.success) {
-        if (response.data.status === 'ativo') {
+      if (result.success) {
+        if (result.status === 'ativo') {
           toast.success('Linha ativada com sucesso!');
         } else {
           toast.info('Ativacao em processamento');

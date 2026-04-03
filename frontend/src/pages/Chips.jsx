@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { safeArray } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -105,8 +106,8 @@ export function Chips() {
         axios.get(`${API_URL}/api/chips`, { params, withCredentials: true }),
         axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
       ]);
-      setChips(Array.isArray(chipsRes.data) ? chipsRes.data : []);
-      setOfertas(Array.isArray(ofertasRes.data) ? ofertasRes.data : []);
+      setChips(safeArray(chipsRes.data));
+      setOfertas(safeArray(ofertasRes.data));
     } catch (error) {
       toast.error('Erro ao carregar dados');
     } finally { setLoading(false); }
