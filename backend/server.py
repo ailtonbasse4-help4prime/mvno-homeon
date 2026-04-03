@@ -1723,7 +1723,7 @@ async def ativar_chip_proxy(data: AtivarChipRequest, request: Request):
     payload = {"nome": data.nome, "cpf": data.cpf, "iccid": data.iccid, "plano": data.plano}
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post("http://187.127.11.235/ativar-chip", json=payload)
+            resp = await client.post("https://mvno.homeonapp.com.br/ativar-chip", json=payload)
             resp.raise_for_status()
         await create_log("ativacao", f"Chip ativado via API externa: ICCID {data.iccid} para {data.nome}", user["id"], user["name"])
         return {"message": "Chip ativado com sucesso"}
