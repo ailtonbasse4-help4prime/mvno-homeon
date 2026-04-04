@@ -15,7 +15,7 @@ import { Logs } from "./pages/Logs";
 import { Usuarios } from "./pages/Usuarios";
 import { CarteiraMovel } from "./pages/CarteiraMovel";
 import { Assinaturas } from "./pages/Assinaturas";
-import { GestaoCobranças } from "./pages/GestaoCobranças";
+import { GestaoCobrancas } from "./pages/GestaoCobrancas";
 import { Revendedores } from "./pages/Revendedores";
 
 function App() {
@@ -33,7 +33,7 @@ function App() {
             <Route path="/ativacoes" element={<ErrorBoundary><Ativacoes /></ErrorBoundary>} />
             <Route path="/linhas" element={<ErrorBoundary><Linhas /></ErrorBoundary>} />
             <Route path="/carteira" element={<ErrorBoundary><CarteiraMovel /></ErrorBoundary>} />
-            <Route path="/cobrancas" element={<ErrorBoundary><GestaoCobranças /></ErrorBoundary>} />
+            <Route path="/cobrancas" element={<ErrorBoundary><GestaoCobrancas /></ErrorBoundary>} />
             <Route path="/assinaturas" element={<ErrorBoundary><Assinaturas /></ErrorBoundary>} />
             <Route path="/revendedores" element={<ErrorBoundary><Revendedores /></ErrorBoundary>} />
             <Route path="/usuarios" element={<ErrorBoundary><Usuarios /></ErrorBoundary>} />

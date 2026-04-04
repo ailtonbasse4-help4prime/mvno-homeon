@@ -335,7 +335,10 @@ class CobrancaResponse(BaseModel):
     status: str
     asaas_payment_id: Optional[str] = None
     asaas_invoice_url: Optional[str] = None
+    asaas_bankslip_url: Optional[str] = None
     asaas_pix_code: Optional[str] = None
+    asaas_pix_qrcode: Optional[str] = None
+    barcode: Optional[str] = None
     paid_at: Optional[str] = None
     created_at: datetime
 
@@ -1557,7 +1560,10 @@ async def _build_cobranca_response(doc: dict) -> CobrancaResponse:
         status=doc.get("status", "PENDING"),
         asaas_payment_id=doc.get("asaas_payment_id"),
         asaas_invoice_url=doc.get("asaas_invoice_url"),
+        asaas_bankslip_url=doc.get("asaas_bankslip_url"),
         asaas_pix_code=doc.get("asaas_pix_code"),
+        asaas_pix_qrcode=doc.get("asaas_pix_qrcode"),
+        barcode=doc.get("barcode"),
         paid_at=doc.get("paid_at"),
         created_at=doc.get("created_at", datetime.now(timezone.utc)),
     )
@@ -1696,7 +1702,21 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
             )
             doc["asaas_payment_id"] = result.get("id")
             doc["asaas_invoice_url"] = result.get("invoiceUrl")
+            doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
             doc["status"] = result.get("status", "PENDING")
+            # Fetch barcode/pix details
+            payment_id = result.get("id")
+            if payment_id:
+                try:
+                    if data.billing_type.value == "BOLETO":
+                        barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                        doc["barcode"] = barcode_data.get("identificationField")
+                    elif data.billing_type.value == "PIX":
+                        pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                        doc["asaas_pix_code"] = pix_data.get("payload")
+                        doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar detalhes do pagamento: {e}")
         except (AsaasNotConfiguredError, AsaasApiError) as e:
             logger.warning(f"Asaas API error ao criar cobranca: {e}")
         except Exception as e:
