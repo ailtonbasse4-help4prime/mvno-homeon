@@ -121,7 +121,7 @@ export function Sidebar({ isOpen, onClose }) {
           )}
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto min-h-0">
           {navItems.map((item) => (
             <NavLink
               key={item.path}

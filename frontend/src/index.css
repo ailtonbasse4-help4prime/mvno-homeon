@@ -53,13 +53,13 @@
 
 @layer components {
     .sidebar {
-        @apply w-64 min-h-screen bg-zinc-950 border-r border-zinc-800 fixed left-0 top-0 z-40;
+        @apply w-64 h-screen bg-zinc-950 border-r border-zinc-800 fixed left-0 top-0 z-40;
         @apply flex flex-col;
     }
 
     @media (max-width: 768px) {
         .sidebar {
-            @apply w-72 -translate-x-full transition-transform duration-300 ease-in-out;
+            @apply w-72 h-screen -translate-x-full transition-transform duration-300 ease-in-out;
             pointer-events: none;
         }
         .sidebar.sidebar-open {
