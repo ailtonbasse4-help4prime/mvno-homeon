@@ -95,7 +95,7 @@ export function Dashboard() {
           icon={Users}
           label="Total de Clientes"
           value={stats?.clientes?.total || 0}
-          subValue={`${stats?.clientes?.ativos || 0} ativos`}
+          subValue={`${stats?.clientes?.ativos || 0} ativos | ${stats?.clientes?.bloqueados || 0} bloqueados`}
           color="blue"
         />
         <StatCard
@@ -109,7 +109,7 @@ export function Dashboard() {
           icon={Phone}
           label="Linhas Ativas"
           value={stats?.linhas?.ativas || 0}
-          subValue={`${stats?.linhas?.total || 0} total`}
+          subValue={`${stats?.linhas?.total || 0} total | ${stats?.linhas?.bloqueadas || 0} bloqueadas`}
           color="purple"
         />
         <StatCard

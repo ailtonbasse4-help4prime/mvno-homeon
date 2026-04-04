@@ -1346,17 +1346,19 @@ async def sync_clients_from_operator(request: Request):
     if isinstance(items, dict):
         items = items.get("results", items.get("items", []))
     # Filter only active chips (EM USO / ATIVADO / ATIVO)
-    active_statuses = {"EM USO", "ATIVADO", "ATIVA", "ATIVO"}
-    active_chips = [
+    # Include EM USO (active) and BLOQUEADO (blocked) - both have contracts
+    sync_statuses = {"EM USO", "ATIVADO", "ATIVA", "ATIVO", "BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA"}
+    contract_chips = [
         item for item in items
-        if isinstance(item.get("status"), str) and item["status"].upper().strip() in active_statuses
+        if isinstance(item.get("status"), str) and item["status"].upper().strip() in sync_statuses
     ]
     clients_created = 0
     clients_updated = 0
     lines_created = 0
     chips_linked = 0
     errors = []
-    for item in active_chips:
+    for item in contract_chips:
+        stock_status = (item.get("status") or "").upper().strip()
         iccid = item.get("sim_card") or item.get("iccid")
         if not iccid:
             continue
@@ -1384,10 +1386,12 @@ async def sync_clients_from_operator(request: Request):
         numero_contrato = d.get("numero_contrato") or ""
         status_ta = (d.get("status") or "").lower().strip()
         msisdn = str(d.get("numero") or "")
-        # Determine local status
-        local_status = "ativo"
-        if status_ta in ("bloqueado", "bloqueada", "suspenso", "suspensa"):
-            local_status = "inativo"
+        # Determine local status based on both stock status and individual status
+        blocked_statuses = {"bloqueado", "bloqueada", "suspenso", "suspensa"}
+        if stock_status in ("BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA") or status_ta in blocked_statuses:
+            local_status = "bloqueado"
+        else:
+            local_status = "ativo"
         # 3. Create or update client by CPF
         existing_client = await db.clientes.find_one({"documento": cpf_clean})
         if existing_client:
@@ -1441,9 +1445,13 @@ async def sync_clients_from_operator(request: Request):
             insert_result = await db.chips.insert_one(chip_doc)
             chip_id = str(insert_result.inserted_id)
             chips_linked += 1
-        # 5. Create line if not exists
+        # 5. Create or update line
         existing_line = await db.linhas.find_one({"chip_id": chip_id})
-        if not existing_line and msisdn:
+        if existing_line:
+            # Update status if changed
+            if existing_line.get("status") != local_status:
+                await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {"status": local_status}})
+        elif msisdn:
             # Try to find matching plan
             plano_id = None
             if plano_nome:
@@ -1470,7 +1478,7 @@ async def sync_clients_from_operator(request: Request):
         "success": True, "message": msg,
         "clients_created": clients_created, "clients_updated": clients_updated,
         "lines_created": lines_created, "chips_linked": chips_linked,
-        "total_active": len(active_chips), "errors": errors[:10],
+        "total_with_contract": len(contract_chips), "errors": errors[:10],
     }
 
 @api_router.get("/operadora/config")
@@ -1878,7 +1886,8 @@ async def ativar_chip_proxy(data: AtivarChipRequest, request: Request):
 async def get_dashboard_stats(request: Request):
     await get_current_user(request)
     total_clientes = await db.clientes.count_documents({})
-    clientes_ativos = await db.clientes.count_documents({"status": "ativo"})
+    clientes_ativos = await db.clientes.count_documents({"status": {"$in": ["ativo"]}})
+    clientes_bloqueados = await db.clientes.count_documents({"status": {"$in": ["bloqueado", "inativo"]}})
     total_chips = await db.chips.count_documents({})
     chips_disponiveis = await db.chips.count_documents({"status": "disponivel"})
     chips_ativados = await db.chips.count_documents({"status": "ativado"})
@@ -1892,7 +1901,7 @@ async def get_dashboard_stats(request: Request):
     ofertas_ativas = await db.ofertas.count_documents({"ativo": True})
     recent_logs = await db.logs.find({}).sort("created_at", -1).limit(5).to_list(5)
     return {
-        "clientes": {"total": total_clientes, "ativos": clientes_ativos},
+        "clientes": {"total": total_clientes, "ativos": clientes_ativos, "bloqueados": clientes_bloqueados},
         "chips": {"total": total_chips, "disponiveis": chips_disponiveis, "ativados": chips_ativados, "bloqueados": chips_bloqueados},
         "linhas": {"total": total_linhas, "ativas": linhas_ativas, "pendentes": linhas_pendentes, "bloqueadas": linhas_bloqueadas},
         "planos": {"total": total_planos},
