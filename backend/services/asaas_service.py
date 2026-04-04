@@ -221,14 +221,24 @@ class AsaasService:
                     raise ValueError(f"Metodo HTTP nao suportado: {method}")
 
                 if response.status_code >= 400:
-                    error_data = response.json() if response.text else {}
+                    try:
+                        error_data = response.json() if response.text else {}
+                    except Exception:
+                        error_data = {"message": response.text[:200] if response.text else "Erro desconhecido"}
                     logger.error(f"Asaas API error {response.status_code}: {error_data}")
                     raise AsaasApiError(
                         f"Erro na API do Asaas ({response.status_code})",
                         status_code=response.status_code,
                         details=error_data
                     )
-                return response.json()
+                try:
+                    return response.json()
+                except Exception:
+                    raise AsaasApiError(
+                        "Resposta invalida do Asaas (nao JSON)",
+                        status_code=502,
+                        details={"raw": response.text[:200] if response.text else ""}
+                    )
         except httpx.TimeoutException:
             logger.error(f"Asaas API timeout: {method} {endpoint}")
             raise AsaasApiError("Timeout na comunicacao com o Asaas", status_code=504)

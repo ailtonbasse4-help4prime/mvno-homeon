@@ -1699,6 +1699,8 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
             doc["status"] = result.get("status", "PENDING")
         except (AsaasNotConfiguredError, AsaasApiError) as e:
             logger.warning(f"Asaas API error ao criar cobranca: {e}")
+        except Exception as e:
+            logger.warning(f"Erro inesperado ao criar cobranca no Asaas: {e}")
 
     inserted = await db.cobrancas.insert_one(doc)
     doc["_id"] = inserted.inserted_id
@@ -1718,6 +1720,8 @@ async def delete_cobranca(cobranca_id: str, request: Request):
             await asaas_service.delete_payment(doc["asaas_payment_id"])
         except AsaasApiError as e:
             logger.warning(f"Erro ao remover cobranca no Asaas: {e}")
+        except Exception as e:
+            logger.warning(f"Erro inesperado ao remover no Asaas: {e}")
     await db.cobrancas.delete_one({"_id": ObjectId(cobranca_id)})
     await create_log("financeiro", f"Cobranca removida: R$ {doc['valor']:.2f}", user["id"], user["name"])
     return {"message": "Cobranca removida"}
@@ -1747,6 +1751,8 @@ async def update_cobranca(cobranca_id: str, data: CobrancaCreate, request: Reque
             })
         except AsaasApiError as e:
             logger.warning(f"Erro ao atualizar cobranca no Asaas: {e}")
+        except Exception as e:
+            logger.warning(f"Erro inesperado ao atualizar no Asaas: {e}")
     await db.cobrancas.update_one({"_id": ObjectId(cobranca_id)}, {"$set": update_fields})
     await create_log("financeiro", f"Cobranca editada: R$ {data.valor:.2f}", user["id"], user["name"])
     updated = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
@@ -1804,8 +1810,10 @@ async def create_cobrancas_lote(data: CobrancaLoteRequest, request: Request):
                     doc["status"] = result.get("status", "PENDING")
                 except (AsaasNotConfiguredError, AsaasApiError) as e:
                     logger.warning(f"Asaas lote error item {idx+1}: {e}")
-            await db.cobrancas.insert_one(doc)
+                except Exception as e:
+                    logger.warning(f"Asaas lote erro inesperado item {idx+1}: {e}")
             created += 1
+            await db.cobrancas.insert_one(doc)
         except Exception as e:
             errors.append(f"Item {idx+1}: {str(e)}")
     await create_log("financeiro", f"Lote de cobrancas: {created} criadas de {len(data.cobrancas)}", user["id"], user["name"])
