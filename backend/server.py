@@ -1713,9 +1713,103 @@ async def delete_cobranca(cobranca_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
     if doc.get("status") in ["CONFIRMED", "RECEIVED"]:
         raise HTTPException(status_code=400, detail="Nao e possivel remover cobranca ja paga")
+    if asaas_service.is_configured and doc.get("asaas_payment_id"):
+        try:
+            await asaas_service.delete_payment(doc["asaas_payment_id"])
+        except AsaasApiError as e:
+            logger.warning(f"Erro ao remover cobranca no Asaas: {e}")
     await db.cobrancas.delete_one({"_id": ObjectId(cobranca_id)})
     await create_log("financeiro", f"Cobranca removida: R$ {doc['valor']:.2f}", user["id"], user["name"])
     return {"message": "Cobranca removida"}
+
+@api_router.put("/carteira/cobrancas/{cobranca_id}")
+async def update_cobranca(cobranca_id: str, data: CobrancaCreate, request: Request):
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+    if doc.get("status") in ["CONFIRMED", "RECEIVED"]:
+        raise HTTPException(status_code=400, detail="Nao e possivel editar cobranca ja paga")
+    update_fields = {
+        "cliente_id": data.cliente_id,
+        "linha_id": data.linha_id,
+        "billing_type": data.billing_type.value,
+        "valor": data.valor,
+        "vencimento": data.vencimento,
+        "descricao": data.descricao,
+    }
+    if asaas_service.is_configured and doc.get("asaas_payment_id"):
+        try:
+            await asaas_service.update_payment(doc["asaas_payment_id"], {
+                "value": data.valor,
+                "dueDate": data.vencimento,
+                "description": data.descricao or "",
+            })
+        except AsaasApiError as e:
+            logger.warning(f"Erro ao atualizar cobranca no Asaas: {e}")
+    await db.cobrancas.update_one({"_id": ObjectId(cobranca_id)}, {"$set": update_fields})
+    await create_log("financeiro", f"Cobranca editada: R$ {data.valor:.2f}", user["id"], user["name"])
+    updated = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    return await _build_cobranca_response(updated)
+
+class CobrancaLoteItem(BaseModel):
+    cliente_id: str
+    linha_id: Optional[str] = None
+    billing_type: str = "BOLETO"
+    valor: float
+    vencimento: str
+    descricao: Optional[str] = None
+
+class CobrancaLoteRequest(BaseModel):
+    cobrancas: List[CobrancaLoteItem]
+
+@api_router.post("/carteira/cobrancas/lote")
+async def create_cobrancas_lote(data: CobrancaLoteRequest, request: Request):
+    user = await require_admin(request)
+    created = 0
+    errors = []
+    for idx, item in enumerate(data.cobrancas):
+        try:
+            cliente = await db.clientes.find_one({"_id": ObjectId(item.cliente_id)})
+            if not cliente:
+                errors.append(f"Item {idx+1}: Cliente nao encontrado")
+                continue
+            doc = {
+                "cliente_id": item.cliente_id,
+                "linha_id": item.linha_id,
+                "billing_type": item.billing_type,
+                "valor": item.valor,
+                "vencimento": item.vencimento,
+                "descricao": item.descricao,
+                "status": "PENDING",
+                "asaas_payment_id": None,
+                "asaas_invoice_url": None,
+                "asaas_pix_code": None,
+                "paid_at": None,
+                "created_at": datetime.now(timezone.utc),
+            }
+            if asaas_service.is_configured:
+                try:
+                    asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                    result = await asaas_service.create_payment(
+                        customer_id=asaas_customer_id,
+                        billing_type=item.billing_type,
+                        value=item.valor,
+                        due_date=item.vencimento,
+                        description=item.descricao or f"Cobranca - {cliente['nome']}",
+                        external_reference=f"lote-{item.cliente_id}",
+                    )
+                    doc["asaas_payment_id"] = result.get("id")
+                    doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                    doc["status"] = result.get("status", "PENDING")
+                except (AsaasNotConfiguredError, AsaasApiError) as e:
+                    logger.warning(f"Asaas lote error item {idx+1}: {e}")
+            await db.cobrancas.insert_one(doc)
+            created += 1
+        except Exception as e:
+            errors.append(f"Item {idx+1}: {str(e)}")
+    await create_log("financeiro", f"Lote de cobrancas: {created} criadas de {len(data.cobrancas)}", user["id"], user["name"])
+    return {"success": True, "created": created, "total": len(data.cobrancas), "errors": errors}
 
 @api_router.post("/carteira/cobrancas/{cobranca_id}/consultar")
 async def consultar_cobranca(cobranca_id: str, request: Request):
@@ -1856,6 +1950,127 @@ async def asaas_webhook(request: Request):
             logger.info(f"Cobranca {payment_id} atualizada para {status}")
 
     return {"received": True}
+
+
+
+# ==================== REVENDEDORES ====================
+class RevendedorCreate(BaseModel):
+    nome: str
+    contato: Optional[str] = None
+    telefone: Optional[str] = None
+    desconto_valor: float = 0
+    observacoes: Optional[str] = None
+
+class RevendedorResponse(BaseModel):
+    id: str
+    nome: str
+    contato: Optional[str] = None
+    telefone: Optional[str] = None
+    desconto_valor: float
+    observacoes: Optional[str] = None
+    total_chips: int = 0
+    chips_ativados: int = 0
+    created_at: datetime
+
+async def _build_revendedor_response(doc: dict) -> RevendedorResponse:
+    rev_id = str(doc["_id"])
+    total_chips = await db.chips.count_documents({"revendedor_id": rev_id})
+    chips_ativados = await db.chips.count_documents({"revendedor_id": rev_id, "status": "ativado"})
+    return RevendedorResponse(
+        id=rev_id, nome=doc["nome"], contato=doc.get("contato"),
+        telefone=doc.get("telefone"), desconto_valor=doc.get("desconto_valor", 0),
+        observacoes=doc.get("observacoes"), total_chips=total_chips,
+        chips_ativados=chips_ativados,
+        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+    )
+
+@api_router.get("/revendedores")
+async def list_revendedores(request: Request):
+    await get_current_user(request)
+    docs = await db.revendedores.find().sort("nome", 1).to_list(500)
+    return [await _build_revendedor_response(d) for d in docs]
+
+@api_router.post("/revendedores")
+async def create_revendedor(data: RevendedorCreate, request: Request):
+    user = await require_admin(request)
+    doc = {
+        "nome": data.nome,
+        "contato": data.contato,
+        "telefone": data.telefone,
+        "desconto_valor": data.desconto_valor,
+        "observacoes": data.observacoes,
+        "created_at": datetime.now(timezone.utc),
+    }
+    inserted = await db.revendedores.insert_one(doc)
+    doc["_id"] = inserted.inserted_id
+    await create_log("revendedor", f"Revendedor criado: {data.nome}", user["id"], user["name"])
+    return await _build_revendedor_response(doc)
+
+@api_router.put("/revendedores/{rev_id}")
+async def update_revendedor(rev_id: str, data: RevendedorCreate, request: Request):
+    user = await require_admin(request)
+    doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
+    update = {
+        "nome": data.nome, "contato": data.contato, "telefone": data.telefone,
+        "desconto_valor": data.desconto_valor, "observacoes": data.observacoes,
+    }
+    await db.revendedores.update_one({"_id": ObjectId(rev_id)}, {"$set": update})
+    updated = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    await create_log("revendedor", f"Revendedor editado: {data.nome}", user["id"], user["name"])
+    return await _build_revendedor_response(updated)
+
+@api_router.delete("/revendedores/{rev_id}")
+async def delete_revendedor(rev_id: str, request: Request):
+    user = await require_admin(request)
+    doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
+    await db.chips.update_many({"revendedor_id": rev_id}, {"$unset": {"revendedor_id": ""}})
+    await db.revendedores.delete_one({"_id": ObjectId(rev_id)})
+    await create_log("revendedor", f"Revendedor removido: {doc['nome']}", user["id"], user["name"])
+    return {"message": "Revendedor removido"}
+
+class VincularChipsRequest(BaseModel):
+    iccids: List[str]
+
+@api_router.post("/revendedores/{rev_id}/vincular-chips")
+async def vincular_chips_revendedor(rev_id: str, data: VincularChipsRequest, request: Request):
+    user = await require_admin(request)
+    doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
+    linked = 0
+    for iccid in data.iccids:
+        result = await db.chips.update_one(
+            {"iccid": iccid, "status": "disponivel"},
+            {"$set": {"revendedor_id": rev_id}}
+        )
+        if result.modified_count:
+            linked += 1
+    await create_log("revendedor", f"{linked} chips vinculados ao revendedor {doc['nome']}", user["id"], user["name"])
+    return {"success": True, "linked": linked, "total": len(data.iccids)}
+
+@api_router.post("/revendedores/{rev_id}/desvincular-chips")
+async def desvincular_chips_revendedor(rev_id: str, data: VincularChipsRequest, request: Request):
+    user = await require_admin(request)
+    unlinked = 0
+    for iccid in data.iccids:
+        result = await db.chips.update_one(
+            {"iccid": iccid, "revendedor_id": rev_id},
+            {"$unset": {"revendedor_id": ""}}
+        )
+        if result.modified_count:
+            unlinked += 1
+    await create_log("revendedor", f"{unlinked} chips desvinculados do revendedor", user["id"], user["name"])
+    return {"success": True, "unlinked": unlinked}
+
+@api_router.get("/revendedores/{rev_id}/chips")
+async def get_chips_revendedor(rev_id: str, request: Request):
+    await get_current_user(request)
+    chips = await db.chips.find({"revendedor_id": rev_id}, {"_id": 0, "iccid": 1, "status": 1, "msisdn": 1, "cliente_id": 1}).to_list(1000)
+    return chips
 
 
 # ==================== DASHBOARD STATS ====================

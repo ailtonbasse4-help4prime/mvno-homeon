@@ -1,0 +1,276 @@
+import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import { toast } from 'sonner';
+import { safeArray } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Card, CardContent } from '../components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Plus, Edit, Trash2, Search, Store, Package, CheckCircle, Link } from 'lucide-react';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+export function Revendedores() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [revendedores, setRevendedores] = useState([]);
+  const [chipsDisponiveis, setChipsDisponiveis] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [vincularDialogOpen, setVincularDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [selectedRevId, setSelectedRevId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState('');
+  const [chipSearch, setChipSearch] = useState('');
+  const [selectedIccids, setSelectedIccids] = useState([]);
+
+  const [form, setForm] = useState({
+    nome: '', contato: '', telefone: '', desconto_valor: '', observacoes: '',
+  });
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [revRes, chipRes] = await Promise.all([
+        axios.get(`${API_URL}/api/revendedores`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/chips`, { withCredentials: true }),
+      ]);
+      setRevendedores(safeArray(revRes.data));
+      setChipsDisponiveis(safeArray(chipRes.data).filter(c => c.status === 'disponivel'));
+    } catch (e) { toast.error('Erro ao carregar dados'); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleOpenDialog = (rev = null) => {
+    if (rev) {
+      setEditingId(rev.id);
+      setForm({
+        nome: rev.nome, contato: rev.contato || '', telefone: rev.telefone || '',
+        desconto_valor: rev.desconto_valor.toString(), observacoes: rev.observacoes || '',
+      });
+    } else {
+      setEditingId(null);
+      setForm({ nome: '', contato: '', telefone: '', desconto_valor: '', observacoes: '' });
+    }
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.nome) { toast.error('Nome obrigatorio'); return; }
+    setSubmitting(true);
+    try {
+      const payload = { ...form, desconto_valor: parseFloat(form.desconto_valor) || 0 };
+      if (editingId) {
+        await axios.put(`${API_URL}/api/revendedores/${editingId}`, payload, { withCredentials: true });
+        toast.success('Revendedor atualizado');
+      } else {
+        await axios.post(`${API_URL}/api/revendedores`, payload, { withCredentials: true });
+        toast.success('Revendedor criado');
+      }
+      setDialogOpen(false);
+      fetchAll();
+    } catch (e) { toast.error(e.response?.data?.detail || 'Erro ao salvar'); }
+    setSubmitting(false);
+  };
+
+  const handleDelete = async (id, nome) => {
+    if (!window.confirm(`Remover revendedor ${nome}? Os chips serao desvinculados.`)) return;
+    try {
+      await axios.delete(`${API_URL}/api/revendedores/${id}`, { withCredentials: true });
+      toast.success('Revendedor removido');
+      fetchAll();
+    } catch (e) { toast.error(e.response?.data?.detail || 'Erro ao remover'); }
+  };
+
+  const handleOpenVincular = (revId) => {
+    setSelectedRevId(revId);
+    setSelectedIccids([]);
+    setChipSearch('');
+    setVincularDialogOpen(true);
+  };
+
+  const handleVincular = async () => {
+    if (!selectedIccids.length) { toast.error('Selecione ao menos um chip'); return; }
+    setSubmitting(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/revendedores/${selectedRevId}/vincular-chips`,
+        { iccids: selectedIccids }, { withCredentials: true });
+      toast.success(`${res.data.linked} chips vinculados`);
+      setVincularDialogOpen(false);
+      fetchAll();
+    } catch (e) { toast.error('Erro ao vincular chips'); }
+    setSubmitting(false);
+  };
+
+  const toggleIccid = (iccid) => {
+    setSelectedIccids(prev =>
+      prev.includes(iccid) ? prev.filter(i => i !== iccid) : [...prev, iccid]
+    );
+  };
+
+  const filtered = revendedores.filter(r =>
+    !search || r.nome.toLowerCase().includes(search.toLowerCase()) ||
+    (r.contato || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredChips = chipsDisponiveis.filter(c =>
+    !chipSearch || c.iccid.includes(chipSearch)
+  );
+
+  return (
+    <div className="space-y-6" data-testid="revendedores-page">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Revendedores</h1>
+          <p className="text-sm text-zinc-400 mt-1">{revendedores.length} revendedores cadastrados</p>
+        </div>
+        {isAdmin && (
+          <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="novo-revendedor-btn">
+            <Plus className="w-4 h-4" />Novo Revendedor
+          </Button>
+        )}
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-4 h-4" />
+        <Input placeholder="Buscar revendedor..." value={search} onChange={e => setSearch(e.target.value)}
+          className="pl-10 bg-zinc-900 border-zinc-700" data-testid="search-revendedores" />
+      </div>
+
+      {loading ? (
+        <p className="text-center text-zinc-500 py-8">Carregando...</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-center text-zinc-500 py-8">Nenhum revendedor cadastrado</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(r => (
+            <Card key={r.id} className="bg-zinc-900 border-zinc-800" data-testid={`revendedor-card-${r.id}`}>
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Store className="w-5 h-5 text-blue-400" />
+                    <h3 className="font-semibold text-lg">{r.nome}</h3>
+                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-1">
+                      <button onClick={() => handleOpenDialog(r)} className="p-1.5 hover:bg-zinc-800 rounded">
+                        <Edit className="w-4 h-4 text-zinc-400" />
+                      </button>
+                      <button onClick={() => handleDelete(r.id, r.nome)} className="p-1.5 hover:bg-zinc-800 rounded">
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {r.contato && <p className="text-sm text-zinc-400 mb-1">Contato: {r.contato}</p>}
+                {r.telefone && <p className="text-sm text-zinc-400 mb-1">Tel: {r.telefone}</p>}
+
+                <div className="mt-3 p-3 bg-zinc-800/50 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-zinc-400">Desconto na ativacao:</span>
+                    <span className="font-bold text-emerald-400">R$ {r.desconto_valor.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-zinc-400 flex items-center gap-1"><Package className="w-3.5 h-3.5" /> Chips vinculados:</span>
+                    <span className="font-medium">{r.total_chips}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-zinc-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Ativados:</span>
+                    <span className="font-medium text-emerald-400">{r.chips_ativados}</span>
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <Button onClick={() => handleOpenVincular(r.id)} variant="outline" size="sm"
+                    className="w-full mt-3 border-zinc-700 hover:bg-zinc-800 flex items-center gap-2" data-testid={`vincular-btn-${r.id}`}>
+                    <Link className="w-4 h-4" />Vincular Chips
+                  </Button>
+                )}
+
+                {r.observacoes && <p className="text-xs text-zinc-500 mt-2">{r.observacoes}</p>}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Dialog Novo/Editar Revendedor */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingId ? 'Editar Revendedor' : 'Novo Revendedor'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4" data-testid="revendedor-form">
+            <div>
+              <label className="text-sm text-zinc-400">Nome *</label>
+              <Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
+                className="bg-zinc-900 border-zinc-700 mt-1" placeholder="Ex: Padaria do Ze" required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-zinc-400">Contato</label>
+                <Input value={form.contato} onChange={e => setForm({ ...form, contato: e.target.value })}
+                  className="bg-zinc-900 border-zinc-700 mt-1" placeholder="Nome contato" />
+              </div>
+              <div>
+                <label className="text-sm text-zinc-400">Telefone</label>
+                <Input value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })}
+                  className="bg-zinc-900 border-zinc-700 mt-1" placeholder="(11) 99999-9999" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400">Desconto na Ativacao (R$)</label>
+              <Input type="number" step="0.01" value={form.desconto_valor} onChange={e => setForm({ ...form, desconto_valor: e.target.value })}
+                className="bg-zinc-900 border-zinc-700 mt-1" placeholder="10.00" />
+              <p className="text-xs text-zinc-500 mt-1">Desconto aplicado automaticamente na primeira mensalidade do cliente</p>
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400">Observacoes</label>
+              <Input value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })}
+                className="bg-zinc-900 border-zinc-700 mt-1" placeholder="Observacoes..." />
+            </div>
+            <Button type="submit" disabled={submitting} className="w-full btn-primary">
+              {submitting ? 'Salvando...' : editingId ? 'Salvar' : 'Criar Revendedor'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Vincular Chips */}
+      <Dialog open={vincularDialogOpen} onOpenChange={setVincularDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vincular Chips ao Revendedor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-4 h-4" />
+              <Input placeholder="Buscar ICCID..." value={chipSearch} onChange={e => setChipSearch(e.target.value)}
+                className="pl-10 bg-zinc-900 border-zinc-700" />
+            </div>
+            <p className="text-sm text-zinc-400">{selectedIccids.length} selecionados de {filteredChips.length} disponiveis</p>
+            <div className="max-h-64 overflow-y-auto border border-zinc-800 rounded-md p-2 space-y-1">
+              {filteredChips.slice(0, 100).map(c => (
+                <label key={c.iccid} className="flex items-center gap-2 p-1.5 hover:bg-zinc-900 rounded cursor-pointer text-sm font-mono">
+                  <input type="checkbox" checked={selectedIccids.includes(c.iccid)}
+                    onChange={() => toggleIccid(c.iccid)} className="rounded" />
+                  {c.iccid}
+                </label>
+              ))}
+              {filteredChips.length > 100 && <p className="text-xs text-zinc-500 text-center py-2">Mostrando 100 de {filteredChips.length}. Use a busca para filtrar.</p>}
+            </div>
+            <Button onClick={handleVincular} disabled={submitting || !selectedIccids.length} className="w-full btn-primary">
+              {submitting ? 'Vinculando...' : `Vincular ${selectedIccids.length} Chips`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

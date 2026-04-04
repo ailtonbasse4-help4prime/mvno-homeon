@@ -1,7 +1,7 @@
 import os
 import logging
 import httpx
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class AsaasService:
     def _headers(self) -> dict:
         return {
             "Content-Type": "application/json",
-            "User-Agent": "MVNOManager",
+            "User-Agent": "MVNOManager/1.0",
             "access_token": self.api_key,
         }
 
@@ -46,14 +46,11 @@ class AsaasService:
                               address_number: Optional[str] = None, province: Optional[str] = None,
                               postal_code: Optional[str] = None) -> Dict[str, Any]:
         self._check_configured()
-        payload = {
-            "name": name,
-            "cpfCnpj": cpf_cnpj,
-        }
+        payload = {"name": name, "cpfCnpj": cpf_cnpj}
         if email:
             payload["email"] = email
         if phone:
-            payload["phone"] = phone
+            payload["mobilePhone"] = phone
         if address:
             payload["address"] = address
         if address_number:
@@ -62,21 +59,31 @@ class AsaasService:
             payload["province"] = province
         if postal_code:
             payload["postalCode"] = postal_code
-
         return await self._request("POST", "/customers", payload)
 
-    async def get_customer(self, customer_id: str) -> Dict[str, Any]:
+    async def find_customer_by_cpf(self, cpf_cnpj: str) -> Optional[Dict[str, Any]]:
         self._check_configured()
-        return await self._request("GET", f"/customers/{customer_id}")
+        result = await self._request("GET", f"/customers?cpfCnpj={cpf_cnpj}")
+        data = result.get("data", [])
+        return data[0] if data else None
+
+    async def get_or_create_customer(self, name: str, cpf_cnpj: str, **kwargs) -> Dict[str, Any]:
+        existing = await self.find_customer_by_cpf(cpf_cnpj)
+        if existing:
+            return existing
+        return await self.create_customer(name, cpf_cnpj, **kwargs)
+
+    async def list_customers(self, offset: int = 0, limit: int = 50) -> Dict[str, Any]:
+        self._check_configured()
+        return await self._request("GET", f"/customers?offset={offset}&limit={limit}")
 
     # ==================== COBRANCAS ====================
     async def create_payment(self, customer_id: str, billing_type: str, value: float,
                              due_date: str, description: Optional[str] = None,
-                             external_reference: Optional[str] = None) -> Dict[str, Any]:
-        """
-        billing_type: BOLETO, CREDIT_CARD, PIX, UNDEFINED
-        due_date: formato YYYY-MM-DD
-        """
+                             external_reference: Optional[str] = None,
+                             discount_value: Optional[float] = None,
+                             fine_value: Optional[float] = None,
+                             interest_value: Optional[float] = None) -> Dict[str, Any]:
         self._check_configured()
         payload = {
             "customer": customer_id,
@@ -88,33 +95,76 @@ class AsaasService:
             payload["description"] = description
         if external_reference:
             payload["externalReference"] = external_reference
-
+        if discount_value:
+            payload["discount"] = {"value": discount_value, "dueDateLimitDays": 0}
+        if fine_value:
+            payload["fine"] = {"value": fine_value}
+        if interest_value:
+            payload["interest"] = {"value": interest_value}
         return await self._request("POST", "/payments", payload)
+
+    async def create_payments_batch(self, payments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Cria multiplas cobrancas de uma vez."""
+        self._check_configured()
+        results = []
+        for p in payments:
+            try:
+                result = await self.create_payment(**p)
+                results.append({"success": True, "data": result})
+            except Exception as e:
+                results.append({"success": False, "error": str(e), "input": p})
+        return results
 
     async def get_payment(self, payment_id: str) -> Dict[str, Any]:
         self._check_configured()
         return await self._request("GET", f"/payments/{payment_id}")
 
-    async def list_customer_payments(self, customer_id: str, offset: int = 0, limit: int = 50) -> Dict[str, Any]:
+    async def update_payment(self, payment_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         self._check_configured()
-        return await self._request("GET", f"/payments?customer={customer_id}&offset={offset}&limit={limit}")
+        return await self._request("PUT", f"/payments/{payment_id}", data)
+
+    async def delete_payment(self, payment_id: str) -> Dict[str, Any]:
+        self._check_configured()
+        return await self._request("DELETE", f"/payments/{payment_id}")
+
+    async def list_payments(self, offset: int = 0, limit: int = 50,
+                            status: Optional[str] = None,
+                            customer_id: Optional[str] = None,
+                            billing_type: Optional[str] = None,
+                            date_from: Optional[str] = None,
+                            date_to: Optional[str] = None) -> Dict[str, Any]:
+        self._check_configured()
+        params = f"?offset={offset}&limit={limit}"
+        if status:
+            params += f"&status={status}"
+        if customer_id:
+            params += f"&customer={customer_id}"
+        if billing_type:
+            params += f"&billingType={billing_type}"
+        if date_from:
+            params += f"&dueDate[ge]={date_from}"
+        if date_to:
+            params += f"&dueDate[le]={date_to}"
+        return await self._request("GET", f"/payments{params}")
 
     async def get_pix_qrcode(self, payment_id: str) -> Dict[str, Any]:
         self._check_configured()
         return await self._request("GET", f"/payments/{payment_id}/pixQrCode")
 
-    async def get_boleto_url(self, payment_id: str) -> Dict[str, Any]:
+    async def get_boleto_barcode(self, payment_id: str) -> Dict[str, Any]:
         self._check_configured()
         return await self._request("GET", f"/payments/{payment_id}/identificationField")
+
+    async def get_invoice_url(self, payment_id: str) -> str:
+        """Retorna URL do boleto/fatura para visualizacao."""
+        payment = await self.get_payment(payment_id)
+        return payment.get("invoiceUrl", "")
 
     # ==================== ASSINATURAS ====================
     async def create_subscription(self, customer_id: str, billing_type: str, value: float,
                                    next_due_date: str, cycle: str = "MONTHLY",
                                    description: Optional[str] = None,
                                    external_reference: Optional[str] = None) -> Dict[str, Any]:
-        """
-        cycle: WEEKLY, BIWEEKLY, MONTHLY, BIMONTHLY, QUARTERLY, SEMIANNUALLY, YEARLY
-        """
         self._check_configured()
         payload = {
             "customer": customer_id,
@@ -127,16 +177,27 @@ class AsaasService:
             payload["description"] = description
         if external_reference:
             payload["externalReference"] = external_reference
-
         return await self._request("POST", "/subscriptions", payload)
 
     async def get_subscription(self, subscription_id: str) -> Dict[str, Any]:
         self._check_configured()
         return await self._request("GET", f"/subscriptions/{subscription_id}")
 
+    async def update_subscription(self, subscription_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        self._check_configured()
+        return await self._request("PUT", f"/subscriptions/{subscription_id}", data)
+
     async def cancel_subscription(self, subscription_id: str) -> Dict[str, Any]:
         self._check_configured()
         return await self._request("DELETE", f"/subscriptions/{subscription_id}")
+
+    async def list_subscriptions(self, offset: int = 0, limit: int = 50,
+                                  customer_id: Optional[str] = None) -> Dict[str, Any]:
+        self._check_configured()
+        params = f"?offset={offset}&limit={limit}"
+        if customer_id:
+            params += f"&customer={customer_id}"
+        return await self._request("GET", f"/subscriptions{params}")
 
     async def list_subscription_payments(self, subscription_id: str) -> Dict[str, Any]:
         self._check_configured()
