@@ -1,20 +1,14 @@
 # PRD - Sistema MVNO Manager - Ta Telecom
 
 ## Problema Original
-Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom para ativacao, consulta, bloqueio/desbloqueio e alteracao de planos.
+Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom e Asaas para pagamentos.
 
 ## Arquitetura
 - **Frontend**: React 19 + Tailwind CSS + Shadcn/UI
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
-- **Integracao**: OperadoraService com padrao Adapter (Mock/Real Ta Telecom)
-
-## Deploy VPS
-- Frontend: Build React servido pelo Nginx (URLs relativas)
-- Backend: FastAPI via Systemd + venv Python
-- Cookies: COOKIE_SECURE=true e COOKIE_SAMESITE=None para HTTPS
-- Pacote: `/app/deploy/mvno-vps-deploy.tar.gz`
+- **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - sandbox)
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
@@ -22,47 +16,46 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ## Implementado
 
-### MVP Inicial (31/03/2026)
-- [x] JWT Auth, dark theme, CRUD completo
-
-### Integracao Ta Telecom (01/04/2026)
-- [x] OperadoraService real, sincronizacao planos/estoque, bloqueio/desbloqueio
-
-### Seguranca e Controle de Acesso (01/04/2026)
+### MVP + Integracoes Basicas (31/03 - 01/04/2026)
+- [x] JWT Auth, dark theme, CRUD completo (clientes, planos, ofertas, chips, linhas)
+- [x] OperadoraService real Ta Telecom (ativar, bloquear, desbloquear, alterar plano)
 - [x] Perfis admin/atendente, brute force, session timeout, audit logs
+- [x] Categorizacao ofertas (movel/m2m), vinculacao oferta ao chip
 
-### Carteira Movel - Asaas (01/04/2026)
-- [x] CRUD cobrancas/assinaturas, dashboard financeiro (MOCK local)
+### Carteira Movel + Asaas (01/04/2026)
+- [x] CRUD cobrancas/assinaturas, dashboard financeiro, webhook
 
-### Layout Responsivo Mobile (02/04/2026)
-- [x] Menu hamburguer, touch targets 44px, grids adaptivos
+### Mobile + Deploy (02/04/2026)
+- [x] Layout responsivo, menu hamburguer
+- [x] Scripts deploy VPS (Nginx + Systemd)
 
-### Programacao Defensiva API (03/04/2026)
-- [x] ErrorBoundary, safeArray/safeObject em 12 paginas
+### Programacao Defensiva + Fix Login VPS (03/04/2026)
+- [x] ErrorBoundary, safeArray/safeObject em todas as paginas
+- [x] URLs relativas no build, cookies HTTPS configuraveis
 
-### Fix Login VPS + Cookies HTTPS (03/04/2026)
-- [x] URLs relativas no build (sem hardcode)
-- [x] COOKIE_SECURE=true, COOKIE_SAMESITE=None
+### Sincronizacao Clientes Ta Telecom (03/04/2026)
+- [x] POST /api/operadora/sincronizar-clientes (ativos + bloqueados)
+- [x] 94 clientes, 108 linhas, 104 chips sincronizados
 
-### Sincronizacao de Clientes da Ta Telecom (03/04/2026)
-- [x] POST /api/operadora/sincronizar-clientes
-- [x] Importa clientes dos chips EM USO por CPF (cria ou atualiza)
-- [x] Cria linhas com numero, plano, ICCID
-- [x] Vincula chips aos clientes
-- [x] Botao "Sincronizar Clientes" na pagina Clientes
-- [x] Resultado: 75 clientes criados, 86 linhas, 86 chips vinculados
-- [x] Sem conflito com ativacoes novas (match por CPF = upsert)
+### Gestao de Cobrancas + Revendedores (04/04/2026)
+- [x] Integracao real Asaas (sandbox key configurada)
+- [x] Pagina Gestao de Cobrancas: avulsa + lote, editar, cancelar, filtros
+- [x] Cards resumo financeiro (receita, pendente, vencido)
+- [x] Link fatura Asaas, copiar link, consultar status
+- [x] Modulo Revendedores: CRUD + vincular chips + desconto na ativacao
+- [x] Testado: 13/13 paginas sem erros
 
 ## Backlog
 
 ### P1 - Alta Prioridade
-- [ ] Configurar chave API do Asaas (sandbox/producao)
-- [ ] Leitor codigo de barras/QR code para ICCID
-- [ ] Retry automatico para ativacoes pendentes
+- [ ] Portal de Ativacao Self-Service (pagina publica com leitor codigo de barras)
+- [ ] Pagamento antes da ativacao (Pix/Boleto via Asaas)
+- [ ] Desconto automatico para chips de revendedor
+- [ ] Webhook Asaas -> ativacao automatica na Ta Telecom
+- [ ] Portal do Cliente (login CPF + numero, consulta plano/boletos)
 
 ### P2 - Media Prioridade
-- [ ] Bloqueio automatico por inadimplencia (via Carteira Movel)
-- [ ] Historico de ativacoes recentes
+- [ ] Bloqueio automatico por inadimplencia
+- [ ] Historico de ativacoes
 - [ ] Consulta de saldo e consumo
-- [ ] Dashboard metricas API
-- [ ] Pix Automatico (quando disponivel no Asaas)
+- [ ] Retry automatico ativacoes pendentes
