@@ -15,7 +15,6 @@ import { Logs } from "./pages/Logs";
 import { Usuarios } from "./pages/Usuarios";
 import { CarteiraMovel } from "./pages/CarteiraMovel";
 import { Assinaturas } from "./pages/Assinaturas";
-import { AtivarChip } from "./pages/AtivarChip";
 
 function App() {
   return (
@@ -30,7 +29,6 @@ function App() {
             <Route path="/planos" element={<ErrorBoundary><Planos /></ErrorBoundary>} />
             <Route path="/ofertas" element={<ErrorBoundary><Ofertas /></ErrorBoundary>} />
             <Route path="/ativacoes" element={<ErrorBoundary><Ativacoes /></ErrorBoundary>} />
-            <Route path="/ativar-chip" element={<ErrorBoundary><AtivarChip /></ErrorBoundary>} />
             <Route path="/linhas" element={<ErrorBoundary><Linhas /></ErrorBoundary>} />
             <Route path="/carteira" element={<ErrorBoundary><CarteiraMovel /></ErrorBoundary>} />
             <Route path="/assinaturas" element={<ErrorBoundary><Assinaturas /></ErrorBoundary>} />
