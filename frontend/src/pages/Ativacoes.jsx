@@ -12,7 +12,7 @@ import {
 } from '../components/ui/select';
 import { IccidInput } from '../components/IccidInput';
 import { toast } from 'sonner';
-import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package } from 'lucide-react';
+import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package, ExternalLink } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -121,14 +121,26 @@ export function Ativacoes() {
 
   return (
     <div className="space-y-6" data-testid="ativacoes-page">
-      <div>
-        <h1 className="page-title flex items-center gap-3">
-          <Zap className="w-7 h-7 text-amber-500" />
-          Ativacao de Linha
-        </h1>
-        <p className="text-zinc-400 text-sm -mt-4">
-          Selecione o cliente e o chip. A oferta e o plano sao detectados automaticamente.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="page-title flex items-center gap-3">
+            <Zap className="w-7 h-7 text-amber-500" />
+            Ativacao de Linha
+          </h1>
+          <p className="text-zinc-400 text-sm -mt-4">
+            Selecione o cliente e o chip. A oferta e o plano sao detectados automaticamente.
+          </p>
+        </div>
+        <a
+          href="/ativar"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-sm transition-all text-sm shrink-0"
+          data-testid="ativar-selfservice-link"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Ativar por QR Code
+        </a>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
