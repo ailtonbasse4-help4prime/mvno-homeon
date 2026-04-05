@@ -104,7 +104,7 @@ export function Sidebar({ isOpen, onClose }) {
             </div>
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-white">MVNO</h1>
-              <p className="text-xs text-zinc-500">Ta Telecom</p>
+              <p className="text-xs text-zinc-400">Ta Telecom</p>
             </div>
           </div>
           {operadoraMode && (
@@ -143,7 +143,7 @@ export function Sidebar({ isOpen, onClose }) {
         <div className="p-4 border-t border-zinc-800">
           <div className="mb-3">
             <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-            <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
+            <p className="text-xs text-zinc-400 truncate">{user?.email}</p>
             <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-sm ${
               userRole === 'admin'
                 ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20'
@@ -155,14 +155,14 @@ export function Sidebar({ isOpen, onClose }) {
           <div className="flex gap-1">
             <button
               onClick={() => setPwdDialogOpen(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-sm transition-colors min-h-[44px]"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-md transition-all duration-200 min-h-[44px]"
               data-testid="change-password-button"
             >
               <KeyRound className="w-3.5 h-3.5" />Senha
             </button>
             <button
               onClick={handleLogout}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-zinc-400 hover:text-red-400 hover:bg-zinc-800/50 rounded-sm transition-colors min-h-[44px]"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-zinc-300 hover:text-red-400 hover:bg-zinc-800/50 rounded-md transition-all duration-200 min-h-[44px]"
               data-testid="logout-button"
             >
               <LogOut className="w-3.5 h-3.5" />Sair

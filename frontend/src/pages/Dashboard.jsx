@@ -53,7 +53,7 @@ export function Dashboard() {
           <p className="stat-value">{value}</p>
           <p className="stat-label">{label}</p>
           {subValue && (
-            <p className="text-xs text-zinc-500 mt-1">{subValue}</p>
+            <p className="text-xs text-zinc-400 mt-1">{subValue}</p>
           )}
         </div>
         <div className={`w-10 h-10 rounded-sm bg-${color}-500/10 flex items-center justify-center`}>
@@ -68,7 +68,7 @@ export function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="text-zinc-400 text-sm -mt-4">Visao geral do sistema MVNO</p>
+          <p className="text-zinc-300 text-sm -mt-4">Visao geral do sistema MVNO</p>
         </div>
         {/* Indicador Mock/Real */}
         {stats?.operadora && (
@@ -136,17 +136,17 @@ export function Dashboard() {
             Status dos Chips
           </h2>
           <div className="grid grid-cols-3 gap-4 mt-4">
-            <div className="text-center p-4 bg-zinc-800/50 rounded-sm">
+            <div className="text-center p-4 bg-zinc-800/50 rounded-lg transition-all duration-200 hover:bg-zinc-800/80">
               <p className="text-2xl font-mono font-bold text-blue-400">{stats?.chips?.disponiveis || 0}</p>
-              <p className="text-xs text-zinc-400 mt-1">Disponíveis</p>
+              <p className="text-xs text-zinc-300 mt-1">Disponíveis</p>
             </div>
-            <div className="text-center p-4 bg-zinc-800/50 rounded-sm">
+            <div className="text-center p-4 bg-zinc-800/50 rounded-lg transition-all duration-200 hover:bg-zinc-800/80">
               <p className="text-2xl font-mono font-bold text-emerald-400">{stats?.chips?.ativados || 0}</p>
-              <p className="text-xs text-zinc-400 mt-1">Ativados</p>
+              <p className="text-xs text-zinc-300 mt-1">Ativados</p>
             </div>
-            <div className="text-center p-4 bg-zinc-800/50 rounded-sm">
+            <div className="text-center p-4 bg-zinc-800/50 rounded-lg transition-all duration-200 hover:bg-zinc-800/80">
               <p className="text-2xl font-mono font-bold text-red-400">{stats?.chips?.bloqueados || 0}</p>
-              <p className="text-xs text-zinc-400 mt-1">Bloqueados</p>
+              <p className="text-xs text-zinc-300 mt-1">Bloqueados</p>
             </div>
           </div>
         </div>
@@ -158,26 +158,26 @@ export function Dashboard() {
             Status das Linhas
           </h2>
           <div className="grid grid-cols-3 gap-4 mt-4">
-            <div className="text-center p-4 bg-zinc-800/50 rounded-sm">
+            <div className="text-center p-4 bg-zinc-800/50 rounded-lg transition-all duration-200 hover:bg-zinc-800/80">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-emerald-500" />
               </div>
               <p className="text-2xl font-mono font-bold text-emerald-400">{stats?.linhas?.ativas || 0}</p>
-              <p className="text-xs text-zinc-400 mt-1">Ativas</p>
+              <p className="text-xs text-zinc-300 mt-1">Ativas</p>
             </div>
-            <div className="text-center p-4 bg-zinc-800/50 rounded-sm">
+            <div className="text-center p-4 bg-zinc-800/50 rounded-lg transition-all duration-200 hover:bg-zinc-800/80">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Clock className="w-4 h-4 text-amber-500" />
               </div>
               <p className="text-2xl font-mono font-bold text-amber-400">{stats?.linhas?.pendentes || 0}</p>
-              <p className="text-xs text-zinc-400 mt-1">Pendentes</p>
+              <p className="text-xs text-zinc-300 mt-1">Pendentes</p>
             </div>
-            <div className="text-center p-4 bg-zinc-800/50 rounded-sm">
+            <div className="text-center p-4 bg-zinc-800/50 rounded-lg transition-all duration-200 hover:bg-zinc-800/80">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <AlertCircle className="w-4 h-4 text-red-500" />
               </div>
               <p className="text-2xl font-mono font-bold text-red-400">{stats?.linhas?.bloqueadas || 0}</p>
-              <p className="text-xs text-zinc-400 mt-1">Bloqueadas</p>
+              <p className="text-xs text-zinc-300 mt-1">Bloqueadas</p>
             </div>
           </div>
         </div>
@@ -195,7 +195,7 @@ export function Dashboard() {
             {stats.recent_logs.map((log, index) => (
               <div 
                 key={log.id || index} 
-                className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-sm"
+                className="flex items-start gap-3 p-3 bg-zinc-800/30 rounded-lg transition-all duration-200 hover:bg-zinc-800/50"
               >
                 <div className={`w-2 h-2 rounded-full mt-2 ${
                   log.action === 'ativacao' ? 'bg-emerald-500' :
@@ -205,8 +205,8 @@ export function Dashboard() {
                   'bg-zinc-500'
                 }`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-zinc-300 truncate">{log.details}</p>
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <p className="text-sm text-zinc-200 truncate">{log.details}</p>
+                  <p className="text-xs text-zinc-400 mt-1">
                     {new Date(log.created_at).toLocaleString('pt-BR')}
                   </p>
                 </div>
@@ -223,7 +223,7 @@ export function Dashboard() {
             ))}
           </div>
         ) : (
-          <p className="text-zinc-500 text-sm mt-4">Nenhuma atividade recente</p>
+          <p className="text-zinc-400 text-sm mt-4">Nenhuma atividade recente</p>
         )}
       </div>
     </div>

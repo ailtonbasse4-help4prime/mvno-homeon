@@ -127,7 +127,7 @@ export function Ativacoes() {
             <Zap className="w-7 h-7 text-amber-500" />
             Ativacao de Linha
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">
+          <p className="text-zinc-300 text-sm -mt-4">
             Selecione o cliente e o chip. A oferta e o plano sao detectados automaticamente.
           </p>
         </div>
