@@ -131,36 +131,43 @@ export function GestaoCobrancas() {
     toast.success(`${label} copiado!`);
   };
 
-  const handlePrint = (c) => {
+  const handlePrint = async (c) => {
+    // Se tem invoice URL do Asaas, abre direto (boleto/fatura real)
     if (c.asaas_invoice_url) {
       window.open(c.asaas_invoice_url, '_blank');
       return;
     }
-    // Gerar versao para impressao local
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html><head><title>Cobranca - ${c.cliente_nome}</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px;max-width:600px;margin:0 auto}
-      h1{font-size:20px;border-bottom:2px solid #000;padding-bottom:10px}
-      .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee}
-      .label{color:#666;font-size:14px}.value{font-weight:bold;font-size:14px}
-      .total{font-size:24px;text-align:center;margin:20px 0;padding:15px;background:#f5f5f5;border-radius:8px}
-      .barcode{text-align:center;margin:20px 0;font-family:monospace;font-size:12px;word-break:break-all}
-      @media print{button{display:none}}</style></head><body>
-      <h1>Cobranca - MVNO Manager</h1>
-      <div class="row"><span class="label">Cliente</span><span class="value">${c.cliente_nome || '—'}</span></div>
-      <div class="row"><span class="label">Linha</span><span class="value">${c.msisdn || '—'}</span></div>
-      <div class="row"><span class="label">Tipo</span><span class="value">${c.billing_type}</span></div>
-      <div class="row"><span class="label">Vencimento</span><span class="value">${c.vencimento}</span></div>
-      <div class="row"><span class="label">Status</span><span class="value">${statusLabel(c.status)}</span></div>
-      <div class="row"><span class="label">Descricao</span><span class="value">${c.descricao || '—'}</span></div>
-      <div class="total">Valor: R$ ${c.valor.toFixed(2)}</div>
-      ${c.barcode ? `<div class="barcode"><strong>Codigo de Barras:</strong><br>${c.barcode}</div>` : ''}
-      ${c.asaas_pix_code ? `<div class="barcode"><strong>Pix Copia e Cola:</strong><br>${c.asaas_pix_code}</div>` : ''}
-      <button onclick="window.print()" style="width:100%;padding:12px;background:#000;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px;margin-top:20px">Imprimir</button>
-      </body></html>
-    `);
-    printWindow.document.close();
+    // Se tem payment_id real mas falta URL, tenta buscar do Asaas
+    if (c.asaas_payment_id && !c.asaas_payment_id.startsWith('mock_')) {
+      try {
+        toast.info('Buscando fatura no Asaas...');
+        const res = await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/refresh`, {}, { withCredentials: true });
+        const updated = res.data;
+        if (updated.asaas_invoice_url) {
+          window.open(updated.asaas_invoice_url, '_blank');
+          fetchAll(); // atualiza lista
+          return;
+        }
+      } catch (e) {
+        toast.error('Erro ao buscar fatura no Asaas');
+      }
+    }
+    toast.error('Fatura do Asaas nao disponivel. Tente consultar o status primeiro.');
+  };
+
+  const handleRefreshCobranca = async (c) => {
+    if (!c.asaas_payment_id || c.asaas_payment_id.startsWith('mock_')) {
+      toast.error('Cobranca sem pagamento real no Asaas');
+      return;
+    }
+    try {
+      toast.info('Consultando Asaas...');
+      await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/refresh`, {}, { withCredentials: true });
+      toast.success('Dados atualizados do Asaas');
+      fetchAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao consultar Asaas');
+    }
   };
 
   const handleShareWhatsApp = (c) => {
@@ -360,6 +367,9 @@ export function GestaoCobrancas() {
                     <button onClick={() => handlePrint(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Imprimir / Abrir fatura">
                       <Printer className="w-3.5 h-3.5 text-zinc-400" />
                     </button>
+                    <button onClick={() => handleRefreshCobranca(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Atualizar dados do Asaas">
+                      <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                    </button>
                     <button onClick={() => handleShareWhatsApp(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Enviar por WhatsApp">
                       <Share2 className="w-3.5 h-3.5 text-emerald-400" />
                     </button>
@@ -458,10 +468,20 @@ export function GestaoCobrancas() {
                 </div>
               )}
 
+              {/* Pagamento real sem invoice URL - precisa atualizar */}
+              {sc.asaas_payment_id && !sc.asaas_payment_id.startsWith('mock_') && !sc.asaas_invoice_url && (
+                <div className="p-3 bg-amber-900/20 border border-amber-800/30 rounded-lg text-sm text-amber-400">
+                  <p>Fatura pendente de sincronizacao. Clique em "Atualizar do Asaas" para buscar o link da fatura.</p>
+                  <Button onClick={() => handleRefreshCobranca(sc)} variant="outline" size="sm" className="mt-2 border-amber-700 text-amber-400 w-full">
+                    <RefreshCw className="w-3.5 h-3.5 mr-2" /> Atualizar do Asaas
+                  </Button>
+                </div>
+              )}
+
               {/* Botoes de acao */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <Button onClick={() => handlePrint(sc)} variant="outline" className="flex items-center gap-2 border-zinc-700">
-                  <Printer className="w-4 h-4" />{sc.asaas_invoice_url ? 'Abrir Fatura' : 'Imprimir'}
+                  <Printer className="w-4 h-4" />{sc.asaas_invoice_url ? 'Abrir Fatura' : 'Buscar Fatura'}
                 </Button>
                 <Button onClick={() => handleShareWhatsApp(sc)} variant="outline" className="flex items-center gap-2 border-zinc-700 text-emerald-400 hover:text-emerald-300">
                   <Share2 className="w-4 h-4" />WhatsApp
