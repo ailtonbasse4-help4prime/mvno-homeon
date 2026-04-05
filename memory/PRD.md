@@ -68,6 +68,8 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Frontend: Dashboard /portal/dashboard com info do cliente, linhas expandiveis, saldo/consumo, faturas
 - [x] Frontend: Links para faturas Asaas com botao "Ver Fatura"
 - [x] Frontend: Logout com limpeza de sessionStorage
+- [x] Link do Portal nas etiquetas de QR Code dos revendedores
+- [x] Link do Portal na descricao das faturas/cobrancas do Asaas
 - [x] Testado: 100% backend (13 testes) + 100% frontend (todas features)
 
 ## Backlog

@@ -459,6 +459,9 @@ export function Revendedores() {
                         <div className="rev" style={{ fontSize: '8px', color: '#666', marginTop: '2px' }}>
                           Rev: {selectedRevName}
                         </div>
+                        <div style={{ fontSize: '7px', color: '#888', marginTop: '3px', borderTop: '1px dashed #ccc', paddingTop: '3px' }}>
+                          Meu plano: {SITE_URL ? `${SITE_URL}/portal` : '/portal'}
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -35,6 +35,13 @@ JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
 COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "none")
+SITE_URL = os.environ.get("SITE_URL", "")
+
+def _append_portal_link(desc: str) -> str:
+    """Adiciona link do Portal do Cliente na descricao da cobranca Asaas."""
+    if SITE_URL:
+        return f"{desc} | Acesse seu portal: {SITE_URL}/portal"
+    return desc
 
 app = FastAPI(title="MVNO Management System - Ta Telecom")
 api_router = APIRouter(prefix="/api")
@@ -1871,7 +1878,7 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
                 billing_type=data.billing_type.value,
                 value=data.valor,
                 due_date=data.vencimento,
-                description=data.descricao or f"Cobranca movel - {cliente['nome']}",
+                description=_append_portal_link(data.descricao or f"Cobranca movel - {cliente['nome']}"),
                 external_reference=ref,
             )
             doc["asaas_payment_id"] = result.get("id")
@@ -2001,7 +2008,7 @@ async def generate_asaas_payment(cobranca_id: str, request: Request):
             billing_type=doc["billing_type"],
             value=doc["valor"],
             due_date=doc["vencimento"],
-            description=doc.get("descricao") or f"Cobranca movel - {cliente['nome']}",
+            description=_append_portal_link(doc.get("descricao") or f"Cobranca movel - {cliente['nome']}"),
         )
 
         update_fields = {
@@ -2115,7 +2122,7 @@ async def create_cobrancas_lote(data: CobrancaLoteRequest, request: Request):
                         billing_type=item.billing_type,
                         value=item.valor,
                         due_date=item.vencimento,
-                        description=item.descricao or f"Cobranca - {cliente['nome']}",
+                        description=_append_portal_link(item.descricao or f"Cobranca - {cliente['nome']}"),
                         external_reference=f"lote-{item.cliente_id}",
                     )
                     doc["asaas_payment_id"] = result.get("id")
@@ -2197,7 +2204,7 @@ async def create_assinatura(data: AssinaturaCreate, request: Request):
                 value=data.valor,
                 next_due_date=data.proximo_vencimento,
                 cycle=data.ciclo,
-                description=data.descricao or f"Assinatura movel - {cliente['nome']}",
+                description=_append_portal_link(data.descricao or f"Assinatura movel - {cliente['nome']}"),
                 external_reference=f"ass-{data.cliente_id}",
             )
             doc["asaas_subscription_id"] = result.get("id")
@@ -2831,7 +2838,7 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
                 billing_type=data.billing_type,
                 value=valor_final,
                 due_date=vencimento,
-                description=f"Ativacao chip {iccid_clean} - {oferta['nome']}",
+                description=_append_portal_link(f"Ativacao chip {iccid_clean} - {oferta['nome']}"),
                 discount_value=desconto if desconto > 0 else None,
             )
             activation_doc["asaas_payment_id"] = payment_result.get("id")
