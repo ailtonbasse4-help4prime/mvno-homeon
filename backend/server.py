@@ -805,7 +805,28 @@ async def list_offers(request: Request, ativo: Optional[bool] = None, categoria:
     if categoria:
         query["categoria"] = categoria
     offers = await db.ofertas.find(query).to_list(1000)
-    return [await build_offer_response(o) for o in offers]
+
+    # Batch load planos
+    plano_ids = list(set(o["plano_id"] for o in offers if o.get("plano_id")))
+    planos_lookup = {}
+    if plano_ids:
+        planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}).to_list(len(plano_ids))
+        planos_lookup = {str(p["_id"]): p for p in planos}
+
+    result = []
+    for o in offers:
+        plano = planos_lookup.get(o.get("plano_id"))
+        result.append(OfferResponse(
+            id=str(o["_id"]), nome=o["nome"], plano_id=o["plano_id"],
+            plano_nome=plano["nome"] if plano else None,
+            franquia=plano["franquia"] if plano else None,
+            plan_code=plano.get("plan_code") if plano else None,
+            valor=o["valor"], descricao=o.get("descricao"),
+            categoria=o.get("categoria", "movel"),
+            ativo=o.get("ativo", True),
+            created_at=o.get("created_at", datetime.now(timezone.utc))
+        ))
+    return result
 
 @api_router.get("/ofertas/{offer_id}", response_model=OfferResponse)
 async def get_offer(offer_id: str, request: Request):
@@ -901,7 +922,56 @@ async def list_chips(request: Request, status: Optional[str] = None, oferta_id: 
     if oferta_id:
         query["oferta_id"] = oferta_id
     chips = await db.chips.find(query).to_list(1000)
-    return [await build_chip_response(c) for c in chips]
+
+    # Batch load related data
+    cliente_ids = list(set(c["cliente_id"] for c in chips if c.get("cliente_id")))
+    oferta_ids = list(set(c["oferta_id"] for c in chips if c.get("oferta_id")))
+
+    clientes_lookup = {}
+    if cliente_ids:
+        clientes = await db.clientes.find({"_id": {"$in": [ObjectId(cid) for cid in cliente_ids]}}).to_list(len(cliente_ids))
+        clientes_lookup = {str(cl["_id"]): cl for cl in clientes}
+
+    ofertas_lookup = {}
+    planos_lookup = {}
+    if oferta_ids:
+        ofertas = await db.ofertas.find({"_id": {"$in": [ObjectId(oid) for oid in oferta_ids]}}).to_list(len(oferta_ids))
+        ofertas_lookup = {str(o["_id"]): o for o in ofertas}
+        plano_ids = list(set(o["plano_id"] for o in ofertas if o.get("plano_id")))
+        if plano_ids:
+            planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}).to_list(len(plano_ids))
+            planos_lookup = {str(p["_id"]): p for p in planos}
+
+    result = []
+    for chip in chips:
+        cliente_nome = None
+        oferta_nome, plano_nome, franquia, valor, plan_code, categoria = None, None, None, None, None, None
+
+        cl = clientes_lookup.get(chip.get("cliente_id"))
+        if cl:
+            cliente_nome = cl["nome"]
+
+        oferta = ofertas_lookup.get(chip.get("oferta_id"))
+        if oferta:
+            oferta_nome = oferta["nome"]
+            valor = oferta["valor"]
+            categoria = oferta.get("categoria", "movel")
+            plano = planos_lookup.get(oferta.get("plano_id"))
+            if plano:
+                plano_nome = plano["nome"]
+                franquia = plano["franquia"]
+                plan_code = plano.get("plan_code")
+
+        result.append(ChipResponse(
+            id=str(chip["_id"]), iccid=chip["iccid"], status=chip["status"],
+            msisdn=chip.get("msisdn"), oferta_id=chip.get("oferta_id"),
+            oferta_nome=oferta_nome, categoria=categoria,
+            plano_nome=plano_nome, franquia=franquia,
+            plan_code=plan_code, valor=valor,
+            cliente_id=chip.get("cliente_id"), cliente_nome=cliente_nome,
+            created_at=chip.get("created_at", datetime.now(timezone.utc))
+        ))
+    return result
 
 @api_router.post("/chips", response_model=ChipResponse)
 async def create_chip(data: ChipCreate, request: Request):
@@ -1111,7 +1181,48 @@ async def list_lines(request: Request, status: Optional[str] = None):
     if status:
         query["status"] = status
     lines = await db.linhas.find(query).to_list(1000)
-    return [await build_line_response(l) for l in lines]
+
+    # Batch load related data
+    cliente_ids = list(set(l["cliente_id"] for l in lines if l.get("cliente_id")))
+    plano_ids = list(set(l["plano_id"] for l in lines if l.get("plano_id")))
+    oferta_ids = list(set(l["oferta_id"] for l in lines if l.get("oferta_id")))
+    chip_ids = list(set(l["chip_id"] for l in lines if l.get("chip_id")))
+
+    clientes_lookup, planos_lookup, ofertas_lookup, chips_lookup = {}, {}, {}, {}
+    if cliente_ids:
+        docs = await db.clientes.find({"_id": {"$in": [ObjectId(i) for i in cliente_ids]}}).to_list(len(cliente_ids))
+        clientes_lookup = {str(d["_id"]): d for d in docs}
+    if plano_ids:
+        docs = await db.planos.find({"_id": {"$in": [ObjectId(i) for i in plano_ids]}}).to_list(len(plano_ids))
+        planos_lookup = {str(d["_id"]): d for d in docs}
+    if oferta_ids:
+        docs = await db.ofertas.find({"_id": {"$in": [ObjectId(i) for i in oferta_ids]}}).to_list(len(oferta_ids))
+        ofertas_lookup = {str(d["_id"]): d for d in docs}
+    if chip_ids:
+        docs = await db.chips.find({"_id": {"$in": [ObjectId(i) for i in chip_ids]}}).to_list(len(chip_ids))
+        chips_lookup = {str(d["_id"]): d for d in docs}
+
+    result = []
+    for line in lines:
+        cl = clientes_lookup.get(line.get("cliente_id"))
+        plano = planos_lookup.get(line.get("plano_id"))
+        oferta = ofertas_lookup.get(line.get("oferta_id"))
+        chip = chips_lookup.get(line.get("chip_id"))
+
+        result.append(LineResponse(
+            id=str(line["_id"]), numero=line["numero"], status=line["status"],
+            cliente_id=line["cliente_id"], chip_id=line["chip_id"],
+            plano_id=line["plano_id"], oferta_id=line.get("oferta_id"),
+            cliente_nome=cl["nome"] if cl else None,
+            plano_nome=plano["nome"] if plano else None,
+            oferta_nome=oferta["nome"] if oferta else None,
+            franquia=plano["franquia"] if plano else None,
+            plan_code=plano.get("plan_code") if plano else None,
+            iccid=chip["iccid"] if chip else None,
+            msisdn=(chip.get("msisdn") if chip else None) or line.get("msisdn"),
+            created_at=line.get("created_at", datetime.now(timezone.utc))
+        ))
+    return result
 
 @api_router.get("/linhas/{line_id}/consultar")
 async def query_line_from_operator(line_id: str, request: Request):

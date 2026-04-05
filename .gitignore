@@ -30,8 +30,7 @@ next-env.d.ts
 dist/
 dist
 
-# Environment files (comprehensive coverage)
-
+# Credentials and tokens
 *token.json*
 *credentials.json*
 
@@ -79,28 +78,6 @@ agenthub/agents/youtube/db
 memory/test_credentials.md
 
 # Mobile development
-android-sdk/-e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+android-sdk/
+
 frontend/node_modules/.cache/default-development/0.pack
