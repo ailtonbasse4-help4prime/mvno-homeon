@@ -145,26 +145,68 @@ export function GestaoCobrancas() {
         const updated = res.data;
         if (updated.asaas_invoice_url) {
           window.open(updated.asaas_invoice_url, '_blank');
-          fetchAll(); // atualiza lista
+          fetchAll();
           return;
         }
       } catch (e) {
         toast.error('Erro ao buscar fatura no Asaas');
       }
     }
-    toast.error('Fatura do Asaas nao disponivel. Tente consultar o status primeiro.');
+    // Sem payment_id - precisa gerar no Asaas primeiro
+    if (!c.asaas_payment_id || c.asaas_payment_id.startsWith('mock_')) {
+      try {
+        toast.info('Gerando pagamento no Asaas...');
+        const res = await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/gerar-asaas`, {}, { withCredentials: true });
+        const updated = res.data;
+        if (updated.asaas_invoice_url) {
+          toast.success('Fatura gerada no Asaas!');
+          window.open(updated.asaas_invoice_url, '_blank');
+          fetchAll();
+          return;
+        }
+        toast.success('Pagamento criado. Clique novamente para abrir a fatura.');
+        fetchAll();
+      } catch (e) {
+        toast.error(e.response?.data?.detail || 'Erro ao gerar pagamento no Asaas');
+      }
+      return;
+    }
+    toast.error('Fatura do Asaas nao disponivel.');
+  };
+
+  const handleGenerateAsaas = async (c) => {
+    try {
+      toast.info('Gerando pagamento no Asaas...');
+      const res = await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/gerar-asaas`, {}, { withCredentials: true });
+      if (res.data.asaas_invoice_url) {
+        toast.success('Fatura gerada com sucesso!');
+      } else {
+        toast.success('Pagamento criado no Asaas!');
+      }
+      fetchAll();
+      // Refresh detail modal if open
+      if (selectedCobranca?.id === c.id) {
+        setSelectedCobranca(res.data);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao gerar pagamento no Asaas');
+    }
   };
 
   const handleRefreshCobranca = async (c) => {
     if (!c.asaas_payment_id || c.asaas_payment_id.startsWith('mock_')) {
-      toast.error('Cobranca sem pagamento real no Asaas');
+      // No real payment - generate it
+      await handleGenerateAsaas(c);
       return;
     }
     try {
       toast.info('Consultando Asaas...');
-      await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/refresh`, {}, { withCredentials: true });
+      const res = await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/refresh`, {}, { withCredentials: true });
       toast.success('Dados atualizados do Asaas');
       fetchAll();
+      if (selectedCobranca?.id === c.id) {
+        setSelectedCobranca(res.data);
+      }
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao consultar Asaas');
     }
@@ -462,9 +504,14 @@ export function GestaoCobrancas() {
               )}
 
               {/* Sem dados do Asaas */}
-              {!sc.asaas_payment_id && (
-                <div className="p-3 bg-yellow-900/20 border border-yellow-800/30 rounded-lg text-sm text-yellow-400">
-                  Esta cobranca foi criada no modo local. Para gerar boleto/Pix com link de pagamento, configure a chave do Asaas no backend.
+              {(!sc.asaas_payment_id || sc.asaas_payment_id.startsWith('mock_')) && (
+                <div className="p-3 bg-yellow-900/20 border border-yellow-800/30 rounded-lg space-y-2">
+                  <p className="text-sm text-yellow-400">
+                    Esta cobranca ainda nao foi vinculada ao Asaas. Clique abaixo para gerar o boleto/Pix real.
+                  </p>
+                  <Button onClick={() => handleGenerateAsaas(sc)} variant="outline" size="sm" className="w-full border-yellow-700 text-yellow-400 hover:bg-yellow-900/30">
+                    <ExternalLink className="w-3.5 h-3.5 mr-2" /> Gerar Pagamento no Asaas
+                  </Button>
                 </div>
               )}
 
@@ -481,7 +528,7 @@ export function GestaoCobrancas() {
               {/* Botoes de acao */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <Button onClick={() => handlePrint(sc)} variant="outline" className="flex items-center gap-2 border-zinc-700">
-                  <Printer className="w-4 h-4" />{sc.asaas_invoice_url ? 'Abrir Fatura' : 'Buscar Fatura'}
+                  <Printer className="w-4 h-4" />{sc.asaas_invoice_url ? 'Abrir Fatura' : 'Gerar Fatura'}
                 </Button>
                 <Button onClick={() => handleShareWhatsApp(sc)} variant="outline" className="flex items-center gap-2 border-zinc-700 text-emerald-400 hover:text-emerald-300">
                   <Share2 className="w-4 h-4" />WhatsApp

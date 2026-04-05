@@ -1904,6 +1904,65 @@ async def refresh_cobranca_asaas(cobranca_id: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
 
 
+@api_router.post("/carteira/cobrancas/{cobranca_id}/gerar-asaas")
+async def generate_asaas_payment(cobranca_id: str, request: Request):
+    """Cria o pagamento no Asaas para uma cobranca que foi criada localmente (sem asaas_payment_id)."""
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+
+    if doc.get("asaas_payment_id") and not doc["asaas_payment_id"].startswith("mock_"):
+        raise HTTPException(status_code=400, detail="Cobranca ja possui pagamento no Asaas. Use o botao de atualizar.")
+
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado. Verifique ASAAS_API_KEY no .env")
+
+    cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    try:
+        asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+        result = await asaas_service.create_payment(
+            customer_id=asaas_customer_id,
+            billing_type=doc["billing_type"],
+            value=doc["valor"],
+            due_date=doc["vencimento"],
+            description=doc.get("descricao") or f"Cobranca movel - {cliente['nome']}",
+        )
+
+        update_fields = {
+            "asaas_payment_id": result.get("id"),
+            "asaas_invoice_url": result.get("invoiceUrl"),
+            "asaas_bankslip_url": result.get("bankSlipUrl"),
+            "status": result.get("status", "PENDING"),
+        }
+
+        payment_id = result.get("id")
+        if payment_id:
+            try:
+                if doc["billing_type"] == "BOLETO":
+                    barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                    update_fields["barcode"] = barcode_data.get("identificationField")
+                elif doc["billing_type"] == "PIX":
+                    pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                    update_fields["asaas_pix_code"] = pix_data.get("payload")
+                    update_fields["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+            except Exception as e:
+                logger.warning(f"Erro ao buscar detalhes pagamento apos criacao: {e}")
+
+        await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+        updated = await db.cobrancas.find_one({"_id": doc["_id"]})
+        await create_log("financeiro", f"Pagamento Asaas gerado para cobranca de {cliente['nome']}: {payment_id}", user["id"], user["name"])
+        return await _build_cobranca_response(updated)
+    except (AsaasNotConfiguredError, AsaasApiError) as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao criar pagamento no Asaas: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+
+
+
 
 @api_router.put("/carteira/cobrancas/{cobranca_id}")
 async def update_cobranca(cobranca_id: str, data: CobrancaCreate, request: Request):
