@@ -10,6 +10,7 @@ import os
 import re
 import logging
 import secrets
+import json
 import bcrypt
 import jwt
 from pathlib import Path
@@ -1631,8 +1632,16 @@ async def list_logs(request: Request, action: Optional[str] = None, limit: int =
 
 async def _get_asaas_customer_id(cliente: dict, user: dict) -> str:
     """Obtem ou cria o customer_id do Asaas para o cliente."""
-    if cliente.get("asaas_customer_id"):
-        return cliente["asaas_customer_id"]
+    cached_id = cliente.get("asaas_customer_id")
+    if cached_id:
+        # Verify it exists in current environment
+        try:
+            await asaas_service._request("GET", f"/customers/{cached_id}")
+            return cached_id
+        except Exception:
+            logger.info(f"Customer {cached_id} nao encontrado no ambiente atual. Recriando.")
+            await db.clientes.update_one({"_id": cliente["_id"]}, {"$unset": {"asaas_customer_id": ""}})
+
     result = await asaas_service.get_or_create_customer(
         name=cliente["nome"],
         cpf_cnpj=cliente.get("documento", ""),
@@ -2020,7 +2029,10 @@ async def generate_asaas_payment(cobranca_id: str, request: Request):
         await create_log("financeiro", f"Pagamento Asaas gerado para cobranca de {cliente['nome']}: {payment_id}", user["id"], user["name"])
         return await _build_cobranca_response(updated)
     except (AsaasNotConfiguredError, AsaasApiError) as e:
-        raise HTTPException(status_code=502, detail=f"Erro ao criar pagamento no Asaas: {str(e)}")
+        detail_msg = f"Erro ao criar pagamento no Asaas: {str(e)}"
+        if hasattr(e, 'details') and e.details:
+            detail_msg += f" | Detalhes: {json.dumps(e.details, ensure_ascii=False)}"
+        raise HTTPException(status_code=502, detail=detail_msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
 
