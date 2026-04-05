@@ -78,6 +78,7 @@ export function Chips() {
   const [ofertas, setOfertas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -230,26 +231,52 @@ export function Chips() {
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+          <Input
+            type="text"
+            placeholder="Buscar por ICCID, MSISDN ou cliente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="form-input max-w-sm"
+            data-testid="chip-search-input"
+          />
+        </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-zinc-500" />
-          <span className="text-sm text-zinc-400">Filtrar por status:</span>
+          <span className="text-sm text-zinc-300">Status:</span>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40 form-input" data-testid="chip-status-filter">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800">
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="disponivel">Disponivel</SelectItem>
+              <SelectItem value="ativado">Ativado</SelectItem>
+              <SelectItem value="bloqueado">Bloqueado</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48 form-input" data-testid="chip-status-filter">
-            <SelectValue placeholder="Todos" />
-          </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="disponivel">Disponivel</SelectItem>
-            <SelectItem value="ativado">Ativado</SelectItem>
-            <SelectItem value="bloqueado">Bloqueado</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Table */}
+      {(() => {
+        const term = searchTerm.trim().toLowerCase();
+        const filteredChips = term
+          ? chips.filter(c =>
+              (c.iccid && c.iccid.toLowerCase().includes(term)) ||
+              (c.msisdn && c.msisdn.toLowerCase().includes(term)) ||
+              (c.cliente_nome && c.cliente_nome.toLowerCase().includes(term))
+            )
+          : chips;
+
+        return (
       <div className="dashboard-card overflow-hidden">
+        {term && (
+          <div className="px-4 py-2 border-b border-zinc-800 text-xs text-zinc-400">
+            {filteredChips.length} resultado{filteredChips.length !== 1 ? 's' : ''} para "{searchTerm}"
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="data-table" data-testid="chips-table">
             <thead>
@@ -267,14 +294,14 @@ export function Chips() {
               </tr>
             </thead>
             <tbody>
-              {chips.length === 0 ? (
+              {filteredChips.length === 0 ? (
                 <tr>
                   <td colSpan={isAdmin ? 10 : 9} className="text-center text-zinc-500 py-8">
-                    Nenhum chip encontrado
+                    {term ? 'Nenhum chip encontrado para esta busca' : 'Nenhum chip encontrado'}
                   </td>
                 </tr>
               ) : (
-                chips.map((chip) => (
+                filteredChips.map((chip) => (
                   <tr key={chip.id} data-testid={`chip-row-${chip.id}`}>
                     <td className="font-mono text-white">{chip.iccid}</td>
                     <td className="font-mono text-zinc-400 text-sm">{chip.msisdn || '-'}</td>
@@ -321,6 +348,8 @@ export function Chips() {
           </table>
         </div>
       </div>
+        );
+      })()}
 
       {/* Add Chip Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
