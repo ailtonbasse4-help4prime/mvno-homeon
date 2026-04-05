@@ -8,11 +8,12 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
-- **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - sandbox)
+- **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - producao)
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
 - **Atendente**: carlos@mvno.com / nova456
+- **Portal Cliente (teste)**: CPF 02962261493 / Tel 83999056284
 
 ## Implementado
 
@@ -58,16 +59,26 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] SITE_URL configuravel via .env (https://mvno.homeonapp.com.br)
 - [x] Fix sidebar: scroll correto com h-screen + overflow-y-auto
 
+### Portal do Cliente (05/04/2026)
+- [x] Backend: Login CPF+telefone com JWT tipo "portal" (24h expiry)
+- [x] Backend: Dashboard com linhas, planos, cobrancas/faturas
+- [x] Backend: Consulta saldo de dados (Ta Telecom)
+- [x] Backend: Consulta consumo consolidado mensal (Ta Telecom)
+- [x] Frontend: Tela de login publica /portal (CPF + telefone formatados)
+- [x] Frontend: Dashboard /portal/dashboard com info do cliente, linhas expandiveis, saldo/consumo, faturas
+- [x] Frontend: Links para faturas Asaas com botao "Ver Fatura"
+- [x] Frontend: Logout com limpeza de sessionStorage
+- [x] Testado: 100% backend (13 testes) + 100% frontend (todas features)
+
 ## Backlog
 
 ### P1 - Alta Prioridade
-- [ ] Portal do Cliente (login CPF + numero, consulta plano/boletos)
+- [ ] Leitura de ICCID por codigo de barras na interface de ativacao manual do Admin
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
 - [ ] Historico de ativacoes
-- [ ] Consulta de saldo e consumo
 
 ### Refatoracao
-- [ ] Desmembrar server.py (2700+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (3000+ linhas) em roteadores separados
