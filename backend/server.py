@@ -1633,7 +1633,7 @@ async def _get_asaas_customer_id(cliente: dict, user: dict) -> str:
     """Obtem ou cria o customer_id do Asaas para o cliente."""
     if cliente.get("asaas_customer_id"):
         return cliente["asaas_customer_id"]
-    result = await asaas_service.create_customer(
+    result = await asaas_service.get_or_create_customer(
         name=cliente["nome"],
         cpf_cnpj=cliente.get("documento", ""),
         email=cliente.get("email"),
@@ -1859,18 +1859,20 @@ async def delete_cobranca(cobranca_id: str, request: Request):
 
 @api_router.post("/carteira/cobrancas/{cobranca_id}/refresh")
 async def refresh_cobranca_asaas(cobranca_id: str, request: Request):
-    """Consulta o Asaas para atualizar dados da cobranca (invoiceUrl, bankSlipUrl, barcode, pix, status)."""
+    """Consulta o Asaas para atualizar dados da cobranca. Se nao tem payment_id, gera no Asaas."""
     user = await require_admin(request)
     doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
 
-    payment_id = doc.get("asaas_payment_id")
-    if not payment_id or payment_id.startswith("mock_"):
-        raise HTTPException(status_code=400, detail="Cobranca nao possui pagamento real no Asaas")
-
     if not asaas_service.is_configured:
-        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+        raise HTTPException(status_code=400, detail="Asaas nao configurado. Verifique ASAAS_API_KEY no .env")
+
+    payment_id = doc.get("asaas_payment_id")
+
+    # Se nao tem payment real, redireciona para gerar
+    if not payment_id or payment_id.startswith("mock_"):
+        return await generate_asaas_payment(cobranca_id, request)
 
     try:
         payment = await asaas_service.get_payment(payment_id)
@@ -1882,7 +1884,6 @@ async def refresh_cobranca_asaas(cobranca_id: str, request: Request):
         if payment.get("confirmedDate"):
             update_fields["paid_at"] = payment["confirmedDate"]
 
-        # Fetch barcode/pix
         try:
             billing_type = doc.get("billing_type", "BOLETO")
             if billing_type == "BOLETO":
