@@ -1,102 +1,98 @@
 {
   "theme": "dark",
-  "archetype": "4_swiss_and_high_contrast",
-  "domain": "telecom_mvno_management",
-  "design_philosophy": {
-    "core_principles": [
-      "Control Room aesthetics: Density, Data Correlation, and Scanability",
-      "Strict grid hierarchy with generous negative space around dense tables",
-      "Color is function only: 95% monochrome, colors strictly for status (active/blocked) and primary actions",
-      "Technical, flat surfaces with sharp or subtle rounded corners (max 4px radius)",
-      "High contrast typography for absolute legibility of numbers (ICCID, CPF, Status)"
-    ]
-  },
+  "archetype": "4 (Swiss & High-Contrast - Dark Mode Adaptation)",
+  "domain": "Portal do Cliente / Dashboard / Analytics",
+  "emotional_tone": "Authoritative, Clear, Professional, Modern",
   "colors": {
     "background": "#09090b",
     "surface": "#18181b",
     "border": "#27272a",
     "primary": "#3b82f6",
     "primary_hover": "#2563eb",
-    "text_primary": "#fafafa",
-    "text_secondary": "#a1a1aa",
-    "success": "#10b981",
-    "danger": "#ef4444",
-    "warning": "#f59e0b",
-    "neutral_tint": "#27272a"
+    "text": {
+      "heading": "#ffffff",
+      "body_primary": "#f4f4f5",
+      "body_secondary": "#d4d4d8",
+      "muted": "#a1a1aa",
+      "inactive": "#71717a"
+    },
+    "status": {
+      "success": "#10b981",
+      "warning": "#f59e0b",
+      "danger": "#ef4444",
+      "info": "#3b82f6"
+    }
   },
   "typography": {
-    "fonts": {
-      "heading": "Chivo, sans-serif",
-      "body": "IBM Plex Sans, sans-serif",
-      "mono": "JetBrains Mono, monospace"
+    "headings": {
+      "family": "Chivo, sans-serif",
+      "weight": "600-700",
+      "tracking": "tracking-tight"
     },
-    "scale": {
-      "h1": "text-3xl sm:text-4xl font-bold tracking-tight",
-      "h2": "text-xl sm:text-2xl font-bold tracking-tight",
-      "h3": "text-lg font-semibold",
-      "body": "text-sm sm:text-base leading-relaxed",
-      "small": "text-xs font-medium uppercase tracking-[0.1em]",
-      "data_numbers": "font-mono text-sm tracking-tight"
-    }
-  },
-  "layout_and_spacing": {
-    "grid_strategy": "Control Room Protocol",
-    "spacing_scale": "p-4, p-6, p-8 for containers. Generous gap-6 between dashboard widgets.",
-    "border_radius": "rounded-sm (4px) to emphasize technical precision",
-    "sidebar": "w-64 fixed left navigation, rich dark background (bg-zinc-950) with 1px right border (border-zinc-800)"
-  },
-  "surfaces_and_micro_themes": {
-    "dashboard_cards": "bg-zinc-900 border border-zinc-800 rounded-sm hover:border-zinc-700 transition-colors",
-    "table_rows": "border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors",
-    "login_card": "bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 shadow-2xl rounded-md",
-    "buttons": "rounded-sm font-semibold transition-all hover:-translate-y-[1px]"
+    "body": {
+      "family": "IBM Plex Sans, sans-serif",
+      "weight": "400-500",
+      "leading": "leading-relaxed"
+    },
+    "data": {
+      "family": "JetBrains Mono, monospace",
+      "weight": "400-500",
+      "tracking": "tracking-tight"
+    },
+    "instructions": "UPGRADE TEXT VISIBILITY: Replace text-zinc-500/text-zinc-400 with text-zinc-300/text-zinc-400 for better APCA contrast. Use text-white for primary values and headings. Small texts should not fall below text-zinc-400."
   },
   "components": {
-    "tables": "Dense, left-aligned, use JetBrains Mono for ICCID, CPF, and Phone numbers.",
-    "badges": {
-      "active": "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20",
-      "blocked": "bg-red-500/10 text-red-500 border border-red-500/20",
-      "pending": "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+    "cards": {
+      "base": "bg-zinc-900 border border-zinc-800 rounded-lg p-6",
+      "hover": "hover:border-zinc-600 hover:bg-zinc-800/40 hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-0.5",
+      "active": "active:scale-[0.98] active:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/50 cursor-pointer",
+      "instructions": "Transform static cards into interactive surfaces. Add hover lift (-translate-y-0.5), active scale-down (scale-[0.98]), and border brightness increase to give tactile feedback. Clickable cards must show obvious interaction states."
     },
-    "forms": "Inputs use bg-zinc-950 border-zinc-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500",
-    "icons": "lucide-react, 18px size for standard buttons, 24px for dashboard metrics"
-  },
-  "media": {
-    "image_urls": {
-      "backgrounds": [
-        {
-          "url": "https://images.unsplash.com/photo-1762267683517-6e9bc20675e9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwxfHxkYXJrJTIwdGVjaG5vbG9neSUyMGFic3RyYWN0JTIwZGF0YSUyMHNlcnZlcnxlbnwwfHx8fDE3NzQ5NzU3NDR8MA&ixlib=rb-4.1.0&q=85",
-          "description": "Abstract streaks of light at night",
-          "category": "login_background"
-        }
-      ],
-      "avatars": [
-        {
-          "url": "https://images.unsplash.com/photo-1629507313712-f21468afdf2e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NDk3NTY3M3ww&ixlib=rb-4.1.0&q=85",
-          "description": "Admin User Avatar",
-          "category": "user_avatar"
-        },
-        {
-          "url": "https://images.unsplash.com/photo-1581065178047-8ee15951ede6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDJ8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBidXNpbmVzcyUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NDk3NTY3M3ww&ixlib=rb-4.1.0&q=85",
-          "description": "Attendant User Avatar",
-          "category": "user_avatar"
-        }
-      ]
+    "stat_cards": {
+      "base": "bg-zinc-900 border border-zinc-800 rounded-lg p-5 flex flex-col relative overflow-hidden group transition-all duration-300 ease-out",
+      "hover": "hover:border-zinc-600 hover:bg-zinc-800/30 hover:-translate-y-0.5 cursor-pointer",
+      "active": "active:scale-[0.98]",
+      "value_text": "text-3xl font-bold text-white font-mono group-hover:text-blue-400 transition-colors",
+      "label_text": "text-sm text-zinc-300 font-medium",
+      "instructions": "Increase contrast of labels from zinc-400 to zinc-300. Add subtle primary color bleed on hover for values. Add click animation (scale down) to make stats feel tactile."
+    },
+    "navigation": {
+      "sidebar": "w-64 h-screen bg-zinc-950 border-r border-zinc-800 flex flex-col z-40",
+      "link_base": "flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-all duration-200 rounded-md mx-2",
+      "link_active": "text-white bg-blue-500/10 border-l-2 border-blue-500 shadow-[inset_4px_0_0_0_rgba(59,130,246,0.1)]",
+      "instructions": "Make the sidebar feel snappy. Links should have a subtle background shift (bg-white/5) and text should brighten significantly. The active link gets a clear visual indicator without overwhelming."
+    },
+    "data_tables": {
+      "header": "text-left text-xs font-semibold uppercase tracking-wider text-zinc-300 px-4 py-3 border-b border-zinc-800",
+      "row": "hover:bg-zinc-800/50 transition-colors duration-150 cursor-default border-b border-zinc-800",
+      "cell": "px-4 py-3 text-sm text-zinc-200",
+      "instructions": "Data tables need high legibility. Upgrade header text to zinc-300. Upgrade cell text to zinc-200. Ensure clear hover state on rows to help the eye track data horizontally."
     }
   },
-  "accessibility_and_interactions": {
-    "hover_states": "All interactive elements must change background and text color explicitly on hover.",
-    "data_testid": "MANDATORY: All buttons, links, form inputs, and menu items MUST have data-testid attributes (e.g., data-testid='login-submit-button').",
-    "contrast": "Ensure text-zinc-400 meets 4.5:1 ratio against bg-zinc-900. Use text-zinc-300 if necessary for better legibility."
+  "motion_and_interactions": {
+    "philosophy": "Frictionless and Tactile. Every interactive element must react to hover and click.",
+    "page_transitions": "Use Framer Motion to wrap page content in a subtle fade and slight slide up (initial={opacity:0, y:10}, animate={opacity:1, y:0}, transition={duration: 0.3, ease: 'easeOut'}).",
+    "scrolling": "Implement smooth scrolling to make navigation feel modern and fluid. Use standard CSS `scroll-behavior: smooth` on html/body element.",
+    "micro_interactions": "All buttons and clickable cards MUST scale down slightly on click (active:scale-[0.98]) to simulate a physical button press."
   },
+  "accessibility": {
+    "contrast": "Ensure minimum 4.5:1 for body text and 3:1 for large text. The shift from zinc-500 to zinc-400/300 resolves the washed-out text issue.",
+    "focus_states": "All focusable elements (links, inputs, buttons, clickable cards) MUST have a focus ring: focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-950.",
+    "testing": "All interactive elements must include 'data-testid' attributes (e.g., data-testid='sidebar-nav-link')."
+  },
+  "dependencies_to_add": [
+    "framer-motion"
+  ],
   "instructions_to_main_agent": [
-    "Strictly use the Dark theme as configured. Do not implement a light theme.",
-    "Use Shadcn UI components extensively for Tables, Dialogs, Dropdowns, and Forms.",
-    "Do NOT use HTML native inputs (<select>, <input type='date'>); rely on Shadcn equivalents.",
-    "For the Sidebar navigation, use a rigid, uncollapsed state on desktop (w-64) for maximum efficiency.",
-    "In the SIM cards (Chips) and Lines management modules, visually distinguish active vs blocked statuses using the predefined Badge styles.",
-    "For the login page, use a split layout: left side with the provided technology abstract background image, right side with the login form.",
-    "Apply `data-testid` to all forms (e.g., 'client-form-submit'), table actions, and navigation links.",
-    "Use CSS variables in index.css to map the defined colors to Tailwind's HSL system for Shadcn compatibility (e.g., --background: 240 10% 3.9%;)."
-  ]
+    "1. You are working with a React app using JS/JSX, DO NOT use TS/TSX.",
+    "2. Edit `/app/frontend/src/index.css` to update base text colors and component classes (`.dashboard-card`, `.sidebar-link`, `.stat-card`, etc.) to match the new high-visibility and interactive classes specified in this JSON. Specifically, update `.stat-label` text to `text-zinc-300`, and `.sidebar-link` text to `text-zinc-300`.",
+    "3. Overhaul `.dashboard-card` and `.stat-card` to include `hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 cursor-pointer`.",
+    "4. Search and replace instances of `text-zinc-500` and `text-zinc-400` in JSX files with `text-zinc-400` and `text-zinc-300` respectively.",
+    "5. Install `framer-motion` using yarn and wrap the main page layouts or routes in an `<AnimatePresence>` / `<motion.div>` setup for a smooth fade-in page transition.",
+    "6. Add `scroll-behavior: smooth` to the `:root` or `html` block in CSS.",
+    "7. Add `data-testid` attributes to all links, buttons, and cards."
+  ],
+  "media": {
+    "image_urls": []
+  }
 }
