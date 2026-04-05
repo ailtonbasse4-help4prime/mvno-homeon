@@ -2394,6 +2394,221 @@ async def get_chips_revendedor(rev_id: str, request: Request):
     return chips
 
 
+
+# ==================== PORTAL DO CLIENTE ====================
+class PortalLoginRequest(BaseModel):
+    documento: str
+    telefone: str
+
+@api_router.post("/portal/login")
+async def portal_login(data: PortalLoginRequest):
+    """Login do cliente por CPF + telefone."""
+    doc_clean = clean_document(data.documento)
+    tel_clean = re.sub(r'\D', '', data.telefone)
+
+    cliente = await db.clientes.find_one({"documento": doc_clean})
+    if not cliente:
+        raise HTTPException(status_code=401, detail="CPF nao encontrado. Verifique seus dados.")
+
+    # Find line matching the phone number
+    linhas = await db.linhas.find({"cliente_id": str(cliente["_id"])}).to_list(100)
+    chip_match = None
+    linha_match = None
+    for l in linhas:
+        msisdn = l.get("msisdn") or l.get("numero") or ""
+        msisdn_clean = re.sub(r'\D', '', msisdn)
+        if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+            linha_match = l
+            if l.get("chip_id"):
+                chip_match = await db.chips.find_one({"_id": ObjectId(l["chip_id"])})
+            break
+
+    if not linha_match:
+        # Try matching via chips
+        chips = await db.chips.find({"cliente_id": str(cliente["_id"])}).to_list(100)
+        for c in chips:
+            msisdn = c.get("msisdn", "")
+            msisdn_clean = re.sub(r'\D', '', msisdn)
+            if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+                chip_match = c
+                linha_match = await db.linhas.find_one({"chip_id": str(c["_id"])})
+                break
+
+    if not linha_match and not chip_match:
+        raise HTTPException(status_code=401, detail="Telefone nao encontrado para este CPF.")
+
+    # Generate portal token (simple JWT with limited scope)
+    portal_token = jwt.encode({
+        "sub": str(cliente["_id"]),
+        "type": "portal",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+    }, SECRET_KEY, algorithm="HS256")
+
+    return {
+        "token": portal_token,
+        "cliente": {
+            "nome": cliente["nome"],
+            "documento": doc_clean,
+            "telefone": data.telefone,
+        }
+    }
+
+async def _get_portal_cliente(request: Request) -> dict:
+    """Extrai e valida o token do portal do cliente."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token nao fornecido")
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        if payload.get("type") != "portal":
+            raise HTTPException(status_code=401, detail="Token invalido")
+        cliente = await db.clientes.find_one({"_id": ObjectId(payload["sub"])})
+        if not cliente:
+            raise HTTPException(status_code=401, detail="Cliente nao encontrado")
+        return cliente
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Sessao expirada. Faca login novamente.")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+@api_router.get("/portal/dashboard")
+async def portal_dashboard(request: Request):
+    """Retorna dados completos do cliente: linhas, plano, saldo, consumo, boletos."""
+    cliente = await _get_portal_cliente(request)
+    cliente_id = str(cliente["_id"])
+
+    # Linhas do cliente
+    linhas = await db.linhas.find({"cliente_id": cliente_id}).to_list(50)
+    chips = await db.chips.find({"cliente_id": cliente_id}).to_list(50)
+
+    # Planos e ofertas
+    plano_ids = list(set(l.get("plano_id") for l in linhas if l.get("plano_id")))
+    oferta_ids = list(set(l.get("oferta_id") for l in linhas if l.get("oferta_id")))
+    planos_lookup = {}
+    ofertas_lookup = {}
+    if plano_ids:
+        docs = await db.planos.find({"_id": {"$in": [ObjectId(p) for p in plano_ids]}}).to_list(len(plano_ids))
+        planos_lookup = {str(d["_id"]): d for d in docs}
+    if oferta_ids:
+        docs = await db.ofertas.find({"_id": {"$in": [ObjectId(o) for o in oferta_ids]}}).to_list(len(oferta_ids))
+        ofertas_lookup = {str(d["_id"]): d for d in docs}
+
+    linhas_data = []
+    for l in linhas:
+        numero = l.get("msisdn") or l.get("numero") or ""
+        plano = planos_lookup.get(l.get("plano_id"))
+        oferta = ofertas_lookup.get(l.get("oferta_id"))
+        chip = next((c for c in chips if str(c["_id"]) == l.get("chip_id")), None)
+
+        linhas_data.append({
+            "id": str(l["_id"]),
+            "numero": numero,
+            "status": l.get("status", "desconhecido"),
+            "plano_nome": plano["nome"] if plano else None,
+            "franquia": plano["franquia"] if plano else None,
+            "plan_code": plano.get("plan_code") if plano else None,
+            "oferta_nome": oferta["nome"] if oferta else None,
+            "valor": oferta.get("valor") if oferta else None,
+            "iccid": chip["iccid"] if chip else None,
+        })
+
+    # Cobranças do cliente (Asaas)
+    cobrancas = await db.cobrancas.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(50)
+    cobrancas_data = []
+    for c in cobrancas:
+        cobrancas_data.append({
+            "id": str(c["_id"]),
+            "valor": c["valor"],
+            "vencimento": c["vencimento"],
+            "billing_type": c["billing_type"],
+            "status": c.get("status", "PENDING"),
+            "descricao": c.get("descricao"),
+            "asaas_invoice_url": c.get("asaas_invoice_url"),
+            "asaas_pix_code": c.get("asaas_pix_code"),
+            "barcode": c.get("barcode"),
+        })
+
+    # Ativações self-service
+    ss_ativacoes = await db.ativacoes_selfservice.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(10)
+    ss_data = []
+    for s in ss_ativacoes:
+        ss_data.append({
+            "id": str(s["_id"]),
+            "iccid": s.get("iccid"),
+            "status": s.get("status"),
+            "valor_final": s.get("valor_final", 0),
+            "asaas_invoice_url": s.get("asaas_invoice_url"),
+            "asaas_pix_code": s.get("asaas_pix_code"),
+            "barcode": s.get("barcode"),
+            "created_at": s.get("created_at", datetime.now(timezone.utc)).isoformat(),
+        })
+
+    return {
+        "cliente": {
+            "nome": cliente["nome"],
+            "documento": cliente.get("documento"),
+            "email": cliente.get("email"),
+            "telefone": cliente.get("telefone"),
+        },
+        "linhas": linhas_data,
+        "cobrancas": cobrancas_data,
+        "ativacoes_selfservice": ss_data,
+    }
+
+@api_router.get("/portal/saldo/{numero}")
+async def portal_saldo(numero: str, request: Request):
+    """Consulta saldo de dados na Ta Telecom."""
+    cliente = await _get_portal_cliente(request)
+    numero_clean = re.sub(r'\D', '', numero)
+    try:
+        resp = await operadora_service.consultar_saldo_dados(numero_clean, db=db, user_id=str(cliente["_id"]), user_name=cliente["nome"])
+        if resp.success and resp.data:
+            return {
+                "success": True,
+                "balance_mb": resp.data.get("balance", 0),
+                "codigo_status_tip": resp.data.get("codigo_status_tip"),
+            }
+        return {"success": False, "message": resp.message, "balance_mb": 0}
+    except Exception as e:
+        return {"success": False, "message": str(e), "balance_mb": 0}
+
+@api_router.get("/portal/consumo/{numero}")
+async def portal_consumo(numero: str, request: Request, periodo: Optional[str] = None):
+    """Consulta consumo consolidado do mes."""
+    cliente = await _get_portal_cliente(request)
+    numero_clean = re.sub(r'\D', '', numero)
+    if not periodo:
+        periodo = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        resp = await operadora_service.consultar_consumo_consolidado(
+            periodo=periodo,
+            cpf_cnpj=cliente.get("documento"),
+            linha=numero_clean,
+            db=db, user_id=str(cliente["_id"]), user_name=cliente["nome"]
+        )
+        if resp.success and resp.data:
+            results = resp.data.get("results", [])
+            if results:
+                r = results[0]
+                return {
+                    "success": True,
+                    "consumo_dados_gb": float(r.get("consumo_dados", 0)),
+                    "consumo_sms": int(r.get("consumo_sms", 0)),
+                    "consumo_minutos": float(r.get("consumo_minutos", 0)),
+                    "consumo_segundos": int(r.get("consumo_segundos", 0)),
+                    "plano": r.get("plano"),
+                    "contrato_status": r.get("contrato_status"),
+                    "simcard_status": r.get("simcard_status"),
+                    "periodo": r.get("periodo"),
+                    "cliente_nome": r.get("cliente_nome"),
+                }
+            return {"success": True, "consumo_dados_gb": 0, "consumo_sms": 0, "consumo_minutos": 0, "periodo": periodo, "message": "Sem dados para o periodo"}
+        return {"success": False, "message": resp.message}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
 # ==================== PUBLIC SELF-SERVICE ACTIVATION ====================
 class SelfServiceActivationRequest(BaseModel):
     iccid: str

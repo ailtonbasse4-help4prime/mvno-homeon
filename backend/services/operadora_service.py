@@ -260,6 +260,40 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
         )
         return req, resp
 
+    async def consultar_saldo_dados(self, numero: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        import asyncio
+        await asyncio.sleep(0.3)
+        req = OperadoraRequest(endpoint=f"/saldo/{numero}/dados", method="POST", payload={})
+        resp = OperadoraResponse(
+            success=True, status="ok", message="Saldo consultado (mock)",
+            data={"balance": random.uniform(500, 8000), "codigo_status_tip": "0"},
+            response_time_ms=300, http_status_code=200,
+        )
+        return req, resp
+
+    async def consultar_consumo_consolidado(self, periodo: str, cpf_cnpj: str = None, linha: str = None) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        import asyncio
+        await asyncio.sleep(0.3)
+        payload = {"periodo": periodo}
+        req = OperadoraRequest(endpoint="/consumoconsolidado", method="POST", payload=payload)
+        resp = OperadoraResponse(
+            success=True, status="ok", message="Consumo consultado (mock)",
+            data={"codigo_status_tip": 0, "results": [{
+                "consumo_sms": random.randint(0, 50),
+                "consumo_dados": f"{random.uniform(0.5, 4.5):.5f}",
+                "consumo_segundos": str(random.randint(100, 5000)),
+                "consumo_minutos": f"{random.uniform(1, 80):.3f}",
+                "periodo": periodo,
+                "contrato_status": "ATIVO",
+                "simcard_status": "EM USO",
+                "plano": "Ta Telecom 10GB",
+                "linha": linha or numero if 'numero' in dir() else "11999999999",
+                "cliente_nome": "Cliente Mock",
+            }]},
+            response_time_ms=300, http_status_code=200,
+        )
+        return req, resp
+
 
 # ==================== REAL TA TELECOM ADAPTER ====================
 class RealTaTelecomAdapter(IOperadoraAdapter):
@@ -368,6 +402,17 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
     async def alterar_plano(self, iccid: str, plan_code: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("POST", f"/simcard/{iccid}/plano/alterar", {"plan_code": plan_code})
 
+    async def consultar_saldo_dados(self, numero: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        return await self._request("POST", f"/saldo/{numero}/dados")
+
+    async def consultar_consumo_consolidado(self, periodo: str, cpf_cnpj: str = None, linha: str = None) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        payload = {"periodo": periodo}
+        if cpf_cnpj:
+            payload["cpf_cnpj"] = cpf_cnpj
+        if linha:
+            payload["linha_contrato"] = linha
+        return await self._request("POST", "/consumoconsolidado", payload)
+
 
 # ==================== SERVICO PRINCIPAL ====================
 class OperadoraService:
@@ -461,6 +506,19 @@ class OperadoraService:
         req, resp = await self.adapter.alterar_plano(iccid, plan_code)
         action = "alteracao_plano" if resp.success else "erro"
         await self._save_log(db, action, req, resp, user_id, user_name, f"Alteracao plano ICCID: {iccid} -> {plan_code}")
+        return resp
+
+    # ---------- Consultar Saldo de Dados ----------
+    async def consultar_saldo_dados(self, numero: str, db=None, user_id=None, user_name=None) -> OperadoraResponse:
+        req, resp = await self.adapter.consultar_saldo_dados(numero)
+        await self._save_log(db, "consulta_saldo", req, resp, user_id, user_name, f"Consulta saldo dados: {numero}")
+        return resp
+
+    # ---------- Consultar Consumo Consolidado ----------
+    async def consultar_consumo_consolidado(self, periodo: str, cpf_cnpj: str = None, linha: str = None,
+                                             db=None, user_id=None, user_name=None) -> OperadoraResponse:
+        req, resp = await self.adapter.consultar_consumo_consolidado(periodo, cpf_cnpj, linha)
+        await self._save_log(db, "consulta_consumo", req, resp, user_id, user_name, f"Consumo consolidado: {periodo}")
         return resp
 
     def get_config_status(self) -> dict:
