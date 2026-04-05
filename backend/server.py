@@ -1711,12 +1711,60 @@ async def _build_assinatura_response(doc: dict) -> AssinaturaResponse:
 async def get_carteira_config(request: Request):
     await get_current_user(request)
     config = asaas_service.get_config_status()
-    # Debug: show key prefix to diagnose auth issues
     key = asaas_service.api_key
     config["key_prefix"] = key[:15] + "..." if len(key) > 15 else "(vazia)"
     config["key_length"] = len(key)
     config["key_starts_with_dollar"] = key.startswith("$")
     return config
+
+class AsaasKeyUpdate(BaseModel):
+    api_key: str
+    environment: str = "sandbox"
+
+@api_router.post("/carteira/config")
+async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
+    """Atualiza a chave do Asaas no .env e recarrega o servico."""
+    await require_admin(request)
+    new_key = data.api_key.strip()
+    new_env = data.environment.strip()
+    if not new_key:
+        raise HTTPException(status_code=400, detail="Chave API nao pode ser vazia")
+
+    # Update .env file
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    lines = []
+    key_found = False
+    env_found = False
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                if line.startswith("ASAAS_API_KEY"):
+                    lines.append(f'ASAAS_API_KEY="{new_key}"\n')
+                    key_found = True
+                elif line.startswith("ASAAS_ENVIRONMENT"):
+                    lines.append(f"ASAAS_ENVIRONMENT={new_env}\n")
+                    env_found = True
+                else:
+                    lines.append(line)
+    if not key_found:
+        lines.append(f'ASAAS_API_KEY="{new_key}"\n')
+    if not env_found:
+        lines.append(f"ASAAS_ENVIRONMENT={new_env}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+    # Reload service in memory
+    asaas_service.api_key = new_key
+    asaas_service.environment = new_env
+    asaas_service.base_url = "https://api.asaas.com/v3" if new_env == "production" else "https://sandbox.asaas.com/api/v3"
+
+    # Test connection
+    try:
+        await asaas_service._request("GET", "/customers?limit=1")
+        return {"success": True, "message": "Chave atualizada e conexao verificada com sucesso!", "configured": True, "environment": new_env}
+    except Exception as e:
+        return {"success": False, "message": f"Chave salva mas erro ao testar: {str(e)}", "configured": True, "environment": new_env}
 
 @api_router.get("/carteira/resumo")
 async def get_carteira_resumo(request: Request):

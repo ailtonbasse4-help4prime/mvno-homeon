@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import {
   Plus, Search, Trash2, Edit, RefreshCw, ExternalLink,
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
-  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X,
+  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -33,6 +33,9 @@ export function GestaoCobrancas() {
   const [search, setSearch] = useState('');
   const [asaasConfig, setAsaasConfig] = useState({});
   const [resumo, setResumo] = useState({});
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [configForm, setConfigForm] = useState({ api_key: '', environment: 'sandbox' });
+  const [configSubmitting, setConfigSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     cliente_id: '', linha_id: '', billing_type: 'BOLETO',
@@ -289,6 +292,24 @@ export function GestaoCobrancas() {
   const clienteLinhas = (clienteId) => linhas.filter(l => l.cliente_id === clienteId);
   const sc = selectedCobranca;
 
+  const handleSaveAsaasConfig = async () => {
+    if (!configForm.api_key) { toast.error('Informe a chave API'); return; }
+    setConfigSubmitting(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/config`, configForm, { withCredentials: true });
+      if (res.data.success) {
+        toast.success(res.data.message);
+        setConfigDialogOpen(false);
+        fetchAll();
+      } else {
+        toast.warning(res.data.message);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao salvar configuracao');
+    }
+    setConfigSubmitting(false);
+  };
+
   return (
     <div className="space-y-6" data-testid="gestao-cobrancas-page">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -296,14 +317,22 @@ export function GestaoCobrancas() {
           <h1 className="text-2xl font-bold">Gestao de Cobrancas</h1>
           <p className="text-sm text-zinc-400 mt-1">
             Asaas: {asaasConfig.configured ? (
-              <span className="text-emerald-400">Conectado ({asaasConfig.environment})</span>
+              <>
+                <span className="text-emerald-400">Conectado ({asaasConfig.environment})</span>
+                {asaasConfig.key_length < 50 && (
+                  <button onClick={() => setConfigDialogOpen(true)} className="ml-2 text-yellow-400 underline text-xs">Chave invalida - Configurar</button>
+                )}
+              </>
             ) : (
-              <span className="text-yellow-400">Modo local (configure ASAAS_API_KEY)</span>
+              <button onClick={() => setConfigDialogOpen(true)} className="text-yellow-400 underline">Configurar chave API</button>
             )}
           </p>
         </div>
         {isAdmin && (
-          <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+            <Button onClick={() => setConfigDialogOpen(true)} variant="outline" className="flex items-center gap-2 border-blue-700 text-blue-400 hover:bg-blue-900/20" data-testid="config-asaas-btn">
+              <Settings className="w-4 h-4" />API Asaas
+            </Button>
             <Button onClick={() => setLoteDialogOpen(true)} variant="outline" className="flex items-center gap-2 border-zinc-700 hover:bg-zinc-800" data-testid="lote-cobranca-btn">
               <CreditCard className="w-4 h-4" />Em Lote
             </Button>
@@ -650,6 +679,51 @@ export function GestaoCobrancas() {
               {submitting ? 'Gerando...' : `Gerar ${loteForm.cliente_ids.length} Cobrancas`}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Config Asaas */}
+      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-blue-400" /> Configurar API Asaas
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {asaasConfig.key_prefix && (
+              <div className="p-3 bg-zinc-900 rounded-lg text-sm">
+                <p className="text-zinc-400">Chave atual: <span className="font-mono text-zinc-300">{asaasConfig.key_prefix}</span></p>
+                <p className="text-zinc-400">Tamanho: {asaasConfig.key_length} caracteres</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm text-zinc-400">Chave API do Asaas *</label>
+              <Input
+                value={configForm.api_key}
+                onChange={e => setConfigForm(prev => ({ ...prev, api_key: e.target.value }))}
+                className="bg-zinc-900 border-zinc-700 mt-1 font-mono text-xs"
+                placeholder="$aact_hmlg_000... ou $aact_prod_..."
+                data-testid="asaas-key-input"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Cole a chave completa do painel do Asaas (Configuracoes &gt; Integracoes &gt; API)</p>
+            </div>
+            <div>
+              <label className="text-sm text-zinc-400">Ambiente</label>
+              <select
+                value={configForm.environment}
+                onChange={e => setConfigForm(prev => ({ ...prev, environment: e.target.value }))}
+                className="w-full mt-1 p-2 bg-zinc-900 border border-zinc-700 rounded-md text-white text-sm"
+              >
+                <option value="sandbox">Sandbox (Testes)</option>
+                <option value="production">Producao (Real)</option>
+              </select>
+            </div>
+            <Button onClick={handleSaveAsaasConfig} disabled={configSubmitting || !configForm.api_key}
+              className="w-full btn-primary" data-testid="save-asaas-config-btn">
+              {configSubmitting ? 'Salvando e testando...' : 'Salvar e Testar Conexao'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
