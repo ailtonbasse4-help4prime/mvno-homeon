@@ -2442,7 +2442,7 @@ async def portal_login(data: PortalLoginRequest):
         "sub": str(cliente["_id"]),
         "type": "portal",
         "exp": datetime.now(timezone.utc) + timedelta(hours=24),
-    }, SECRET_KEY, algorithm="HS256")
+    }, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
     return {
         "token": portal_token,
@@ -2460,7 +2460,7 @@ async def _get_portal_cliente(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Token nao fornecido")
     token = auth_header.split(" ")[1]
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "portal":
             raise HTTPException(status_code=401, detail="Token invalido")
         cliente = await db.clientes.find_one({"_id": ObjectId(payload["sub"])})

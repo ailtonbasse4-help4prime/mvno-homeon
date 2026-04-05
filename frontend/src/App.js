@@ -19,6 +19,8 @@ import { GestaoCobrancas } from "./pages/GestaoCobrancas";
 import { Revendedores } from "./pages/Revendedores";
 import { AtivacoesSelfService } from "./pages/AtivacoesSelfService";
 import AtivarSelfService from "./pages/AtivarSelfService";
+import PortalLogin from "./pages/PortalLogin";
+import PortalDashboard from "./pages/PortalDashboard";
 
 function App() {
   return (
@@ -27,6 +29,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/ativar" element={<ErrorBoundary><AtivarSelfService /></ErrorBoundary>} />
+          <Route path="/portal" element={<ErrorBoundary><PortalLogin /></ErrorBoundary>} />
+          <Route path="/portal/dashboard" element={<ErrorBoundary><PortalDashboard /></ErrorBoundary>} />
           <Route element={<MainLayout />}>
             <Route path="/" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
             <Route path="/clientes" element={<ErrorBoundary><Clientes /></ErrorBoundary>} />
