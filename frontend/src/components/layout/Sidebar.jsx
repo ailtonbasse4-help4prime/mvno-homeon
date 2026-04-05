@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import {
   LayoutDashboard, Users, CreditCard, Package, Tag, Zap,
   Phone, FileText, LogOut, Wifi, WifiOff, UserCog, KeyRound,
-  Wallet, RefreshCw, X, Receipt, Store,
+  Wallet, RefreshCw, X, Receipt, Store, Smartphone,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -26,6 +26,7 @@ const allNavItems = [
   { path: '/ativacoes', icon: Zap, label: 'Ativacoes', roles: ['admin', 'atendente'] },
   { path: '/linhas', icon: Phone, label: 'Linhas', roles: ['admin', 'atendente'] },
   { path: '/revendedores', icon: Store, label: 'Revendedores', roles: ['admin'] },
+  { path: '/ativacoes-selfservice', icon: Smartphone, label: 'Self-Service', roles: ['admin'] },
   { path: '/carteira', icon: Wallet, label: 'Carteira Movel', roles: ['admin'] },
   { path: '/cobrancas', icon: Receipt, label: 'Cobrancas', roles: ['admin'] },
   { path: '/assinaturas', icon: RefreshCw, label: 'Assinaturas', roles: ['admin'] },

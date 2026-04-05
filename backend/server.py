@@ -2101,6 +2101,513 @@ async def get_chips_revendedor(rev_id: str, request: Request):
     return chips
 
 
+# ==================== PUBLIC SELF-SERVICE ACTIVATION ====================
+class SelfServiceActivationRequest(BaseModel):
+    iccid: str
+    nome: str
+    tipo_pessoa: TipoPessoa = TipoPessoa.pf
+    documento: str
+    telefone: str
+    data_nascimento: str
+    cep: str
+    endereco: str
+    numero_endereco: str
+    bairro: Optional[str] = None
+    cidade: Optional[str] = None
+    estado: Optional[str] = None
+    city_code: Optional[str] = None
+    complemento: Optional[str] = None
+    email: Optional[str] = None
+    billing_type: str = "PIX"  # PIX or BOLETO
+
+class SelfServiceActivationResponse(BaseModel):
+    id: str
+    status: str  # aguardando_pagamento, pago, ativando, ativo, erro
+    chip_iccid: str
+    plano_nome: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    valor_original: float
+    desconto: float = 0
+    valor_final: float
+    billing_type: str
+    asaas_invoice_url: Optional[str] = None
+    asaas_pix_code: Optional[str] = None
+    asaas_pix_qrcode: Optional[str] = None
+    barcode: Optional[str] = None
+    message: str = ""
+
+@api_router.get("/public/validar-chip/{iccid}")
+async def public_validate_chip(iccid: str):
+    """Valida um ICCID e retorna info do chip, oferta, plano e desconto do revendedor."""
+    iccid_clean = re.sub(r'\D', '', iccid)
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado. Verifique o ICCID informado.")
+    if chip["status"] != "disponivel":
+        status_msgs = {
+            "ativado": "Este chip ja foi ativado.",
+            "bloqueado": "Este chip esta bloqueado.",
+            "reservado": "Este chip esta reservado.",
+            "cancelado": "Este chip foi cancelado.",
+        }
+        raise HTTPException(status_code=400, detail=status_msgs.get(chip["status"], f"Chip indisponivel (status: {chip['status']})"))
+
+    if not chip.get("oferta_id"):
+        raise HTTPException(status_code=400, detail="Chip nao possui oferta vinculada. Contate o administrador.")
+
+    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    if not oferta or not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta deste chip nao esta disponivel.")
+
+    plano = None
+    if oferta.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+
+    desconto = 0.0
+    revendedor_nome = None
+    if chip.get("revendedor_id"):
+        rev = await db.revendedores.find_one({"_id": ObjectId(chip["revendedor_id"])})
+        if rev:
+            desconto = rev.get("desconto_valor", 0)
+            revendedor_nome = rev.get("nome")
+
+    valor_original = oferta.get("valor", 0)
+    valor_final = max(0, valor_original - desconto)
+
+    return {
+        "chip_id": str(chip["_id"]),
+        "iccid": chip["iccid"],
+        "oferta_id": str(oferta["_id"]),
+        "oferta_nome": oferta["nome"],
+        "plano_nome": plano["nome"] if plano else None,
+        "franquia": plano["franquia"] if plano else None,
+        "descricao": oferta.get("descricao") or (plano["descricao"] if plano else None),
+        "valor_original": valor_original,
+        "desconto": desconto,
+        "valor_final": valor_final,
+        "revendedor_nome": revendedor_nome,
+        "tem_revendedor": bool(chip.get("revendedor_id")),
+    }
+
+@api_router.get("/public/ofertas")
+async def public_list_offers():
+    """Lista ofertas ativas com dados do plano para a pagina publica."""
+    ofertas = await db.ofertas.find({"ativo": True}).to_list(100)
+    result = []
+    for o in ofertas:
+        plano = None
+        if o.get("plano_id"):
+            plano = await db.planos.find_one({"_id": ObjectId(o["plano_id"])})
+        result.append({
+            "id": str(o["_id"]),
+            "nome": o["nome"],
+            "plano_nome": plano["nome"] if plano else None,
+            "franquia": plano["franquia"] if plano else None,
+            "descricao": o.get("descricao") or (plano.get("descricao") if plano else None),
+            "valor": o.get("valor", 0),
+            "categoria": o.get("categoria", "movel"),
+        })
+    return result
+
+@api_router.post("/public/ativacao", response_model=SelfServiceActivationResponse)
+async def public_self_service_activation(data: SelfServiceActivationRequest):
+    """Fluxo completo de ativacao self-service: valida chip, cria/encontra cliente, gera cobranca."""
+    iccid_clean = re.sub(r'\D', '', data.iccid)
+
+    # 1. Validate chip
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip["status"] != "disponivel":
+        raise HTTPException(status_code=400, detail="Chip nao esta disponivel para ativacao")
+
+    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta do chip nao encontrada")
+    plano = None
+    if oferta.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+
+    # 2. Calculate discount
+    desconto = 0.0
+    if chip.get("revendedor_id"):
+        rev = await db.revendedores.find_one({"_id": ObjectId(chip["revendedor_id"])})
+        if rev:
+            desconto = rev.get("desconto_valor", 0)
+    valor_original = oferta.get("valor", 0)
+    valor_final = max(0, valor_original - desconto)
+
+    # 3. Validate document
+    doc_clean = clean_document(data.documento)
+    if data.tipo_pessoa == TipoPessoa.pf:
+        if not validate_cpf(doc_clean):
+            raise HTTPException(status_code=400, detail="CPF invalido")
+    else:
+        if not validate_cnpj(doc_clean):
+            raise HTTPException(status_code=400, detail="CNPJ invalido")
+
+    # 4. Create or find cliente
+    existing_client = await db.clientes.find_one({"documento": doc_clean})
+    if existing_client:
+        cliente_id = str(existing_client["_id"])
+        # Update client data
+        await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": {
+            "nome": data.nome, "telefone": data.telefone,
+            "data_nascimento": data.data_nascimento, "cep": re.sub(r'\D', '', data.cep),
+            "endereco": data.endereco, "numero_endereco": data.numero_endereco,
+            "bairro": data.bairro, "cidade": data.cidade, "estado": data.estado,
+            "city_code": data.city_code, "complemento": data.complemento,
+        }})
+        cliente = await db.clientes.find_one({"_id": existing_client["_id"]})
+    else:
+        cliente_doc = {
+            "nome": data.nome, "tipo_pessoa": data.tipo_pessoa.value,
+            "documento": doc_clean, "telefone": data.telefone,
+            "data_nascimento": data.data_nascimento,
+            "cep": re.sub(r'\D', '', data.cep), "endereco": data.endereco,
+            "numero_endereco": data.numero_endereco, "bairro": data.bairro,
+            "cidade": data.cidade, "estado": data.estado,
+            "city_code": data.city_code, "complemento": data.complemento,
+            "email": data.email, "status": "ativo",
+            "created_at": datetime.now(timezone.utc),
+        }
+        result = await db.clientes.insert_one(cliente_doc)
+        cliente_id = str(result.inserted_id)
+        cliente_doc["_id"] = result.inserted_id
+        cliente = cliente_doc
+
+    # 5. Reserve chip
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {"status": "reservado", "cliente_id": cliente_id}})
+
+    # 6. Create activation record
+    vencimento = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
+    activation_doc = {
+        "cliente_id": cliente_id,
+        "chip_id": str(chip["_id"]),
+        "iccid": iccid_clean,
+        "oferta_id": str(oferta["_id"]),
+        "plano_id": oferta.get("plano_id"),
+        "valor_original": valor_original,
+        "desconto": desconto,
+        "valor_final": valor_final,
+        "billing_type": data.billing_type,
+        "status": "aguardando_pagamento",
+        "asaas_payment_id": None,
+        "asaas_invoice_url": None,
+        "asaas_pix_code": None,
+        "asaas_pix_qrcode": None,
+        "barcode": None,
+        "revendedor_id": chip.get("revendedor_id"),
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    # 7. Create Asaas payment
+    if asaas_service.is_configured and valor_final > 0:
+        try:
+            asaas_customer = await asaas_service.get_or_create_customer(
+                name=data.nome,
+                cpf_cnpj=doc_clean,
+                email=data.email,
+                phone=data.telefone,
+                address=data.endereco,
+                address_number=data.numero_endereco,
+                province=data.bairro,
+                postal_code=re.sub(r'\D', '', data.cep),
+            )
+            asaas_customer_id = asaas_customer.get("id")
+            if asaas_customer_id:
+                await db.clientes.update_one({"_id": ObjectId(cliente_id)}, {"$set": {"asaas_customer_id": asaas_customer_id}})
+
+            payment_result = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type,
+                value=valor_final,
+                due_date=vencimento,
+                description=f"Ativacao chip {iccid_clean} - {oferta['nome']}",
+                discount_value=desconto if desconto > 0 else None,
+            )
+            activation_doc["asaas_payment_id"] = payment_result.get("id")
+            activation_doc["asaas_invoice_url"] = payment_result.get("invoiceUrl")
+
+            payment_id = payment_result.get("id")
+            if payment_id:
+                try:
+                    if data.billing_type == "BOLETO":
+                        barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                        activation_doc["barcode"] = barcode_data.get("identificationField")
+                    elif data.billing_type == "PIX":
+                        pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                        activation_doc["asaas_pix_code"] = pix_data.get("payload")
+                        activation_doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar detalhes pagamento self-service: {e}")
+        except Exception as e:
+            logger.warning(f"Erro Asaas no self-service (usando mock local): {e}")
+            activation_doc["asaas_payment_id"] = f"mock_ss_{secrets.token_hex(8)}"
+            activation_doc["asaas_invoice_url"] = None
+    elif valor_final <= 0:
+        activation_doc["status"] = "pago"
+
+    inserted = await db.ativacoes_selfservice.insert_one(activation_doc)
+    activation_doc["_id"] = inserted.inserted_id
+
+    await create_log("ativacao", f"Self-service: {data.nome} ({doc_clean}) solicitou ativacao do chip {iccid_clean}", None, "self-service")
+
+    return SelfServiceActivationResponse(
+        id=str(inserted.inserted_id),
+        status=activation_doc["status"],
+        chip_iccid=iccid_clean,
+        plano_nome=plano["nome"] if plano else None,
+        oferta_nome=oferta["nome"],
+        valor_original=valor_original,
+        desconto=desconto,
+        valor_final=valor_final,
+        billing_type=data.billing_type,
+        asaas_invoice_url=activation_doc.get("asaas_invoice_url"),
+        asaas_pix_code=activation_doc.get("asaas_pix_code"),
+        asaas_pix_qrcode=activation_doc.get("asaas_pix_qrcode"),
+        barcode=activation_doc.get("barcode"),
+        message="Pagamento gerado. Apos confirmacao, seu chip sera ativado automaticamente." if activation_doc["status"] == "aguardando_pagamento" else "Ativacao em processamento.",
+    )
+
+@api_router.get("/public/ativacao/{activation_id}/status")
+async def public_check_activation_status(activation_id: str):
+    """Verifica status de uma ativacao self-service."""
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+
+    # If still waiting, check Asaas
+    if doc["status"] == "aguardando_pagamento" and doc.get("asaas_payment_id") and not doc["asaas_payment_id"].startswith("mock_"):
+        try:
+            payment = await asaas_service.get_payment(doc["asaas_payment_id"])
+            asaas_status = payment.get("status", "")
+            if asaas_status in ("CONFIRMED", "RECEIVED"):
+                await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "pago"}})
+                doc["status"] = "pago"
+                # Trigger activation
+                await _trigger_selfservice_activation(doc)
+                doc = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+        except Exception as e:
+            logger.warning(f"Erro ao consultar status pagamento self-service: {e}")
+
+    plano_nome, oferta_nome = None, None
+    if doc.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])})
+        if plano:
+            plano_nome = plano["nome"]
+    if doc.get("oferta_id"):
+        oferta = await db.ofertas.find_one({"_id": ObjectId(doc["oferta_id"])})
+        if oferta:
+            oferta_nome = oferta["nome"]
+
+    status_messages = {
+        "aguardando_pagamento": "Aguardando confirmacao do pagamento.",
+        "pago": "Pagamento confirmado! Ativando seu chip...",
+        "ativando": "Ativacao em andamento na operadora...",
+        "ativo": "Chip ativado com sucesso!",
+        "erro": "Erro na ativacao. Contate o suporte.",
+    }
+
+    return {
+        "id": str(doc["_id"]),
+        "status": doc["status"],
+        "chip_iccid": doc.get("iccid"),
+        "plano_nome": plano_nome,
+        "oferta_nome": oferta_nome,
+        "valor_original": doc.get("valor_original", 0),
+        "desconto": doc.get("desconto", 0),
+        "valor_final": doc.get("valor_final", 0),
+        "billing_type": doc.get("billing_type"),
+        "asaas_invoice_url": doc.get("asaas_invoice_url"),
+        "asaas_pix_code": doc.get("asaas_pix_code"),
+        "asaas_pix_qrcode": doc.get("asaas_pix_qrcode"),
+        "barcode": doc.get("barcode"),
+        "msisdn": doc.get("msisdn"),
+        "message": status_messages.get(doc["status"], ""),
+    }
+
+async def _trigger_selfservice_activation(doc: dict):
+    """Dispara a ativacao na Ta Telecom apos pagamento confirmado."""
+    try:
+        await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "ativando"}})
+
+        cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+        chip = await db.chips.find_one({"_id": ObjectId(doc["chip_id"])})
+        oferta = await db.ofertas.find_one({"_id": ObjectId(doc["oferta_id"])})
+        plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])}) if doc.get("plano_id") else None
+
+        if not all([cliente, chip, oferta, plano]):
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "erro", "erro_msg": "Dados incompletos para ativacao"}})
+            return
+
+        if not plano.get("plan_code"):
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "erro", "erro_msg": "Plano sem plan_code configurado"}})
+            return
+
+        telefone_clean = re.sub(r'\D', '', cliente.get("telefone", ""))
+        ddd = telefone_clean[:2] if len(telefone_clean) >= 2 else "11"
+
+        activation_payload = {
+            "person_type": cliente.get("tipo_pessoa", "pf"),
+            "person_name": cliente["nome"],
+            "document_number": clean_document(cliente.get("documento", "")),
+            "phone_number": telefone_clean,
+            "date_of_birth": cliente.get("data_nascimento", ""),
+            "type_of_street": "",
+            "address": cliente.get("endereco", ""),
+            "address_number": cliente.get("numero_endereco", ""),
+            "neighborhood": cliente.get("bairro", ""),
+            "state": cliente.get("estado", ""),
+            "city_code": cliente.get("city_code", ""),
+            "postcode": re.sub(r'\D', '', cliente.get("cep", "")),
+            "plan_code": plano["plan_code"],
+            "portability": False,
+            "cn_contract_line": ddd,
+            "contract_line": "",
+        }
+
+        result = await operadora_service.ativar_chip(
+            iccid=chip["iccid"],
+            activation_payload=activation_payload,
+            db=db, user_id="self-service", user_name="self-service"
+        )
+
+        if result.success:
+            status_str = result.status if isinstance(result.status, str) else result.status.value
+            chip_status = ChipStatus.ativado.value if status_str == "ativo" else ChipStatus.reservado.value
+            msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
+
+            await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+                "status": chip_status, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+            }})
+
+            line_doc = {
+                "numero": msisdn or "Pendente",
+                "status": status_str,
+                "cliente_id": doc["cliente_id"],
+                "chip_id": doc["chip_id"],
+                "plano_id": doc.get("plano_id"),
+                "oferta_id": doc.get("oferta_id"),
+                "msisdn": msisdn,
+                "created_at": datetime.now(timezone.utc),
+            }
+            await db.linhas.insert_one(line_doc)
+
+            new_status = "ativo" if status_str == "ativo" else "ativando"
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": new_status, "msisdn": msisdn,
+            }})
+            await create_log("ativacao", f"Self-service ativacao concluida: {cliente['nome']} - chip {chip['iccid']} - {msisdn}", None, "self-service")
+        else:
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": "erro", "erro_msg": result.message,
+            }})
+            await create_log("erro", f"Self-service ativacao falhou: {result.message}", None, "self-service")
+    except Exception as e:
+        logger.error(f"Erro na ativacao self-service: {e}")
+        await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+            "status": "erro", "erro_msg": str(e),
+        }})
+
+@api_router.post("/public/ativacao/{activation_id}/confirmar-pagamento")
+async def public_confirm_payment_manual(activation_id: str):
+    """Permite confirmacao manual do pagamento (para testes ou quando webhook nao funcionar)."""
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("aguardando_pagamento",):
+        raise HTTPException(status_code=400, detail=f"Status atual: {doc['status']}. Nao e possivel confirmar pagamento.")
+
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "pago"}})
+    doc["status"] = "pago"
+    await _trigger_selfservice_activation(doc)
+
+    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+    return {"success": True, "status": updated["status"], "message": "Pagamento confirmado. Ativacao em andamento."}
+
+# --- Admin: Manage Self-Service Activations ---
+@api_router.get("/ativacoes-selfservice")
+async def admin_list_selfservice_activations(request: Request, status: Optional[str] = None):
+    """Lista ativacoes self-service para o admin gerenciar."""
+    await require_admin(request)
+    query = {}
+    if status:
+        query["status"] = status
+    docs = await db.ativacoes_selfservice.find(query).sort("created_at", -1).limit(200).to_list(200)
+    result = []
+    for d in docs:
+        cliente_nome = None
+        if d.get("cliente_id"):
+            cl = await db.clientes.find_one({"_id": ObjectId(d["cliente_id"])})
+            if cl:
+                cliente_nome = cl["nome"]
+        plano_nome = None
+        if d.get("plano_id"):
+            plano = await db.planos.find_one({"_id": ObjectId(d["plano_id"])})
+            if plano:
+                plano_nome = plano["nome"]
+        oferta_nome = None
+        if d.get("oferta_id"):
+            oferta = await db.ofertas.find_one({"_id": ObjectId(d["oferta_id"])})
+            if oferta:
+                oferta_nome = oferta["nome"]
+        result.append({
+            "id": str(d["_id"]),
+            "cliente_id": d.get("cliente_id"),
+            "cliente_nome": cliente_nome,
+            "iccid": d.get("iccid"),
+            "plano_nome": plano_nome,
+            "oferta_nome": oferta_nome,
+            "valor_original": d.get("valor_original", 0),
+            "desconto": d.get("desconto", 0),
+            "valor_final": d.get("valor_final", 0),
+            "billing_type": d.get("billing_type"),
+            "status": d.get("status"),
+            "msisdn": d.get("msisdn"),
+            "erro_msg": d.get("erro_msg"),
+            "revendedor_id": d.get("revendedor_id"),
+            "created_at": d.get("created_at", datetime.now(timezone.utc)).isoformat(),
+        })
+    return result
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/confirmar")
+async def admin_confirm_selfservice(activation_id: str, request: Request):
+    """Admin confirma pagamento manualmente e dispara ativacao."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("aguardando_pagamento",):
+        raise HTTPException(status_code=400, detail=f"Status atual: {doc['status']}")
+
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "pago"}})
+    doc["status"] = "pago"
+    await _trigger_selfservice_activation(doc)
+
+    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+    await create_log("ativacao", f"Admin confirmou pagamento self-service: {doc.get('iccid')}", user["id"], user["name"])
+    return {"success": True, "status": updated["status"]}
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/cancelar")
+async def admin_cancel_selfservice(activation_id: str, request: Request):
+    """Admin cancela ativacao self-service e libera o chip."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] in ("ativo",):
+        raise HTTPException(status_code=400, detail="Ativacao ja foi concluida")
+
+    # Release chip back to available
+    if doc.get("chip_id"):
+        await db.chips.update_one({"_id": ObjectId(doc["chip_id"])}, {"$set": {"status": "disponivel", "cliente_id": None}})
+
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "cancelado"}})
+    await create_log("ativacao", f"Admin cancelou ativacao self-service: {doc.get('iccid')}", user["id"], user["name"])
+    return {"success": True, "message": "Ativacao cancelada e chip liberado."}
+
+
 # ==================== DASHBOARD STATS ====================
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(request: Request):
@@ -2216,6 +2723,8 @@ async def startup_event():
     await db.cobrancas.create_index("asaas_payment_id", sparse=True)
     await db.assinaturas.create_index([("cliente_id", 1)])
     await db.assinaturas.create_index([("status", 1)])
+    await db.ativacoes_selfservice.create_index([("status", 1)])
+    await db.ativacoes_selfservice.create_index([("iccid", 1)])
     await seed_admin()
     await seed_sample_data()
     logger.info("Application started successfully")

@@ -17,6 +17,8 @@ import { CarteiraMovel } from "./pages/CarteiraMovel";
 import { Assinaturas } from "./pages/Assinaturas";
 import { GestaoCobrancas } from "./pages/GestaoCobrancas";
 import { Revendedores } from "./pages/Revendedores";
+import { AtivacoesSelfService } from "./pages/AtivacoesSelfService";
+import AtivarSelfService from "./pages/AtivarSelfService";
 
 function App() {
   return (
@@ -24,6 +26,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/ativar" element={<ErrorBoundary><AtivarSelfService /></ErrorBoundary>} />
           <Route element={<MainLayout />}>
             <Route path="/" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
             <Route path="/clientes" element={<ErrorBoundary><Clientes /></ErrorBoundary>} />
@@ -36,6 +39,7 @@ function App() {
             <Route path="/cobrancas" element={<ErrorBoundary><GestaoCobrancas /></ErrorBoundary>} />
             <Route path="/assinaturas" element={<ErrorBoundary><Assinaturas /></ErrorBoundary>} />
             <Route path="/revendedores" element={<ErrorBoundary><Revendedores /></ErrorBoundary>} />
+            <Route path="/ativacoes-selfservice" element={<ErrorBoundary><AtivacoesSelfService /></ErrorBoundary>} />
             <Route path="/usuarios" element={<ErrorBoundary><Usuarios /></ErrorBoundary>} />
             <Route path="/logs" element={<ErrorBoundary><Logs /></ErrorBoundary>} />
           </Route>

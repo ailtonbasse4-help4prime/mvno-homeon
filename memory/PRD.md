@@ -4,7 +4,7 @@
 Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom e Asaas para pagamentos.
 
 ## Arquitetura
-- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI
+- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
@@ -43,19 +43,30 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Cards resumo financeiro (receita, pendente, vencido)
 - [x] Link fatura Asaas, copiar link, consultar status
 - [x] Modulo Revendedores: CRUD + vincular chips + desconto na ativacao
-- [x] Testado: 13/13 paginas sem erros
+
+### Ativacao Self-Service + QR Code (04/04/2026)
+- [x] Pagina publica /ativar (sem auth) com leitor QR Code e entrada manual ICCID
+- [x] Fluxo completo: escanear chip -> validar -> preencher dados -> pagar (Pix/Boleto) -> ativar
+- [x] Desconto automatico para chips de revendedor
+- [x] Consulta CEP automatica (ViaCEP)
+- [x] Integracao Asaas para gerar pagamento (Pix QR Code / Boleto)
+- [x] Polling automatico de status do pagamento
+- [x] Ativacao automatica na Ta Telecom apos pagamento confirmado
+- [x] Pagina admin /ativacoes-selfservice: listar, confirmar pagamento, cancelar
+- [x] Cards de resumo (total, aguardando, ativados, erros)
+- [x] Fix sidebar: scroll correto com h-screen + overflow-y-auto
+- [x] Testado: 14/14 paginas admin + 1 publica, 14/14 backend tests
 
 ## Backlog
 
 ### P1 - Alta Prioridade
-- [ ] Portal de Ativacao Self-Service (pagina publica com leitor codigo de barras)
-- [ ] Pagamento antes da ativacao (Pix/Boleto via Asaas)
-- [ ] Desconto automatico para chips de revendedor
-- [ ] Webhook Asaas -> ativacao automatica na Ta Telecom
 - [ ] Portal do Cliente (login CPF + numero, consulta plano/boletos)
+- [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
 
 ### P2 - Media Prioridade
-- [ ] Bloqueio automatico por inadimplencia
+- [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
 - [ ] Historico de ativacoes
 - [ ] Consulta de saldo e consumo
-- [ ] Retry automatico ativacoes pendentes
+
+### Refatoracao
+- [ ] Desmembrar server.py (2600+ linhas) em roteadores separados
