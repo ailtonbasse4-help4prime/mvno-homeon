@@ -4,7 +4,7 @@
 Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom e Asaas para pagamentos.
 
 ## Arquitetura
-- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode
+- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
@@ -38,13 +38,12 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] 94 clientes, 108 linhas, 104 chips sincronizados
 
 ### Gestao de Cobrancas + Revendedores (04/04/2026)
-- [x] Integracao real Asaas (sandbox key configurada)
+- [x] Integracao real Asaas (sandbox key $aact_hmlg_ configurada)
 - [x] Pagina Gestao de Cobrancas: avulsa + lote, editar, cancelar, filtros
 - [x] Cards resumo financeiro (receita, pendente, vencido)
-- [x] Link fatura Asaas, copiar link, consultar status
 - [x] Modulo Revendedores: CRUD + vincular chips + desconto na ativacao
 
-### Ativacao Self-Service + QR Code (04/04/2026)
+### Ativacao Self-Service + QR Code (04-05/04/2026)
 - [x] Pagina publica /ativar (sem auth) com leitor QR Code e entrada manual ICCID
 - [x] Fluxo completo: escanear chip -> validar -> preencher dados -> pagar (Pix/Boleto) -> ativar
 - [x] Desconto automatico para chips de revendedor
@@ -53,9 +52,11 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Polling automatico de status do pagamento
 - [x] Ativacao automatica na Ta Telecom apos pagamento confirmado
 - [x] Pagina admin /ativacoes-selfservice: listar, confirmar pagamento, cancelar
-- [x] Cards de resumo (total, aguardando, ativados, erros)
+- [x] Geracao de QR Codes por revendedor (individual + em lote)
+- [x] Preview de etiquetas com grid 3 colunas e botao de impressao
+- [x] Auto-fill ICCID via URL query string (/ativar?iccid=XXX)
+- [x] SITE_URL configuravel via .env (https://mvno.homeonapp.com.br)
 - [x] Fix sidebar: scroll correto com h-screen + overflow-y-auto
-- [x] Testado: 14/14 paginas admin + 1 publica, 14/14 backend tests
 
 ## Backlog
 
@@ -69,4 +70,4 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [ ] Consulta de saldo e consumo
 
 ### Refatoracao
-- [ ] Desmembrar server.py (2600+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (2700+ linhas) em roteadores separados

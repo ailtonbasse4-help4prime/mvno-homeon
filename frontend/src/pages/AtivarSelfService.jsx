@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -19,6 +20,7 @@ const STEPS = [
 ];
 
 export default function AtivarSelfService() {
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(0);
   const [iccid, setIccid] = useState('');
   const [chipInfo, setChipInfo] = useState(null);
@@ -27,6 +29,26 @@ export default function AtivarSelfService() {
   const [scannerActive, setScannerActive] = useState(false);
   const scannerRef = useRef(null);
   const html5QrRef = useRef(null);
+  const autoValidated = useRef(false);
+
+  // Auto-fill ICCID from URL query (QR Code)
+  useEffect(() => {
+    const iccidParam = searchParams.get('iccid');
+    if (iccidParam && !autoValidated.current) {
+      const cleaned = iccidParam.replace(/\D/g, '');
+      if (cleaned.length >= 18) {
+        setIccid(cleaned);
+        autoValidated.current = true;
+      }
+    }
+  }, [searchParams]);
+
+  // Auto-validate when ICCID comes from URL
+  useEffect(() => {
+    if (autoValidated.current && iccid && iccid.length >= 18 && !chipInfo && step === 0) {
+      handleValidateChip();
+    }
+  }, [iccid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Form data
   const [form, setForm] = useState({
