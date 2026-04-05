@@ -1710,7 +1710,13 @@ async def _build_assinatura_response(doc: dict) -> AssinaturaResponse:
 @api_router.get("/carteira/config")
 async def get_carteira_config(request: Request):
     await get_current_user(request)
-    return asaas_service.get_config_status()
+    config = asaas_service.get_config_status()
+    # Debug: show key prefix to diagnose auth issues
+    key = asaas_service.api_key
+    config["key_prefix"] = key[:15] + "..." if len(key) > 15 else "(vazia)"
+    config["key_length"] = len(key)
+    config["key_starts_with_dollar"] = key.startswith("$")
+    return config
 
 @api_router.get("/carteira/resumo")
 async def get_carteira_resumo(request: Request):

@@ -13,7 +13,12 @@ class AsaasService:
     """Servico de integracao com a API do Asaas para cobrancas e assinaturas."""
 
     def __init__(self):
-        self.api_key = os.environ.get("ASAAS_API_KEY", "")
+        raw_key = os.environ.get("ASAAS_API_KEY", "")
+        # Sanitize: python-dotenv may strip leading $ if .env is unquoted
+        # If key doesn't start with $ but should (hmlg or production key), prepend it
+        if raw_key and not raw_key.startswith("$") and (raw_key.startswith("aact_") or raw_key.startswith("aach_")):
+            raw_key = "$" + raw_key
+        self.api_key = raw_key
         self.environment = os.environ.get("ASAAS_ENVIRONMENT", "sandbox")
         self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
         self.timeout = int(os.environ.get("ASAAS_TIMEOUT", "30"))
