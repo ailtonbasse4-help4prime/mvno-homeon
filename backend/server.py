@@ -1968,7 +1968,15 @@ async def generate_asaas_payment(cobranca_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
 
     if doc.get("asaas_payment_id") and not doc["asaas_payment_id"].startswith("mock_"):
-        raise HTTPException(status_code=400, detail="Cobranca ja possui pagamento no Asaas. Use o botao de atualizar.")
+        # Verify payment exists in current environment
+        try:
+            await asaas_service.get_payment(doc["asaas_payment_id"])
+            raise HTTPException(status_code=400, detail="Cobranca ja possui pagamento no Asaas. Use o botao de atualizar.")
+        except (AsaasApiError, Exception) as check_err:
+            if "404" in str(check_err):
+                logger.info(f"Payment {doc['asaas_payment_id']} nao encontrado no ambiente atual. Recriando.")
+            else:
+                raise HTTPException(status_code=400, detail="Cobranca ja possui pagamento no Asaas. Use o botao de atualizar.")
 
     if not asaas_service.is_configured:
         raise HTTPException(status_code=400, detail="Asaas nao configurado. Verifique ASAAS_API_KEY no .env")
