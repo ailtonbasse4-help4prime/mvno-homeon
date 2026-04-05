@@ -16,6 +16,12 @@ import {
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const SITE_URL = process.env.REACT_APP_SITE_URL || '';
 
+function getSiteUrl() {
+  if (SITE_URL) return SITE_URL;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return '';
+}
+
 export function Revendedores() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -162,7 +168,7 @@ export function Revendedores() {
     );
   };
 
-  const getChipUrl = (iccid) => `${SITE_URL}/ativar?iccid=${iccid}`;
+  const getChipUrl = (iccid) => `${getSiteUrl()}/ativar?iccid=${iccid}`;
 
   const handlePrintQrCodes = () => {
     if (!qrSelectedIccids.length) { toast.error('Selecione ao menos um chip'); return; }
@@ -460,7 +466,7 @@ export function Revendedores() {
                           Rev: {selectedRevName}
                         </div>
                         <div style={{ fontSize: '7px', color: '#888', marginTop: '3px', borderTop: '1px dashed #ccc', paddingTop: '3px' }}>
-                          Meu plano: {SITE_URL ? `${SITE_URL}/portal` : '/portal'}
+                          Meu plano: {getSiteUrl()}/portal
                         </div>
                       </div>
                     ))}
