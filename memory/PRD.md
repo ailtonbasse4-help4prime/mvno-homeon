@@ -4,7 +4,7 @@
 Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom e Asaas para pagamentos.
 
 ## Arquitetura
-- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react
+- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react + framer-motion
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
@@ -39,7 +39,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] 94 clientes, 108 linhas, 104 chips sincronizados
 
 ### Gestao de Cobrancas + Revendedores (04/04/2026)
-- [x] Integracao real Asaas (sandbox key $aact_hmlg_ configurada)
+- [x] Integracao real Asaas (producao)
 - [x] Pagina Gestao de Cobrancas: avulsa + lote, editar, cancelar, filtros
 - [x] Cards resumo financeiro (receita, pendente, vencido)
 - [x] Modulo Revendedores: CRUD + vincular chips + desconto na ativacao
@@ -54,23 +54,26 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Ativacao automatica na Ta Telecom apos pagamento confirmado
 - [x] Pagina admin /ativacoes-selfservice: listar, confirmar pagamento, cancelar
 - [x] Geracao de QR Codes por revendedor (individual + em lote)
-- [x] Preview de etiquetas com grid 3 colunas e botao de impressao
-- [x] Auto-fill ICCID via URL query string (/ativar?iccid=XXX)
-- [x] SITE_URL configuravel via .env (https://mvno.homeonapp.com.br)
-- [x] Fix sidebar: scroll correto com h-screen + overflow-y-auto
+- [x] SITE_URL configuravel via .env
 
 ### Portal do Cliente (05/04/2026)
 - [x] Backend: Login CPF+telefone com JWT tipo "portal" (24h expiry)
 - [x] Backend: Dashboard com linhas, planos, cobrancas/faturas
-- [x] Backend: Consulta saldo de dados (Ta Telecom)
-- [x] Backend: Consulta consumo consolidado mensal (Ta Telecom)
-- [x] Frontend: Tela de login publica /portal (CPF + telefone formatados)
-- [x] Frontend: Dashboard /portal/dashboard com info do cliente, linhas expandiveis, saldo/consumo, faturas
-- [x] Frontend: Links para faturas Asaas com botao "Ver Fatura"
-- [x] Frontend: Logout com limpeza de sessionStorage
-- [x] Link do Portal nas etiquetas de QR Code dos revendedores
-- [x] Link do Portal na descricao das faturas/cobrancas do Asaas
-- [x] Testado: 100% backend (13 testes) + 100% frontend (todas features)
+- [x] Backend: Consulta saldo de dados e consumo consolidado (Ta Telecom)
+- [x] Frontend: Tela login publica /portal + Dashboard /portal/dashboard
+- [x] Frontend: Linhas expandiveis com saldo/consumo, faturas com links Asaas
+- [x] Link do Portal nas etiquetas QR Code e na descricao das faturas Asaas
+- [x] Botao "Ativar por QR Code" na pagina de Ativacoes
+
+### Polish Visual / UX (05/04/2026)
+- [x] Cards interativos: hover lift (-translate-y-0.5), active scale (0.98), border glow
+- [x] Stat cards com hover color (valor muda para azul no hover)
+- [x] Texto mais visivel: zinc-500->zinc-400, zinc-400->zinc-300 em labels, tabelas, sidebar
+- [x] Badges com rounded-md e cores mais vivas
+- [x] Botoes com active:scale[0.97] e rounded-md
+- [x] Transicao de pagina suave com framer-motion (fade-in + slide-up)
+- [x] Scroll suave (scroll-behavior: smooth)
+- [x] Sidebar links com hover bg-white/5 e active com box-shadow inset
 
 ## Backlog
 
