@@ -289,6 +289,9 @@ class LineResponse(BaseModel):
 class ActivationRequest(BaseModel):
     cliente_id: str
     chip_id: str
+    portability: bool = False
+    port_ddd: Optional[str] = None
+    port_number: Optional[str] = None
 
 class ActivationResponse(BaseModel):
     success: bool
@@ -1104,9 +1107,9 @@ async def activate_line(data: ActivationRequest, request: Request):
         "city_code": cliente.get("city_code", ""),
         "postcode": re.sub(r'\D', '', cliente.get("cep", "")),
         "plan_code": plano["plan_code"],
-        "portability": False,
-        "cn_contract_line": ddd,
-        "contract_line": "",
+        "portability": data.portability,
+        "cn_contract_line": data.port_ddd if data.portability and data.port_ddd else ddd,
+        "contract_line": data.port_number if data.portability and data.port_number else "",
     }
 
     # Call operadora service
@@ -1134,6 +1137,8 @@ async def activate_line(data: ActivationRequest, request: Request):
             "plano_id": oferta["plano_id"],
             "oferta_id": chip["oferta_id"],
             "msisdn": msisdn,
+            "portability": data.portability,
+            "port_number": f"{data.port_ddd}{data.port_number}" if data.portability and data.port_ddd and data.port_number else None,
             "created_at": datetime.now(timezone.utc)
         }
         await db.linhas.insert_one(line_doc)
@@ -1149,6 +1154,22 @@ async def activate_line(data: ActivationRequest, request: Request):
         valor=oferta["valor"],
         response_time_ms=result.response_time_ms,
     )
+
+
+# ==================== PORTABILITY STATUS ====================
+@api_router.get("/portabilidade/status/{numero_ou_iccid}")
+async def get_portability_status(numero_ou_iccid: str, request: Request):
+    user = await get_current_user(request)
+    result = await operadora_service.consultar_status_portabilidade(
+        numero_ou_iccid, db=db, user_id=user["id"], user_name=user["name"]
+    )
+    return {
+        "success": result.success,
+        "status": result.data.get("status") if result.data else None,
+        "message": result.data.get("msg_usuario") if result.data else result.message,
+        "janela": result.data.get("janela") if result.data else None,
+        "chip_status": result.data.get("chip_status") if result.data else None,
+    }
 
 # ==================== LINES ROUTES ====================
 async def build_line_response(line: dict) -> LineResponse:
@@ -2634,6 +2655,9 @@ class SelfServiceActivationRequest(BaseModel):
     complemento: Optional[str] = None
     email: Optional[str] = None
     billing_type: str = "PIX"  # PIX or BOLETO
+    portability: bool = False
+    port_ddd: Optional[str] = None
+    port_number: Optional[str] = None
 
 class SelfServiceActivationResponse(BaseModel):
     id: str
@@ -2813,6 +2837,9 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
         "asaas_pix_qrcode": None,
         "barcode": None,
         "revendedor_id": chip.get("revendedor_id"),
+        "portability": data.portability,
+        "port_ddd": data.port_ddd if data.portability else None,
+        "port_number": data.port_number if data.portability else None,
         "created_at": datetime.now(timezone.utc),
     }
 
@@ -2977,9 +3004,9 @@ async def _trigger_selfservice_activation(doc: dict):
             "city_code": cliente.get("city_code", ""),
             "postcode": re.sub(r'\D', '', cliente.get("cep", "")),
             "plan_code": plano["plan_code"],
-            "portability": False,
-            "cn_contract_line": ddd,
-            "contract_line": "",
+            "portability": doc.get("portability", False),
+            "cn_contract_line": doc.get("port_ddd") or ddd,
+            "contract_line": doc.get("port_number", ""),
         }
 
         result = await operadora_service.ativar_chip(

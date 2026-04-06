@@ -271,6 +271,26 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
         )
         return req, resp
 
+    async def consultar_status_portabilidade(self, numero_ou_iccid: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        import asyncio
+        await asyncio.sleep(0.3)
+        req = OperadoraRequest(endpoint=f"/portabilidade/status/{numero_ou_iccid}", method="GET", payload={})
+        statuses = ["EM USO", "AGUARDANDO JANELA", "PORTABILIDADE CONCLUIDA", "PENDENTE"]
+        chosen = random.choice(statuses)
+        resp = OperadoraResponse(
+            success=True, status="ok", message=f"Status portabilidade consultado (mock)",
+            data={
+                "codigo_status_tip": 0, "status": chosen,
+                "msg_usuario": f"Portabilidade {chosen} (mock)",
+                "simcard": numero_ou_iccid,
+                "janela": "2026-04-10 03:00" if chosen == "AGUARDANDO JANELA" else None,
+                "chip_status": "Ativo",
+                "erro_info": "",
+            },
+            response_time_ms=300, http_status_code=200,
+        )
+        return req, resp
+
     async def consultar_consumo_consolidado(self, periodo: str, cpf_cnpj: str = None, linha: str = None) -> Tuple[OperadoraRequest, OperadoraResponse]:
         import asyncio
         await asyncio.sleep(0.3)
@@ -405,6 +425,9 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
     async def consultar_saldo_dados(self, numero: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("POST", f"/saldo/{numero}/dados")
 
+    async def consultar_status_portabilidade(self, numero_ou_iccid: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        return await self._request("GET", f"/portabilidade/status/{numero_ou_iccid}")
+
     async def consultar_consumo_consolidado(self, periodo: str, cpf_cnpj: str = None, linha: str = None) -> Tuple[OperadoraRequest, OperadoraResponse]:
         payload = {"periodo": periodo}
         if cpf_cnpj:
@@ -512,6 +535,12 @@ class OperadoraService:
     async def consultar_saldo_dados(self, numero: str, db=None, user_id=None, user_name=None) -> OperadoraResponse:
         req, resp = await self.adapter.consultar_saldo_dados(numero)
         await self._save_log(db, "consulta_saldo", req, resp, user_id, user_name, f"Consulta saldo dados: {numero}")
+        return resp
+
+    # ---------- Consultar Status Portabilidade ----------
+    async def consultar_status_portabilidade(self, numero_ou_iccid: str, db=None, user_id=None, user_name=None) -> OperadoraResponse:
+        req, resp = await self.adapter.consultar_status_portabilidade(numero_ou_iccid)
+        await self._save_log(db, "consulta_portabilidade", req, resp, user_id, user_name, f"Status portabilidade: {numero_ou_iccid}")
         return resp
 
     # ---------- Consultar Consumo Consolidado ----------

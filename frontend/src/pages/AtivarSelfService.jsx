@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import {
   QrCode, CreditCard, ArrowRight, ArrowLeft, CheckCircle, Clock,
   AlertCircle, Wifi, ScanLine, Loader2, Copy, ExternalLink, XCircle,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -55,6 +56,7 @@ export default function AtivarSelfService() {
     nome: '', documento: '', telefone: '', data_nascimento: '',
     cep: '', endereco: '', numero_endereco: '', bairro: '',
     cidade: '', estado: '', email: '', billing_type: 'PIX',
+    portability: false, port_ddd: '', port_number: '',
   });
 
   // Activation result
@@ -143,6 +145,14 @@ export default function AtivarSelfService() {
       setError('Preencha todos os campos obrigatorios');
       return;
     }
+    if (form.portability) {
+      const dddClean = (form.port_ddd || '').replace(/\D/g, '');
+      const numClean = (form.port_number || '').replace(/\D/g, '');
+      if (dddClean.length < 2 || numClean.length < 8) {
+        setError('Informe o DDD e numero para portabilidade');
+        return;
+      }
+    }
     setLoading(true);
     setError('');
     try {
@@ -160,7 +170,12 @@ export default function AtivarSelfService() {
         estado: form.estado,
         email: form.email || undefined,
         billing_type: form.billing_type,
+        portability: form.portability,
       };
+      if (form.portability) {
+        payload.port_ddd = form.port_ddd.replace(/\D/g, '');
+        payload.port_number = form.port_number.replace(/\D/g, '');
+      }
       const res = await axios.post(`${API_URL}/api/public/ativacao`, payload);
       setActivation(res.data);
       setStep(3);
@@ -405,6 +420,62 @@ export default function AtivarSelfService() {
                     className="form-input" data-testid="cidade-input" />
                 </div>
               </div>
+            </div>
+
+            {/* Portabilidade */}
+            <div className="space-y-3 mt-4">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.portability}
+                  onClick={() => updateForm('portability', !form.portability)}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${form.portability ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                  data-testid="selfservice-portability-toggle"
+                >
+                  <span className={`block w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${form.portability ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+                <span className="text-zinc-300 text-sm flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-blue-400" />
+                  Portabilidade (manter meu numero)
+                </span>
+              </div>
+
+              {form.portability && (
+                <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-3">
+                  <p className="text-xs text-zinc-400">
+                    Informe o numero que deseja portar de outra operadora.
+                  </p>
+                  <div className="flex gap-3">
+                    <div className="w-20">
+                      <Label className="text-zinc-400 text-xs">DDD</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={2}
+                        value={form.port_ddd}
+                        onChange={(e) => updateForm('port_ddd', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        placeholder="83"
+                        className="form-input font-mono"
+                        data-testid="selfservice-port-ddd"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label className="text-zinc-400 text-xs">Numero</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={9}
+                        value={form.port_number}
+                        onChange={(e) => updateForm('port_number', e.target.value.replace(/\D/g, '').slice(0, 9))}
+                        placeholder="999056284"
+                        className="form-input font-mono"
+                        data-testid="selfservice-port-number"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Payment Method */}

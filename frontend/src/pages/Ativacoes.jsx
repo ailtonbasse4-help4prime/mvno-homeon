@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { safeArray } from '../lib/api';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import {
   Select,
@@ -12,7 +13,7 @@ import {
 } from '../components/ui/select';
 import { IccidInput } from '../components/IccidInput';
 import { toast } from 'sonner';
-import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package, ExternalLink } from 'lucide-react';
+import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package, ExternalLink, ArrowRightLeft } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -27,6 +28,9 @@ export function Ativacoes() {
   const [selectedCliente, setSelectedCliente] = useState('');
   const [selectedChip, setSelectedChip] = useState('');
   const [selectedChipData, setSelectedChipData] = useState(null);
+  const [portability, setPortability] = useState(false);
+  const [portDdd, setPortDdd] = useState('');
+  const [portNumber, setPortNumber] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -58,16 +62,36 @@ export function Ativacoes() {
       return;
     }
 
+    if (portability) {
+      const dddClean = portDdd.replace(/\D/g, '');
+      const numClean = portNumber.replace(/\D/g, '');
+      if (dddClean.length < 2) {
+        toast.error('Informe o DDD do numero a portar');
+        return;
+      }
+      if (numClean.length < 8) {
+        toast.error('Informe o numero a portar (8-9 digitos)');
+        return;
+      }
+    }
+
     setActivating(true);
     setActivationResult(null);
 
     try {
+      const payload = {
+        cliente_id: selectedCliente,
+        chip_id: selectedChip,
+        portability,
+      };
+      if (portability) {
+        payload.port_ddd = portDdd.replace(/\D/g, '');
+        payload.port_number = portNumber.replace(/\D/g, '');
+      }
+
       const response = await axios.post(
         `${API_URL}/api/ativacao`,
-        {
-          cliente_id: selectedCliente,
-          chip_id: selectedChip,
-        },
+        payload,
         { withCredentials: true }
       );
 
@@ -83,6 +107,9 @@ export function Ativacoes() {
         setSelectedCliente('');
         setSelectedChip('');
         setSelectedChipData(null);
+        setPortability(false);
+        setPortDdd('');
+        setPortNumber('');
         fetchData();
       } else {
         toast.error(response.data.message);
@@ -225,6 +252,62 @@ export function Ativacoes() {
                 </div>
               </div>
             )}
+
+            {/* Portabilidade toggle */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={portability}
+                  onClick={() => { setPortability(!portability); setPortDdd(''); setPortNumber(''); }}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${portability ? 'bg-blue-600' : 'bg-zinc-700'}`}
+                  data-testid="portability-toggle"
+                >
+                  <span className={`block w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${portability ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+                <Label className="text-zinc-300 flex items-center gap-2 cursor-pointer" onClick={() => { setPortability(!portability); setPortDdd(''); setPortNumber(''); }}>
+                  <ArrowRightLeft className="w-4 h-4 text-blue-400" />
+                  Com Portabilidade
+                </Label>
+              </div>
+
+              {portability && (
+                <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-3" data-testid="portability-fields">
+                  <p className="text-xs text-zinc-400">
+                    Informe o numero que o cliente deseja portar de outra operadora.
+                  </p>
+                  <div className="flex gap-3">
+                    <div className="w-24">
+                      <Label className="text-xs text-zinc-400">DDD</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={2}
+                        value={portDdd}
+                        onChange={(e) => setPortDdd(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        placeholder="83"
+                        className="form-input font-mono"
+                        data-testid="port-ddd-input"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <Label className="text-xs text-zinc-400">Numero a Portar</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={9}
+                        value={portNumber}
+                        onChange={(e) => setPortNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                        placeholder="999056284"
+                        className="form-input font-mono"
+                        data-testid="port-number-input"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <Button
               onClick={handleActivate}
