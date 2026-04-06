@@ -2300,6 +2300,37 @@ async def asaas_webhook(request: Request):
 
     return {"received": True}
 
+# --- Sync status from Asaas ---
+@api_router.post("/carteira/sincronizar-status")
+async def sync_cobrancas_status(request: Request):
+    """Consulta o Asaas e atualiza o status de todas as cobrancas pendentes."""
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    pendentes = await db.cobrancas.find({
+        "asaas_payment_id": {"$ne": None, "$exists": True},
+        "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
+    }).to_list(200)
+
+    updated_count = 0
+    errors = []
+    for cob in pendentes:
+        try:
+            payment_data = await asaas_service.get_payment(cob["asaas_payment_id"])
+            new_status = payment_data.get("status")
+            if new_status and new_status != cob.get("status"):
+                update_fields = {"status": new_status}
+                if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
+                    update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                await db.cobrancas.update_one({"_id": cob["_id"]}, {"$set": update_fields})
+                updated_count += 1
+        except Exception as e:
+            errors.append(f"{cob['asaas_payment_id']}: {str(e)}")
+
+    await create_log("financeiro", f"Sync Asaas: {updated_count} cobrancas atualizadas de {len(pendentes)} pendentes", user["id"], user["name"])
+    return {"total_checked": len(pendentes), "updated": updated_count, "errors": errors}
+
 
 
 # ==================== REVENDEDORES ====================
@@ -2541,20 +2572,38 @@ async def portal_dashboard(request: Request):
             "iccid": chip["iccid"] if chip else None,
         })
 
-    # Cobranças do cliente (Asaas)
+    # Cobranças do cliente (Asaas) - com sync de status em tempo real
     cobrancas = await db.cobrancas.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(50)
     cobrancas_data = []
     for c in cobrancas:
+        # Sync status with Asaas if payment exists and status is not final
+        status = c.get("status", "PENDING")
+        if c.get("asaas_payment_id") and status not in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "REFUNDED"]:
+            try:
+                if asaas_service.is_configured:
+                    payment_data = await asaas_service.get_payment(c["asaas_payment_id"])
+                    new_status = payment_data.get("status")
+                    if new_status and new_status != status:
+                        update_fields = {"status": new_status}
+                        if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
+                            update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                        await db.cobrancas.update_one({"_id": c["_id"]}, {"$set": update_fields})
+                        status = new_status
+            except Exception as e:
+                logger.warning(f"Portal: erro ao sync status cobranca {c.get('asaas_payment_id')}: {e}")
+
         cobrancas_data.append({
             "id": str(c["_id"]),
             "valor": c["valor"],
             "vencimento": c["vencimento"],
             "billing_type": c["billing_type"],
-            "status": c.get("status", "PENDING"),
+            "status": status,
             "descricao": c.get("descricao"),
             "asaas_invoice_url": c.get("asaas_invoice_url"),
+            "asaas_bankslip_url": c.get("asaas_bankslip_url"),
             "asaas_pix_code": c.get("asaas_pix_code"),
             "barcode": c.get("barcode"),
+            "paid_at": c.get("paid_at"),
         })
 
     # Ativações self-service

@@ -267,13 +267,13 @@ export function GestaoCobrancas() {
 
   const statusLabel = (s) => ({
     PENDING: 'Pendente', OVERDUE: 'Vencida', CONFIRMED: 'Paga',
-    RECEIVED: 'Recebida', CANCELLED: 'Cancelada',
+    RECEIVED: 'Recebida', RECEIVED_IN_CASH: 'Recebida', CANCELLED: 'Cancelada',
   }[s] || s);
 
   const statusBg = (s) => ({
     PENDING: 'bg-yellow-900/30 text-yellow-400', OVERDUE: 'bg-red-900/30 text-red-400',
     CONFIRMED: 'bg-emerald-900/30 text-emerald-400', RECEIVED: 'bg-emerald-900/30 text-emerald-400',
-    CANCELLED: 'bg-zinc-800 text-zinc-500',
+    RECEIVED_IN_CASH: 'bg-emerald-900/30 text-emerald-400', CANCELLED: 'bg-zinc-800 text-zinc-500',
   }[s] || 'bg-zinc-800 text-zinc-400');
 
   const filtered = cobrancas.filter(c => {
@@ -291,6 +291,26 @@ export function GestaoCobrancas() {
   const cobs = (resumo && resumo.cobrancas) || {};
   const clienteLinhas = (clienteId) => linhas.filter(l => l.cliente_id === clienteId);
   const sc = selectedCobranca;
+
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncStatus = async () => {
+    setSyncing(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/sincronizar-status`, {}, { withCredentials: true });
+      const { total_checked, updated, errors } = res.data;
+      if (updated > 0) {
+        toast.success(`${updated} cobranca(s) atualizada(s) de ${total_checked}`);
+      } else {
+        toast.info(`${total_checked} cobrancas verificadas, nenhuma alteracao`);
+      }
+      if (errors?.length) toast.warning(`${errors.length} erro(s) na sincronizacao`);
+      fetchAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao sincronizar');
+    }
+    setSyncing(false);
+  };
 
   const handleSaveAsaasConfig = async () => {
     if (!configForm.api_key) { toast.error('Informe a chave API'); return; }
@@ -330,6 +350,9 @@ export function GestaoCobrancas() {
         </div>
         {isAdmin && (
           <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+            <Button onClick={handleSyncStatus} disabled={syncing} variant="outline" className="flex items-center gap-2 border-emerald-700 text-emerald-400 hover:bg-emerald-900/20" data-testid="sync-status-btn">
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />{syncing ? 'Sincronizando...' : 'Sincronizar Status'}
+            </Button>
             <Button onClick={() => setConfigDialogOpen(true)} variant="outline" className="flex items-center gap-2 border-blue-700 text-blue-400 hover:bg-blue-900/20" data-testid="config-asaas-btn">
               <Settings className="w-4 h-4" />API Asaas
             </Button>
