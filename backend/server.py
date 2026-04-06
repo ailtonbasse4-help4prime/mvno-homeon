@@ -1794,7 +1794,10 @@ async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
     # Reload service in memory
     asaas_service.api_key = new_key
     asaas_service.environment = new_env
-    asaas_service.base_url = "https://api.asaas.com/v3" if new_env == "production" else "https://sandbox.asaas.com/api/v3"
+    asaas_service.base_url = "https://www.asaas.com/api/v3" if new_env == "production" else "https://sandbox.asaas.com/api/v3"
+
+    # Persist to MongoDB (survives restarts/redeploys)
+    await asaas_service.save_config_to_db(db)
 
     # Test connection
     try:
@@ -3318,6 +3321,8 @@ async def startup_event():
     await db.ativacoes_selfservice.create_index([("iccid", 1)])
     await seed_admin()
     await seed_sample_data()
+    # Load Asaas config from DB (survives restarts)
+    await asaas_service.load_config_from_db(db)
     logger.info("Application started successfully")
 
 app.include_router(api_router)

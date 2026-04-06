@@ -14,8 +14,6 @@ class AsaasService:
 
     def __init__(self):
         raw_key = os.environ.get("ASAAS_API_KEY", "")
-        # Sanitize: python-dotenv may strip leading $ if .env is unquoted
-        # If key doesn't start with $ but should (hmlg or production key), prepend it
         if raw_key and not raw_key.startswith("$") and (raw_key.startswith("aact_") or raw_key.startswith("aach_")):
             raw_key = "$" + raw_key
         self.api_key = raw_key
@@ -25,6 +23,40 @@ class AsaasService:
 
     @property
     def is_configured(self) -> bool:
+        return bool(self.api_key)
+
+    async def load_config_from_db(self, db):
+        """Carrega chave Asaas do MongoDB (fonte primaria). Chamado no startup."""
+        try:
+            config = await db.system_config.find_one({"key": "asaas_config"})
+            if config and config.get("api_key"):
+                stored_key = config["api_key"]
+                if stored_key and not stored_key.startswith("$") and (stored_key.startswith("aact_") or stored_key.startswith("aach_")):
+                    stored_key = "$" + stored_key
+                self.api_key = stored_key
+                self.environment = config.get("environment", self.environment)
+                self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
+                logger.info(f"Asaas config loaded from DB: env={self.environment}, key_len={len(self.api_key)}")
+            elif self.api_key:
+                await self.save_config_to_db(db)
+                logger.info("Asaas config migrated from .env to DB")
+        except Exception as e:
+            logger.warning(f"Failed to load Asaas config from DB: {e}")
+
+    async def save_config_to_db(self, db):
+        """Persiste chave Asaas no MongoDB para sobreviver a restarts."""
+        try:
+            await db.system_config.update_one(
+                {"key": "asaas_config"},
+                {"$set": {
+                    "key": "asaas_config",
+                    "api_key": self.api_key,
+                    "environment": self.environment,
+                }},
+                upsert=True,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save Asaas config to DB: {e}")
         return bool(self.api_key)
 
     def _headers(self) -> dict:
