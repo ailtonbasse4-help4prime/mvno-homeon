@@ -210,24 +210,24 @@ export function Clientes() {
       </div>
 
       <div className="dashboard-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table" data-testid="clientes-table">
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>Tipo</th>
-                <th>Documento</th>
-                <th>Telefone</th>
-                <th>Linhas</th>
-                <th>Dados</th>
-                <th>Status</th>
-                <th className="text-right">Acoes</th>
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
+          <table className="data-table w-full table-fixed" data-testid="clientes-table">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
+                <th className="text-blue-300 w-[20%]">Nome</th>
+                <th className="text-blue-300 w-[5%]">Tipo</th>
+                <th className="text-blue-300 w-[14%]">Documento</th>
+                <th className="text-blue-300 w-[13%]">Telefone</th>
+                <th className="text-blue-300 w-[18%]">Linhas</th>
+                <th className="text-blue-300 w-[9%]">Dados</th>
+                <th className="text-blue-300 w-[8%]">Status</th>
+                <th className="text-blue-300 text-right w-[13%]">Acoes</th>
               </tr>
             </thead>
             <tbody>
               {clientes.length === 0 ? (
                 <tr><td colSpan={8} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
-              ) : clientes.map((c) => (
+              ) : [...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map((c) => (
                 <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
                   <td className="font-medium text-white">{c.nome}</td>
                   <td className="text-zinc-400 text-xs uppercase">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
