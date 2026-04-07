@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import {
   Plus, Search, Trash2, Edit, RefreshCw, ExternalLink,
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
-  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings,
+  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -481,6 +481,13 @@ export function GestaoCobrancas() {
                     <button onClick={() => handlePrint(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Imprimir / Abrir fatura">
                       <Printer className="w-3.5 h-3.5 text-zinc-400" />
                     </button>
+                    {(c.asaas_bankslip_url || c.asaas_invoice_url) && (
+                      <a href={c.asaas_bankslip_url || c.asaas_invoice_url} target="_blank" rel="noreferrer"
+                        className="p-1.5 hover:bg-zinc-800 rounded inline-flex" title="Baixar boleto PDF"
+                        data-testid={`download-boleto-${c.id}`}>
+                        <Download className="w-3.5 h-3.5 text-cyan-400" />
+                      </a>
+                    )}
                     <button onClick={() => handleRefreshCobranca(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Atualizar dados do Asaas">
                       <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
                     </button>
@@ -540,11 +547,16 @@ export function GestaoCobrancas() {
 
               {/* Boleto bankslip */}
               {sc.asaas_bankslip_url && (
-                <div className="p-3 bg-zinc-900 rounded-lg space-y-2">
-                  <div className="text-sm font-medium flex items-center gap-2"><FileText className="w-4 h-4" /> PDF do Boleto</div>
+                <div className="p-3 bg-cyan-900/20 border border-cyan-800/30 rounded-lg space-y-2">
+                  <div className="text-sm font-medium text-cyan-400 flex items-center gap-2"><Download className="w-4 h-4" /> Boleto PDF</div>
                   <a href={sc.asaas_bankslip_url} target="_blank" rel="noreferrer">
-                    <Button variant="outline" size="sm" className="w-full border-zinc-700"><FileText className="w-4 h-4 mr-2" />Baixar PDF do Boleto</Button>
+                    <Button variant="outline" size="sm" className="w-full border-cyan-700 text-cyan-400 hover:bg-cyan-900/30" data-testid="download-boleto-detail">
+                      <Download className="w-4 h-4 mr-2" />Baixar Boleto PDF
+                    </Button>
                   </a>
+                  <Button size="sm" variant="outline" onClick={() => handleCopy(sc.asaas_bankslip_url, 'Link do boleto')} className="w-full border-zinc-700">
+                    <Copy className="w-3.5 h-3.5 mr-2" />Copiar Link do Boleto
+                  </Button>
                 </div>
               )}
 
