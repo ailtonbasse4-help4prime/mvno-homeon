@@ -201,6 +201,8 @@ class ClientResponse(BaseModel):
     status: str
     dados_completos: bool = False
     created_at: datetime
+    linhas_count: int = 0
+    linhas: list = []
 
 # Plan Models - with plan_code
 class PlanCreate(BaseModel):
@@ -444,10 +446,29 @@ def check_client_completeness(cliente: dict) -> tuple:
     missing = [f for f in required if not cliente.get(f)]
     return len(missing) == 0, missing
 
-def build_client_response(c: dict) -> ClientResponse:
+async def build_client_response(c: dict) -> ClientResponse:
     is_complete, _ = check_client_completeness(c)
+    client_id = str(c["_id"])
+    # Fetch lines for this client
+    linhas_cursor = db.linhas.find({"cliente_id": client_id}, {"_id": 0, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1})
+    linhas_raw = await linhas_cursor.to_list(50)
+    linhas_data = []
+    for l in linhas_raw:
+        plano_nome = None
+        if l.get("plano_id"):
+            try:
+                plano = await db.planos.find_one({"_id": ObjectId(l["plano_id"])}, {"nome": 1})
+                if plano:
+                    plano_nome = plano["nome"]
+            except Exception:
+                pass
+        linhas_data.append({
+            "numero": l.get("numero") or l.get("msisdn", ""),
+            "status": l.get("status", ""),
+            "plano_nome": plano_nome,
+        })
     return ClientResponse(
-        id=str(c["_id"]), nome=c["nome"],
+        id=client_id, nome=c["nome"],
         tipo_pessoa=c.get("tipo_pessoa", "pf"),
         documento=c.get("documento", c.get("cpf", "")),
         telefone=c.get("telefone", ""),
@@ -458,7 +479,9 @@ def build_client_response(c: dict) -> ClientResponse:
         estado=c.get("estado"), city_code=c.get("city_code"),
         complemento=c.get("complemento"),
         status=c["status"], dados_completos=is_complete,
-        created_at=c.get("created_at", datetime.now(timezone.utc))
+        created_at=c.get("created_at", datetime.now(timezone.utc)),
+        linhas_count=len(linhas_data),
+        linhas=linhas_data,
     )
 
 # ==================== AUTH ROUTES ====================
@@ -653,7 +676,48 @@ async def list_clients(request: Request, search: Optional[str] = None):
             {"telefone": {"$regex": search, "$options": "i"}}
         ]}
     clients = await db.clientes.find(query).to_list(1000)
-    return [build_client_response(c) for c in clients]
+    # Pre-fetch all lines in bulk for performance
+    client_ids = [str(c["_id"]) for c in clients]
+    all_lines = await db.linhas.find({"cliente_id": {"$in": client_ids}}, {"_id": 0, "cliente_id": 1, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1}).to_list(5000)
+    # Pre-fetch plan names
+    plano_ids = list(set(l["plano_id"] for l in all_lines if l.get("plano_id")))
+    planos_map = {}
+    if plano_ids:
+        planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}, {"nome": 1}).to_list(100)
+        planos_map = {str(p["_id"]): p["nome"] for p in planos}
+    # Group lines by client_id
+    lines_by_client = {}
+    for l in all_lines:
+        cid = l["cliente_id"]
+        if cid not in lines_by_client:
+            lines_by_client[cid] = []
+        lines_by_client[cid].append({
+            "numero": l.get("numero") or l.get("msisdn", ""),
+            "status": l.get("status", ""),
+            "plano_nome": planos_map.get(l.get("plano_id"), None),
+        })
+    results = []
+    for c in clients:
+        is_complete, _ = check_client_completeness(c)
+        cid = str(c["_id"])
+        linhas = lines_by_client.get(cid, [])
+        results.append(ClientResponse(
+            id=cid, nome=c["nome"],
+            tipo_pessoa=c.get("tipo_pessoa", "pf"),
+            documento=c.get("documento", c.get("cpf", "")),
+            telefone=c.get("telefone", ""),
+            data_nascimento=c.get("data_nascimento"),
+            cep=c.get("cep"), endereco=c.get("endereco"),
+            numero_endereco=c.get("numero_endereco"),
+            bairro=c.get("bairro"), cidade=c.get("cidade"),
+            estado=c.get("estado"), city_code=c.get("city_code"),
+            complemento=c.get("complemento"),
+            status=c["status"], dados_completos=is_complete,
+            created_at=c.get("created_at", datetime.now(timezone.utc)),
+            linhas_count=len(linhas),
+            linhas=linhas,
+        ))
+    return results
 
 @api_router.post("/clientes", response_model=ClientResponse)
 async def create_client(data: ClientCreate, request: Request):
@@ -682,7 +746,7 @@ async def create_client(data: ClientCreate, request: Request):
     result = await db.clientes.insert_one(client_doc)
     client_doc["_id"] = result.inserted_id
     await create_log("cadastro", f"Cliente cadastrado: {data.nome}", user["id"], user["name"])
-    return build_client_response(client_doc)
+    return await build_client_response(client_doc)
 
 @api_router.get("/clientes/{client_id}", response_model=ClientResponse)
 async def get_client(client_id: str, request: Request):
@@ -690,7 +754,7 @@ async def get_client(client_id: str, request: Request):
     c = await db.clientes.find_one({"_id": ObjectId(client_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Cliente nao encontrado")
-    return build_client_response(c)
+    return await build_client_response(c)
 
 @api_router.put("/clientes/{client_id}", response_model=ClientResponse)
 async def update_client(client_id: str, data: ClientCreate, request: Request):
@@ -721,7 +785,7 @@ async def update_client(client_id: str, data: ClientCreate, request: Request):
     await db.clientes.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
     await create_log("cadastro", f"Cliente atualizado: {data.nome}", user["id"], user["name"])
     updated = await db.clientes.find_one({"_id": ObjectId(client_id)})
-    return build_client_response(updated)
+    return await build_client_response(updated)
 
 @api_router.delete("/clientes/{client_id}")
 async def delete_client(client_id: str, request: Request):

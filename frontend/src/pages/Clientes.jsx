@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { safeArray } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -30,6 +30,17 @@ export function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debounceRef = useRef(null);
+
+  // Debounce search - triggers after 400ms of no typing
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState(null);
@@ -40,7 +51,7 @@ export function Clientes() {
 
   const fetchClientes = useCallback(async () => {
     try {
-      const params = search ? { search } : {};
+      const params = debouncedSearch ? { search: debouncedSearch } : {};
       const response = await axios.get(`${API_URL}/api/clientes`, { params, withCredentials: true });
       setClientes(safeArray(response.data));
     } catch (error) {
@@ -48,7 +59,7 @@ export function Clientes() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [debouncedSearch]);
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
@@ -188,6 +199,7 @@ export function Clientes() {
                 <th>Tipo</th>
                 <th>Documento</th>
                 <th>Telefone</th>
+                <th>Linhas</th>
                 <th>Dados</th>
                 <th>Status</th>
                 <th className="text-right">Acoes</th>
@@ -195,13 +207,28 @@ export function Clientes() {
             </thead>
             <tbody>
               {clientes.length === 0 ? (
-                <tr><td colSpan={7} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
+                <tr><td colSpan={8} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
               ) : clientes.map((c) => (
                 <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
                   <td className="font-medium text-white">{c.nome}</td>
                   <td className="text-zinc-400 text-xs uppercase">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
-                  <td className="font-mono text-zinc-400 text-sm">{c.documento}</td>
-                  <td className="font-mono text-zinc-400 text-sm">{c.telefone}</td>
+                  <td className="font-mono text-zinc-300 text-sm">{c.documento}</td>
+                  <td className="font-mono text-zinc-300 text-sm">{c.telefone}</td>
+                  <td>
+                    {c.linhas_count > 0 ? (
+                      <div className="space-y-0.5">
+                        {(c.linhas || []).map((l, i) => (
+                          <div key={i} className="flex items-center gap-1.5 text-xs">
+                            <Phone className="w-3 h-3 text-zinc-500" />
+                            <span className="font-mono text-zinc-200">{l.numero}</span>
+                            <span className={l.status === 'ativo' ? 'badge-active' : l.status === 'bloqueado' ? 'badge-blocked' : 'badge-pending'}>{l.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-zinc-500">Nenhuma</span>
+                    )}
+                  </td>
                   <td>
                     {c.dados_completos ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle className="w-3 h-3" />Completo</span>
