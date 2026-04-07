@@ -36,6 +36,8 @@ export function GestaoCobrancas() {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [configForm, setConfigForm] = useState({ api_key: '', environment: 'sandbox' });
   const [configSubmitting, setConfigSubmitting] = useState(false);
+  const [diagResult, setDiagResult] = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
 
   const [form, setForm] = useState({
     cliente_id: '', linha_id: '', billing_type: 'BOLETO',
@@ -328,6 +330,24 @@ export function GestaoCobrancas() {
       toast.error(e.response?.data?.detail || 'Erro ao salvar configuracao');
     }
     setConfigSubmitting(false);
+  };
+
+  const handleDiagnostico = async () => {
+    setDiagLoading(true);
+    setDiagResult(null);
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/diagnostico`, {}, { withCredentials: true });
+      setDiagResult(res.data);
+      if (res.data.api_test === 'OK') {
+        toast.success('Conexao com Asaas OK!');
+      } else {
+        toast.error('Falha na conexao: ' + (res.data.api_error || 'Erro desconhecido'));
+      }
+    } catch (e) {
+      toast.error('Erro ao executar diagnostico');
+      setDiagResult({ api_test: 'ERRO', api_error: e.response?.data?.detail || e.message });
+    }
+    setDiagLoading(false);
   };
 
   return (
@@ -746,6 +766,23 @@ export function GestaoCobrancas() {
               className="w-full btn-primary" data-testid="save-asaas-config-btn">
               {configSubmitting ? 'Salvando e testando...' : 'Salvar e Testar Conexao'}
             </Button>
+            <Button onClick={handleDiagnostico} disabled={diagLoading} variant="outline"
+              className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800" data-testid="diagnostico-asaas-btn">
+              {diagLoading ? 'Testando...' : 'Diagnostico da Conexao'}
+            </Button>
+            {diagResult && (
+              <div className={`p-3 rounded-lg text-sm space-y-1 ${diagResult.api_test === 'OK' ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-red-500/10 border border-red-500/30'}`}
+                data-testid="diagnostico-result">
+                <p className={diagResult.api_test === 'OK' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+                  API: {diagResult.api_test}
+                </p>
+                <p className="text-zinc-400">Chave: {diagResult.key_prefix} ({diagResult.key_length} chars)</p>
+                <p className="text-zinc-400">Formato valido: {diagResult.key_valid_format ? 'Sim' : 'NAO'}</p>
+                <p className="text-zinc-400">Ambiente: {diagResult.environment} | Producao: {diagResult.is_production ? 'Sim' : 'Nao'}</p>
+                <p className="text-zinc-400">MongoDB: {diagResult.db_keys_match ? 'Chave sincronizada' : diagResult.db_config || 'Chave divergente'}</p>
+                {diagResult.api_error && <p className="text-red-400 text-xs mt-1">Erro: {diagResult.api_error}</p>}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

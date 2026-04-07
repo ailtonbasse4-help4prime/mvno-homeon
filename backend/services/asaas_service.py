@@ -15,16 +15,36 @@ class AsaasService:
 
     def __init__(self):
         raw_key = os.environ.get("ASAAS_API_KEY", "")
-        if raw_key and not raw_key.startswith("$") and (raw_key.startswith("aact_") or raw_key.startswith("aach_")):
-            raw_key = "$" + raw_key
-        self.api_key = raw_key
+        raw_key = self._normalize_key(raw_key)
+        self.api_key = raw_key if self._is_valid_key(raw_key) else ""
         self.environment = os.environ.get("ASAAS_ENVIRONMENT", "sandbox")
         self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
         self.timeout = int(os.environ.get("ASAAS_TIMEOUT", "30"))
+        if self.api_key:
+            logger.info(f"Asaas init from .env: env={self.environment}, key_len={len(self.api_key)}, valid={self._is_valid_key(self.api_key)}")
+        else:
+            logger.warning(f"Asaas init: chave .env vazia ou invalida (raw_len={len(raw_key)})")
+
+    @staticmethod
+    def _normalize_key(key: str) -> str:
+        """Garante que a chave comece com $ se for uma chave Asaas valida."""
+        if not key:
+            return ""
+        key = key.strip().strip("'\"")
+        if not key.startswith("$") and (key.startswith("aact_") or key.startswith("aach_")):
+            key = "$" + key
+        return key
+
+    @staticmethod
+    def _is_valid_key(key: str) -> bool:
+        """Valida formato da chave Asaas: deve comecar com $aact_ ou $aach_ e ter 50+ chars."""
+        if not key or len(key) < 50:
+            return False
+        return key.startswith("$aact_") or key.startswith("$aach_")
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.api_key) and len(self.api_key) > 10
+        return self._is_valid_key(self.api_key)
 
     def is_production(self) -> bool:
         return self.environment == "production" and self.api_key.startswith("$aact_prod_")
@@ -34,27 +54,28 @@ class AsaasService:
         try:
             config = await db.system_config.find_one({"key": "asaas_config"})
             if config and config.get("api_key"):
-                stored_key = config["api_key"]
-                if stored_key and not stored_key.startswith("$") and (stored_key.startswith("aact_") or stored_key.startswith("aach_")):
-                    stored_key = "$" + stored_key
-                # MongoDB key takes priority over .env
-                self.api_key = stored_key
-                self.environment = config.get("environment", self.environment)
-                self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
-                logger.info(f"Asaas config loaded from DB: env={self.environment}, key_len={len(self.api_key)}, production={self.is_production()}")
-            elif self.api_key:
-                # .env has key but DB doesn't — migrate immediately
+                stored_key = self._normalize_key(config["api_key"])
+                if self._is_valid_key(stored_key):
+                    self.api_key = stored_key
+                    self.environment = config.get("environment", self.environment)
+                    self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
+                    logger.info(f"Asaas config loaded from DB: env={self.environment}, key_len={len(self.api_key)}, production={self.is_production()}")
+                    return
+                else:
+                    logger.warning(f"Asaas: chave no MongoDB INVALIDA (len={len(stored_key)}). Tentando .env...")
+            # Se MongoDB nao tem chave valida, tenta usar .env
+            if self._is_valid_key(self.api_key):
                 await self.save_config_to_db(db)
                 logger.info(f"Asaas config migrated from .env to DB: env={self.environment}, key_len={len(self.api_key)}")
             else:
-                logger.warning("ASAAS NAO CONFIGURADO: nenhuma chave encontrada no MongoDB nem no .env")
+                logger.warning("ASAAS NAO CONFIGURADO: nenhuma chave valida encontrada no MongoDB nem no .env")
         except Exception as e:
             logger.error(f"CRITICAL: Failed to load Asaas config from DB: {e}")
 
     async def save_config_to_db(self, db):
-        """Persiste chave Asaas no MongoDB para sobreviver a restarts."""
-        if not self.api_key or len(self.api_key) < 10:
-            logger.warning("Tentativa de salvar chave Asaas vazia ou invalida no DB — ignorada")
+        """Persiste chave Asaas no MongoDB. Nunca salva chave invalida."""
+        if not self._is_valid_key(self.api_key):
+            logger.warning(f"Tentativa de salvar chave Asaas invalida no DB — BLOQUEADA (len={len(self.api_key)})")
             return False
         try:
             await db.system_config.update_one(
@@ -72,7 +93,6 @@ class AsaasService:
         except Exception as e:
             logger.error(f"CRITICAL: Failed to save Asaas config to DB: {e}")
             return False
-        return bool(self.api_key)
 
     def _headers(self) -> dict:
         return {

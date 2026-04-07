@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(interpolate=False)
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
 from fastapi.responses import FileResponse
@@ -1846,7 +1846,7 @@ async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
         with open(env_path, "r") as f:
             for line in f:
                 if line.startswith("ASAAS_API_KEY"):
-                    lines.append(f'ASAAS_API_KEY="{new_key}"\n')
+                    lines.append(f"ASAAS_API_KEY='{new_key}'\n")
                     key_found = True
                 elif line.startswith("ASAAS_ENVIRONMENT"):
                     lines.append(f"ASAAS_ENVIRONMENT={new_env}\n")
@@ -1854,7 +1854,7 @@ async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
                 else:
                     lines.append(line)
     if not key_found:
-        lines.append(f'ASAAS_API_KEY="{new_key}"\n')
+        lines.append(f"ASAAS_API_KEY='{new_key}'\n")
     if not env_found:
         lines.append(f"ASAAS_ENVIRONMENT={new_env}\n")
 
@@ -1875,6 +1875,43 @@ async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
         return {"success": True, "message": "Chave atualizada e conexao verificada com sucesso!", "configured": True, "environment": new_env}
     except Exception as e:
         return {"success": False, "message": f"Chave salva mas erro ao testar: {str(e)}", "configured": True, "environment": new_env}
+
+@api_router.post("/carteira/diagnostico")
+async def diagnostico_asaas(request: Request):
+    """Diagnostico completo da integracao Asaas. Testa a chave real."""
+    await require_admin(request)
+    key = asaas_service.api_key
+    result = {
+        "key_length": len(key),
+        "key_valid_format": asaas_service._is_valid_key(key),
+        "key_prefix": key[:20] + "..." if len(key) > 20 else "(curta)",
+        "key_has_dollar": key.startswith("$") if key else False,
+        "environment": asaas_service.environment,
+        "base_url": asaas_service.base_url,
+        "is_production": asaas_service.is_production(),
+    }
+    # Testar chamada real a API
+    try:
+        test = await asaas_service._request("GET", "/customers?limit=1")
+        result["api_test"] = "OK"
+        result["api_response_keys"] = list(test.keys()) if isinstance(test, dict) else str(type(test))
+    except Exception as e:
+        result["api_test"] = "ERRO"
+        result["api_error"] = str(e)
+    # Verificar MongoDB
+    try:
+        db_config = await db.system_config.find_one({"key": "asaas_config"}, {"_id": 0})
+        if db_config:
+            db_key = db_config.get("api_key", "")
+            result["db_key_length"] = len(db_key)
+            result["db_key_valid"] = asaas_service._is_valid_key(asaas_service._normalize_key(db_key))
+            result["db_env"] = db_config.get("environment", "?")
+            result["db_keys_match"] = (asaas_service._normalize_key(db_key) == key)
+        else:
+            result["db_config"] = "NAO ENCONTRADA"
+    except Exception as e:
+        result["db_error"] = str(e)
+    return result
 
 @api_router.get("/carteira/resumo")
 async def get_carteira_resumo(request: Request):
