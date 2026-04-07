@@ -16,14 +16,54 @@ class AsaasService:
     def __init__(self):
         raw_key = os.environ.get("ASAAS_API_KEY", "")
         raw_key = self._normalize_key(raw_key)
+        env = os.environ.get("ASAAS_ENVIRONMENT", "sandbox")
+        # Se dotenv/shell corrompeu a chave ($→vazio), le direto do arquivo .env
+        if not self._is_valid_key(raw_key):
+            logger.warning(f"Asaas: chave do os.environ invalida (len={len(raw_key)}). Lendo .env raw...")
+            raw_key, raw_env = self._read_env_file_raw()
+            raw_key = self._normalize_key(raw_key)
+            if raw_env:
+                env = raw_env
+            if self._is_valid_key(raw_key):
+                logger.info(f"Asaas: chave recuperada via leitura raw do .env! len={len(raw_key)}")
         self.api_key = raw_key if self._is_valid_key(raw_key) else ""
-        self.environment = os.environ.get("ASAAS_ENVIRONMENT", "sandbox")
+        self.environment = env
         self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
         self.timeout = int(os.environ.get("ASAAS_TIMEOUT", "30"))
         if self.api_key:
-            logger.info(f"Asaas init from .env: env={self.environment}, key_len={len(self.api_key)}, valid={self._is_valid_key(self.api_key)}")
+            logger.info(f"Asaas init: env={self.environment}, key_len={len(self.api_key)}, valid=True")
         else:
-            logger.warning(f"Asaas init: chave .env vazia ou invalida (raw_len={len(raw_key)})")
+            logger.warning(f"Asaas init: NENHUMA chave valida encontrada (env={len(raw_key)})")
+
+    @staticmethod
+    def _read_env_file_raw():
+        """Le ASAAS_API_KEY e ASAAS_ENVIRONMENT diretamente do arquivo .env,
+        sem qualquer expansao de variaveis. Imune a corrupcao por $ do shell/dotenv."""
+        api_key = ""
+        environment = ""
+        # Tenta encontrar o .env
+        for env_path in [
+            os.path.join(os.path.dirname(__file__), "..", ".env"),
+            os.path.join(os.path.dirname(__file__), ".env"),
+            "/app/backend/.env",
+        ]:
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("ASAAS_API_KEY") and "=" in line:
+                                _, _, value = line.partition("=")
+                                api_key = value.strip().strip("'\"")
+                            elif line.startswith("ASAAS_ENVIRONMENT") and "=" in line:
+                                _, _, value = line.partition("=")
+                                environment = value.strip().strip("'\"")
+                    if api_key:
+                        logger.info(f"Raw .env read from {env_path}: key_len={len(api_key)}, env={environment}")
+                        break
+                except Exception as e:
+                    logger.warning(f"Erro ao ler {env_path}: {e}")
+        return api_key, environment
 
     @staticmethod
     def _normalize_key(key: str) -> str:
@@ -50,8 +90,9 @@ class AsaasService:
         return self.environment == "production" and self.api_key.startswith("$aact_prod_")
 
     async def load_config_from_db(self, db):
-        """Carrega chave Asaas do MongoDB (fonte primaria). Chamado no startup."""
+        """Carrega chave Asaas. Prioridade: MongoDB > .env > leitura raw do .env."""
         try:
+            # 1. Tenta MongoDB (fonte primaria)
             config = await db.system_config.find_one({"key": "asaas_config"})
             if config and config.get("api_key"):
                 stored_key = self._normalize_key(config["api_key"])
@@ -62,13 +103,27 @@ class AsaasService:
                     logger.info(f"Asaas config loaded from DB: env={self.environment}, key_len={len(self.api_key)}, production={self.is_production()}")
                     return
                 else:
-                    logger.warning(f"Asaas: chave no MongoDB INVALIDA (len={len(stored_key)}). Tentando .env...")
-            # Se MongoDB nao tem chave valida, tenta usar .env
+                    logger.warning(f"Asaas: chave no MongoDB INVALIDA (len={len(stored_key)})")
+
+            # 2. Tenta chave ja em memoria (do __init__)
             if self._is_valid_key(self.api_key):
                 await self.save_config_to_db(db)
-                logger.info(f"Asaas config migrated from .env to DB: env={self.environment}, key_len={len(self.api_key)}")
-            else:
-                logger.warning("ASAAS NAO CONFIGURADO: nenhuma chave valida encontrada no MongoDB nem no .env")
+                logger.info(f"Asaas config saved to DB from memory: env={self.environment}, key_len={len(self.api_key)}")
+                return
+
+            # 3. Ultimo recurso: le .env raw novamente
+            raw_key, raw_env = self._read_env_file_raw()
+            raw_key = self._normalize_key(raw_key)
+            if self._is_valid_key(raw_key):
+                self.api_key = raw_key
+                if raw_env:
+                    self.environment = raw_env
+                    self.base_url = ASAAS_PRODUCTION_URL if raw_env == "production" else ASAAS_SANDBOX_URL
+                await self.save_config_to_db(db)
+                logger.info(f"Asaas: chave recuperada do .env raw e salva no MongoDB! env={self.environment}, key_len={len(self.api_key)}")
+                return
+
+            logger.warning("ASAAS NAO CONFIGURADO: nenhuma chave valida em MongoDB, .env ou arquivo raw")
         except Exception as e:
             logger.error(f"CRITICAL: Failed to load Asaas config from DB: {e}")
 

@@ -53,6 +53,9 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Fix MockTaTelecomAdapter.ativar_chip (corrupcao do agente anterior corrigida)
 - [x] Busca automatica de CEP via ViaCEP no formulario de Clientes (Clientes.jsx)
 - [x] Paginacao de estoque Ta Telecom validada (525 chips sincronizados vs. 50 anterior)
+- [x] Fix Enter no campo CEP nao submete mais o formulario
+- [x] FIX DEFINITIVO Asaas API Key: leitura raw do .env (imune a corrupcao por $ do shell/dotenv), validacao robusta, load_dotenv(interpolate=False), aspas simples, endpoint de diagnostico
+- [x] Botao "Diagnostico da Conexao" na tela de Cobrancas > API Asaas
 
 ## Backlog
 
