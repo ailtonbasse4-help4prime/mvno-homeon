@@ -501,6 +501,52 @@ class OperadoraService:
             self.adapter = RealTaTelecomAdapter(TATELECOM_API_URL, TATELECOM_USER_TOKEN, TATELECOM_TIMEOUT)
             logger.info(f"OperadoraService iniciado em modo REAL - URL: {TATELECOM_API_URL}")
 
+    def get_config_status(self):
+        return {
+            "mode": "mock" if self.use_mock else "real",
+            "api_url": TATELECOM_API_URL if not self.use_mock else "mock",
+            "has_token": bool(TATELECOM_USER_TOKEN) and not self.use_mock,
+        }
+
+    async def load_config_from_db(self, db):
+        """Carrega config Tá Telecom do MongoDB."""
+        try:
+            config = await db.system_config.find_one({"key": "tatelecom_config"})
+            if config and config.get("api_url") and config.get("user_token"):
+                stored_url = config["api_url"]
+                stored_token = config["user_token"]
+                if stored_token and len(stored_token) > 5:
+                    self.use_mock = False
+                    self.adapter = RealTaTelecomAdapter(stored_url, stored_token, TATELECOM_TIMEOUT)
+                    logger.info(f"TaTelecom config loaded from DB: url={stored_url}, token_len={len(stored_token)}")
+            elif not self.use_mock and TATELECOM_USER_TOKEN:
+                # .env has token but DB doesn't — migrate
+                await self.save_config_to_db(db)
+                logger.info("TaTelecom config migrated from .env to DB")
+        except Exception as e:
+            logger.warning(f"Failed to load TaTelecom config from DB: {e}")
+
+    async def save_config_to_db(self, db):
+        """Persiste config Tá Telecom no MongoDB."""
+        if self.use_mock:
+            return
+        try:
+            adapter = self.adapter
+            if hasattr(adapter, 'base_url') and hasattr(adapter, 'user_token'):
+                await db.system_config.update_one(
+                    {"key": "tatelecom_config"},
+                    {"$set": {
+                        "key": "tatelecom_config",
+                        "api_url": adapter.base_url,
+                        "user_token": adapter.user_token,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }},
+                    upsert=True,
+                )
+                logger.info("TaTelecom config saved to DB")
+        except Exception as e:
+            logger.warning(f"Failed to save TaTelecom config to DB: {e}")
+
     async def _save_log(self, db, action: str, request: OperadoraRequest, response: OperadoraResponse,
                         user_id: Optional[str] = None, user_name: Optional[str] = None,
                         extra_details: Optional[str] = None):

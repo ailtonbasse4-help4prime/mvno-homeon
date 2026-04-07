@@ -1828,8 +1828,14 @@ async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
     await require_admin(request)
     new_key = data.api_key.strip()
     new_env = data.environment.strip()
-    if not new_key:
-        raise HTTPException(status_code=400, detail="Chave API nao pode ser vazia")
+    if not new_key or len(new_key) < 20:
+        raise HTTPException(status_code=400, detail="Chave API invalida. Deve ter pelo menos 20 caracteres.")
+    if new_env == "production" and not (new_key.startswith("$aact_prod_") or new_key.startswith("aact_prod_")):
+        raise HTTPException(status_code=400, detail="Chave de producao deve comecar com $aact_prod_")
+
+    # Sanitize key - ensure $ prefix
+    if not new_key.startswith("$") and (new_key.startswith("aact_") or new_key.startswith("aach_")):
+        new_key = "$" + new_key
 
     # Update .env file
     env_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -3385,8 +3391,9 @@ async def startup_event():
     await db.ativacoes_selfservice.create_index([("iccid", 1)])
     await seed_admin()
     await seed_sample_data()
-    # Load Asaas config from DB (survives restarts)
+    # Load configs from DB (survives restarts/redeploys)
     await asaas_service.load_config_from_db(db)
+    await operadora_service.load_config_from_db(db)
     logger.info("Application started successfully")
 
 app.include_router(api_router)

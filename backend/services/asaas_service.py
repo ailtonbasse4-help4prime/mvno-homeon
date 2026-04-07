@@ -1,6 +1,7 @@
 import os
 import logging
 import httpx
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,10 @@ class AsaasService:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_key) and len(self.api_key) > 10
+
+    def is_production(self) -> bool:
+        return self.environment == "production" and self.api_key.startswith("$aact_prod_")
 
     async def load_config_from_db(self, db):
         """Carrega chave Asaas do MongoDB (fonte primaria). Chamado no startup."""
@@ -33,18 +37,25 @@ class AsaasService:
                 stored_key = config["api_key"]
                 if stored_key and not stored_key.startswith("$") and (stored_key.startswith("aact_") or stored_key.startswith("aach_")):
                     stored_key = "$" + stored_key
+                # MongoDB key takes priority over .env
                 self.api_key = stored_key
                 self.environment = config.get("environment", self.environment)
                 self.base_url = ASAAS_PRODUCTION_URL if self.environment == "production" else ASAAS_SANDBOX_URL
-                logger.info(f"Asaas config loaded from DB: env={self.environment}, key_len={len(self.api_key)}")
+                logger.info(f"Asaas config loaded from DB: env={self.environment}, key_len={len(self.api_key)}, production={self.is_production()}")
             elif self.api_key:
+                # .env has key but DB doesn't — migrate immediately
                 await self.save_config_to_db(db)
-                logger.info("Asaas config migrated from .env to DB")
+                logger.info(f"Asaas config migrated from .env to DB: env={self.environment}, key_len={len(self.api_key)}")
+            else:
+                logger.warning("ASAAS NAO CONFIGURADO: nenhuma chave encontrada no MongoDB nem no .env")
         except Exception as e:
-            logger.warning(f"Failed to load Asaas config from DB: {e}")
+            logger.error(f"CRITICAL: Failed to load Asaas config from DB: {e}")
 
     async def save_config_to_db(self, db):
         """Persiste chave Asaas no MongoDB para sobreviver a restarts."""
+        if not self.api_key or len(self.api_key) < 10:
+            logger.warning("Tentativa de salvar chave Asaas vazia ou invalida no DB — ignorada")
+            return False
         try:
             await db.system_config.update_one(
                 {"key": "asaas_config"},
@@ -52,11 +63,15 @@ class AsaasService:
                     "key": "asaas_config",
                     "api_key": self.api_key,
                     "environment": self.environment,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 }},
                 upsert=True,
             )
+            logger.info(f"Asaas config saved to DB: env={self.environment}, key_len={len(self.api_key)}")
+            return True
         except Exception as e:
-            logger.warning(f"Failed to save Asaas config to DB: {e}")
+            logger.error(f"CRITICAL: Failed to save Asaas config to DB: {e}")
+            return False
         return bool(self.api_key)
 
     def _headers(self) -> dict:
