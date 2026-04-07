@@ -4,12 +4,10 @@ import { useAuth } from '../../context/AuthContext';
 import { Sidebar } from './Sidebar';
 import { Toaster } from '../ui/sonner';
 import { Menu } from 'lucide-react';
-import { PageTransition } from '../PageTransition';
 
 export function MainLayout() {
   const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const location = useLocation();
 
   if (loading) {
     return (
@@ -47,9 +45,7 @@ export function MainLayout() {
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="main-content">
-        <PageTransition key={location.pathname}>
-          <Outlet />
-        </PageTransition>
+        <Outlet />
       </main>
       <Toaster position="top-right" />
     </div>

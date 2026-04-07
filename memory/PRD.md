@@ -56,6 +56,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Fix Enter no campo CEP nao submete mais o formulario
 - [x] FIX DEFINITIVO Asaas API Key: leitura raw do .env (imune a corrupcao por $ do shell/dotenv), validacao robusta, load_dotenv(interpolate=False), aspas simples, endpoint de diagnostico
 - [x] Botao "Diagnostico da Conexao" na tela de Cobrancas > API Asaas
+- [x] FIX navegacao travando: removido PageTransition (framer-motion) que causava "Maximum update depth exceeded" ao navegar entre paginas
 
 ## Backlog
 
