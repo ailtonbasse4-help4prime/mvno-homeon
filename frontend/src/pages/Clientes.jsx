@@ -275,7 +275,7 @@ export function Clientes() {
           <DialogHeader>
             <DialogTitle className="text-white">{editingCliente ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }} className="space-y-4">
             {/* Dados Pessoais */}
             <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Dados Pessoais</h3>
