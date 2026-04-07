@@ -185,17 +185,17 @@ export function Linhas() {
 
       {/* Table */}
       <div className="dashboard-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table" data-testid="linhas-table">
-            <thead>
-              <tr>
-                <th>Numero</th>
-                <th>Cliente</th>
-                <th>ICCID</th>
-                <th>Plano</th>
-                <th>Oferta</th>
-                <th>Status</th>
-                <th className="text-right">Acoes</th>
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
+          <table className="data-table w-full table-fixed" data-testid="linhas-table">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
+                <th className="text-blue-300 w-[15%]">Numero</th>
+                <th className="text-blue-300 w-[20%]">Cliente</th>
+                <th className="text-blue-300 w-[18%]">ICCID</th>
+                <th className="text-blue-300 w-[14%]">Plano</th>
+                <th className="text-blue-300 w-[14%]">Oferta</th>
+                <th className="text-blue-300 w-[9%]">Status</th>
+                <th className="text-blue-300 text-right w-[10%]">Acoes</th>
               </tr>
             </thead>
             <tbody>

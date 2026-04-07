@@ -161,18 +161,18 @@ export function AtivacoesSelfService() {
           <p>Nenhuma ativacao self-service encontrada</p>
         </div>
       ) : (
-        <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <table className="data-table min-w-[700px] w-full">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>ICCID</th>
-                <th>Plano</th>
-                <th>Valor</th>
-                <th>Tipo</th>
-                <th>Status</th>
-                <th>Data</th>
-                <th>Acoes</th>
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] -mx-4 sm:mx-0">
+          <table className="data-table min-w-[700px] w-full table-fixed">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
+                <th className="text-blue-300 w-[16%]">Cliente</th>
+                <th className="text-blue-300 w-[14%]">ICCID</th>
+                <th className="text-blue-300 w-[12%]">Plano</th>
+                <th className="text-blue-300 w-[9%]">Valor</th>
+                <th className="text-blue-300 w-[10%]">Tipo</th>
+                <th className="text-blue-300 w-[10%]">Status</th>
+                <th className="text-blue-300 w-[12%]">Data</th>
+                <th className="text-blue-300 w-[17%]">Acoes</th>
               </tr>
             </thead>
             <tbody>

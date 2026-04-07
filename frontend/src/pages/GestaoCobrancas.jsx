@@ -438,16 +438,16 @@ export function GestaoCobrancas() {
       </div>
 
       {/* Tabela */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" data-testid="cobrancas-table">
-          <thead>
-            <tr className="border-b border-zinc-800 text-zinc-400 text-left">
-              <th className="p-3">Cliente</th>
-              <th className="p-3 hidden sm:table-cell">Tipo</th>
-              <th className="p-3">Valor</th>
-              <th className="p-3 hidden md:table-cell">Vencimento</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Acoes</th>
+      <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-340px)]">
+        <table className="w-full text-sm table-fixed" data-testid="cobrancas-table">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50 text-left">
+              <th className="p-3 text-blue-300 w-[22%]">Cliente</th>
+              <th className="p-3 text-blue-300 hidden sm:table-cell w-[10%]">Tipo</th>
+              <th className="p-3 text-blue-300 w-[12%]">Valor</th>
+              <th className="p-3 text-blue-300 hidden md:table-cell w-[14%]">Vencimento</th>
+              <th className="p-3 text-blue-300 w-[12%]">Status</th>
+              <th className="p-3 text-blue-300 w-[30%]">Acoes</th>
             </tr>
           </thead>
           <tbody>

@@ -165,20 +165,20 @@ export function Assinaturas() {
 
       {/* Table */}
       <div className="dashboard-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table" data-testid="assinaturas-table">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Linha</th>
-                <th>Oferta</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Ciclo</th>
-                <th>Proximo Venc.</th>
-                <th>Status</th>
-                <th>Asaas ID</th>
-                {isAdmin && <th className="text-right">Acoes</th>}
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
+          <table className="data-table w-full table-fixed" data-testid="assinaturas-table">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
+                <th className="text-blue-300 w-[13%]">Cliente</th>
+                <th className="text-blue-300 w-[10%]">Linha</th>
+                <th className="text-blue-300 w-[12%]">Oferta</th>
+                <th className="text-blue-300 w-[8%]">Tipo</th>
+                <th className="text-blue-300 w-[8%]">Valor</th>
+                <th className="text-blue-300 w-[8%]">Ciclo</th>
+                <th className="text-blue-300 w-[11%]">Proximo Venc.</th>
+                <th className="text-blue-300 w-[9%]">Status</th>
+                <th className="text-blue-300 w-[13%]">Asaas ID</th>
+                {isAdmin && <th className="text-blue-300 text-right w-[8%]">Acoes</th>}
               </tr>
             </thead>
             <tbody>
