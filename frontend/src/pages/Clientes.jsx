@@ -161,6 +161,25 @@ export function Clientes() {
 
   const f = (field, val) => setFormData(prev => ({ ...prev, [field]: val }));
 
+  const handleCepLookup = async (rawCep) => {
+    const cleaned = rawCep.replace(/\D/g, '').slice(0, 8);
+    f('cep', cleaned);
+    if (cleaned.length === 8) {
+      try {
+        const res = await axios.get(`https://viacep.com.br/ws/${cleaned}/json/`);
+        if (res.data && !res.data.erro) {
+          setFormData(prev => ({
+            ...prev,
+            endereco: res.data.logradouro || prev.endereco,
+            bairro: res.data.bairro || prev.bairro,
+            cidade: res.data.localidade || prev.cidade,
+            estado: res.data.uf || prev.estado,
+          }));
+        }
+      } catch {} // eslint-disable-line no-empty
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>;
   }
@@ -310,7 +329,7 @@ export function Clientes() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-zinc-400 text-xs">CEP</Label>
-                  <Input value={formData.cep} onChange={(e) => f('cep', e.target.value.replace(/\D/g, '').slice(0, 8))} className="form-input font-mono" placeholder="00000000" maxLength={8} data-testid="cliente-cep-input" />
+                  <Input value={formData.cep} onChange={(e) => handleCepLookup(e.target.value)} className="form-input font-mono" placeholder="00000000" maxLength={8} data-testid="cliente-cep-input" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-zinc-400 text-xs">Numero</Label>

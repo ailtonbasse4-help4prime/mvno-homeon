@@ -177,10 +177,6 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
 
     async def ativar_chip(self, iccid: str, payload: dict) -> Tuple[OperadoraRequest, OperadoraResponse]:
         import asyncio
-
-    async def listar_estoque_completo(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
-        return await self.listar_estoque()
-
         await asyncio.sleep(random.uniform(0.3, 0.8))
         req = OperadoraRequest(endpoint=f"/simcard/{iccid}/ativar", method="POST", payload=payload)
         scenario = random.choices(["sucesso", "pendente", "erro"], weights=[70, 20, 10], k=1)[0]
@@ -206,6 +202,9 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
                 error_code=ErrorCode.SERVER_ERROR, response_time_ms=rt, http_status_code=500,
             )
         return req, resp
+
+    async def listar_estoque_completo(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        return await self.listar_estoque()
 
     async def consultar_linha(self, iccid: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
         import asyncio
