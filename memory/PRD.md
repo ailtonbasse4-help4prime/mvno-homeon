@@ -49,6 +49,11 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Campo paid_at salvo quando pagamento confirmado
 - [x] Campos asaas_bankslip_url e paid_at no retorno do portal
 
+### Correcoes Criticas (07/04/2026)
+- [x] Fix MockTaTelecomAdapter.ativar_chip (corrupcao do agente anterior corrigida)
+- [x] Busca automatica de CEP via ViaCEP no formulario de Clientes (Clientes.jsx)
+- [x] Paginacao de estoque Ta Telecom validada (525 chips sincronizados vs. 50 anterior)
+
 ## Backlog
 
 ### P1 - Alta Prioridade
@@ -59,4 +64,4 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [ ] Historico de ativacoes
 
 ### Refatoracao
-- [ ] Desmembrar server.py (3000+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (3400+ linhas) em roteadores separados
