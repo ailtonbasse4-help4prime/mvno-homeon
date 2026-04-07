@@ -177,6 +177,10 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
 
     async def ativar_chip(self, iccid: str, payload: dict) -> Tuple[OperadoraRequest, OperadoraResponse]:
         import asyncio
+
+    async def listar_estoque_completo(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        return await self.listar_estoque()
+
         await asyncio.sleep(random.uniform(0.3, 0.8))
         req = OperadoraRequest(endpoint=f"/simcard/{iccid}/ativar", method="POST", payload=payload)
         scenario = random.choices(["sucesso", "pendente", "erro"], weights=[70, 20, 10], k=1)[0]
@@ -401,8 +405,50 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
     async def listar_planos(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("GET", "/planos")
 
-    async def listar_estoque(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
-        return await self._request("GET", "/estoque/listar")
+    async def listar_estoque(self, status: int = None) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        endpoint = "/estoque/listar"
+        if status is not None:
+            endpoint = f"/estoque/listar?status={status}"
+        return await self._request("GET", endpoint)
+
+    async def listar_estoque_completo(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        """Busca estoque com todos os status para garantir completude."""
+        all_items = []
+        # Status: 1=DISPONÍVEL, 2=CANCELADO, 3=EM USO
+        for st in [1, 3]:  # Disponivel + Em Uso (pula Cancelado)
+            try:
+                req, resp = await self.listar_estoque(status=st)
+                if resp.success and resp.data:
+                    items = resp.data.get("results", resp.data.get("items", resp.data.get("data", [])))
+                    if isinstance(items, dict):
+                        items = items.get("results", items.get("items", []))
+                    if isinstance(items, list):
+                        all_items.extend(items)
+            except Exception as e:
+                logger.warning(f"Erro ao buscar estoque status={st}: {e}")
+        # Also try without filter as fallback
+        try:
+            req, resp = await self._request("GET", "/estoque/listar")
+            if resp.success and resp.data:
+                items = resp.data.get("results", resp.data.get("items", resp.data.get("data", [])))
+                if isinstance(items, dict):
+                    items = items.get("results", items.get("items", []))
+                if isinstance(items, list):
+                    # Merge by iccid to avoid duplicates
+                    existing_iccids = {str(i.get("sim_card") or i.get("iccid")) for i in all_items}
+                    for item in items:
+                        iccid = str(item.get("sim_card") or item.get("iccid") or "")
+                        if iccid and iccid not in existing_iccids:
+                            all_items.append(item)
+        except Exception:
+            pass
+        final_resp = OperadoraResponse(
+            success=True, status="ok",
+            message=f"Estoque completo: {len(all_items)} chips",
+            data={"results": all_items},
+            response_time_ms=0, http_status_code=200,
+        )
+        return req, final_resp
 
     async def ativar_chip(self, iccid: str, payload: dict) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("POST", f"/simcard/{iccid}/ativar", payload)
@@ -485,6 +531,15 @@ class OperadoraService:
     async def listar_estoque(self, db=None, user_id=None, user_name=None) -> OperadoraResponse:
         req, resp = await self.adapter.listar_estoque()
         await self._save_log(db, "api_call", req, resp, user_id, user_name, "Sincronizacao de estoque da operadora")
+        return resp
+
+    # ---------- Listar Estoque Completo (todos os status) ----------
+    async def listar_estoque_completo(self, db=None, user_id=None, user_name=None) -> OperadoraResponse:
+        if hasattr(self.adapter, 'listar_estoque_completo'):
+            req, resp = await self.adapter.listar_estoque_completo()
+        else:
+            req, resp = await self.adapter.listar_estoque()
+        await self._save_log(db, "api_call", req, resp, user_id, user_name, "Sincronizacao completa de estoque (todos status)")
         return resp
 
     # ---------- Ativar Chip ----------

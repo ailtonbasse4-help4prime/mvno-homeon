@@ -1493,7 +1493,7 @@ async def sync_plans_from_operator(request: Request):
 @api_router.post("/operadora/sincronizar-estoque")
 async def sync_stock_from_operator(request: Request):
     user = await require_admin(request)
-    result = await operadora_service.listar_estoque(db=db, user_id=user["id"], user_name=user["name"])
+    result = await operadora_service.listar_estoque_completo(db=db, user_id=user["id"], user_name=user["name"])
     if not result.success:
         raise HTTPException(status_code=502, detail=f"Erro ao buscar estoque da operadora: {result.message}")
     # Ta Telecom estoque format: {codigo_status_tip, results: [{data, sim_card, status}]}
@@ -1545,8 +1545,8 @@ async def sync_stock_from_operator(request: Request):
 @api_router.post("/operadora/sincronizar-clientes")
 async def sync_clients_from_operator(request: Request):
     user = await require_admin(request)
-    # 1. Get stock from Tá Telecom
-    result = await operadora_service.listar_estoque(db=db, user_id=user["id"], user_name=user["name"])
+    # 1. Get stock from Tá Telecom (all statuses)
+    result = await operadora_service.listar_estoque_completo(db=db, user_id=user["id"], user_name=user["name"])
     if not result.success:
         raise HTTPException(status_code=502, detail=f"Erro ao buscar estoque: {result.message}")
     items = result.data.get("results", result.data.get("items", []))
