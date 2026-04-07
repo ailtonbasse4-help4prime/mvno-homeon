@@ -406,49 +406,68 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
         return await self._request("GET", "/planos")
 
     async def listar_estoque(self, status: int = None) -> Tuple[OperadoraRequest, OperadoraResponse]:
-        endpoint = "/estoque/listar"
+        params = "?per_page=500"
         if status is not None:
-            endpoint = f"/estoque/listar?status={status}"
-        return await self._request("GET", endpoint)
+            params += f"&status={status}"
+        return await self._request("GET", f"/estoque/listar{params}")
 
     async def listar_estoque_completo(self) -> Tuple[OperadoraRequest, OperadoraResponse]:
-        """Busca estoque com todos os status para garantir completude."""
+        """Busca estoque completo com paginacao automatica e todos os status."""
         all_items = []
-        # Status: 1=DISPONÍVEL, 2=CANCELADO, 3=EM USO
-        for st in [1, 3]:  # Disponivel + Em Uso (pula Cancelado)
-            try:
-                req, resp = await self.listar_estoque(status=st)
-                if resp.success and resp.data:
+        # Buscar com cada status relevante: 1=DISPONÍVEL, 3=EM USO
+        for st in [1, 3]:
+            page = 1
+            while True:
+                try:
+                    req, resp = await self._request("GET", f"/estoque/listar?status={st}&page={page}&per_page=500")
+                    if not resp.success or not resp.data:
+                        break
                     items = resp.data.get("results", resp.data.get("items", resp.data.get("data", [])))
                     if isinstance(items, dict):
                         items = items.get("results", items.get("items", []))
-                    if isinstance(items, list):
-                        all_items.extend(items)
-            except Exception as e:
-                logger.warning(f"Erro ao buscar estoque status={st}: {e}")
-        # Also try without filter as fallback
-        try:
-            req, resp = await self._request("GET", "/estoque/listar")
-            if resp.success and resp.data:
+                    if not isinstance(items, list) or len(items) == 0:
+                        break
+                    all_items.extend(items)
+                    logger.info(f"Estoque status={st} page={page}: {len(items)} chips")
+                    # Se retornou menos que per_page, é a última página
+                    if len(items) < 500:
+                        break
+                    page += 1
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar estoque status={st} page={page}: {e}")
+                    break
+        # Fallback: buscar sem filtro de status (pode pegar os que faltam)
+        page = 1
+        existing_iccids = {str(i.get("sim_card") or i.get("iccid") or "") for i in all_items}
+        while True:
+            try:
+                req, resp = await self._request("GET", f"/estoque/listar?page={page}&per_page=500")
+                if not resp.success or not resp.data:
+                    break
                 items = resp.data.get("results", resp.data.get("items", resp.data.get("data", [])))
                 if isinstance(items, dict):
                     items = items.get("results", items.get("items", []))
-                if isinstance(items, list):
-                    # Merge by iccid to avoid duplicates
-                    existing_iccids = {str(i.get("sim_card") or i.get("iccid")) for i in all_items}
-                    for item in items:
-                        iccid = str(item.get("sim_card") or item.get("iccid") or "")
-                        if iccid and iccid not in existing_iccids:
-                            all_items.append(item)
-        except Exception:
-            pass
+                if not isinstance(items, list) or len(items) == 0:
+                    break
+                for item in items:
+                    iccid = str(item.get("sim_card") or item.get("iccid") or "")
+                    if iccid and iccid not in existing_iccids:
+                        all_items.append(item)
+                        existing_iccids.add(iccid)
+                if len(items) < 500:
+                    break
+                page += 1
+            except Exception:
+                break
+
+        logger.info(f"Estoque completo: {len(all_items)} chips total")
         final_resp = OperadoraResponse(
             success=True, status="ok",
             message=f"Estoque completo: {len(all_items)} chips",
             data={"results": all_items},
             response_time_ms=0, http_status_code=200,
         )
-        return req, final_resp
+        return req if 'req' in dir() else OperadoraRequest(endpoint="/estoque/listar", method="GET", payload={}), final_resp
 
     async def ativar_chip(self, iccid: str, payload: dict) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("POST", f"/simcard/{iccid}/ativar", payload)
