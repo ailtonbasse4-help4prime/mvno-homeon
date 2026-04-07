@@ -19,7 +19,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
 const emptyForm = {
-  nome: '', tipo_pessoa: 'pf', documento: '', telefone: '',
+  nome: '', tipo_pessoa: 'pf', documento: '', telefone: '', email: '',
   data_nascimento: '', cep: '', endereco: '', numero_endereco: '',
   bairro: '', cidade: '', estado: '', city_code: '', complemento: '',
   status: 'ativo',
@@ -69,6 +69,7 @@ export function Clientes() {
       setFormData({
         nome: cliente.nome, tipo_pessoa: cliente.tipo_pessoa || 'pf',
         documento: cliente.documento, telefone: cliente.telefone,
+        email: cliente.email || '',
         data_nascimento: cliente.data_nascimento || '',
         cep: cliente.cep || '', endereco: cliente.endereco || '',
         numero_endereco: cliente.numero_endereco || '',
@@ -316,6 +317,10 @@ export function Clientes() {
                   <Label className="text-zinc-400 text-xs">Telefone</Label>
                   <Input value={formData.telefone} onChange={(e) => f('telefone', formatPhone(e.target.value))} className="form-input font-mono" placeholder="(00) 00000-0000" maxLength={15} required data-testid="cliente-telefone-input" />
                 </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-zinc-400 text-xs">Email</Label>
+                <Input type="email" value={formData.email} onChange={(e) => f('email', e.target.value)} className="form-input" placeholder="cliente@email.com" data-testid="cliente-email-input" />
               </div>
               <div className="space-y-1">
                 <Label className="text-zinc-400 text-xs">Data de Nascimento</Label>

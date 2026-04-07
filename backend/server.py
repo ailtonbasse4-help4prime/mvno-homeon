@@ -172,6 +172,7 @@ class ClientCreate(BaseModel):
     tipo_pessoa: TipoPessoa = TipoPessoa.pf
     documento: str  # CPF or CNPJ
     telefone: str
+    email: Optional[str] = None
     data_nascimento: Optional[str] = None
     cep: Optional[str] = None
     endereco: Optional[str] = None
@@ -189,6 +190,7 @@ class ClientResponse(BaseModel):
     tipo_pessoa: str
     documento: str
     telefone: str
+    email: Optional[str] = None
     data_nascimento: Optional[str] = None
     cep: Optional[str] = None
     endereco: Optional[str] = None
@@ -472,6 +474,7 @@ async def build_client_response(c: dict) -> ClientResponse:
         tipo_pessoa=c.get("tipo_pessoa", "pf"),
         documento=c.get("documento", c.get("cpf", "")),
         telefone=c.get("telefone", ""),
+        email=c.get("email"),
         data_nascimento=c.get("data_nascimento"),
         cep=c.get("cep"), endereco=c.get("endereco"),
         numero_endereco=c.get("numero_endereco"),
@@ -734,6 +737,7 @@ async def create_client(data: ClientCreate, request: Request):
     client_doc = {
         "nome": data.nome, "tipo_pessoa": data.tipo_pessoa.value,
         "documento": doc_clean, "telefone": data.telefone,
+        "email": data.email,
         "data_nascimento": data.data_nascimento,
         "cep": re.sub(r'\D', '', data.cep) if data.cep else None,
         "endereco": data.endereco, "numero_endereco": data.numero_endereco,
@@ -774,6 +778,7 @@ async def update_client(client_id: str, data: ClientCreate, request: Request):
     update_data = {
         "nome": data.nome, "tipo_pessoa": data.tipo_pessoa.value,
         "documento": doc_clean, "telefone": data.telefone,
+        "email": data.email,
         "data_nascimento": data.data_nascimento,
         "cep": re.sub(r'\D', '', data.cep) if data.cep else None,
         "endereco": data.endereco, "numero_endereco": data.numero_endereco,
