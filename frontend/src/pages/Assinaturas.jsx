@@ -55,7 +55,7 @@ export function Assinaturas() {
   const [clientes, setClientes] = useState([]);
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [assinaturaToCancel, setAssinaturaToCancel] = useState(null);

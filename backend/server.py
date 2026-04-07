@@ -2304,7 +2304,7 @@ async def list_assinaturas(request: Request, cliente_id: Optional[str] = None,
     query = {}
     if cliente_id:
         query["cliente_id"] = cliente_id
-    if status:
+    if status and status not in ("all", "todos"):
         query["status"] = status
     docs = await db.assinaturas.find(query).sort("created_at", -1).limit(limit).to_list(limit)
     return [await _build_assinatura_response(d) for d in docs]
