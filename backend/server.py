@@ -1222,8 +1222,12 @@ async def activate_line(data: ActivationRequest, request: Request):
     else:
         status_str = str(result.status)
     # Mapear "ok" para "ativo" (Ta Telecom retorna "ok" quando sucesso)
+    # Para portabilidade, manter como pendente ate conclusao
     if result.success and status_str == "ok":
-        status_str = "ativo"
+        if data.portability:
+            status_str = "portabilidade_em_andamento"
+        else:
+            status_str = "ativo"
 
     msg = result.message
     if isinstance(msg, list):
@@ -1231,7 +1235,10 @@ async def activate_line(data: ActivationRequest, request: Request):
     msg = str(msg) if msg else "Resultado da ativacao"
 
     if result.success:
-        chip_status = ChipStatus.ativado.value if status_str == "ativo" else ChipStatus.reservado.value
+        if status_str in ("ativo",):
+            chip_status = ChipStatus.ativado.value
+        else:
+            chip_status = ChipStatus.reservado.value
         msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
 
         await db.chips.update_one({"_id": ObjectId(data.chip_id)}, {"$set": {
@@ -3198,6 +3205,11 @@ async def public_check_activation_status(activation_id: str):
                     }})
                     doc["status"] = "ativo"
                     doc["msisdn"] = msisdn
+                    # Atualizar chip e linha para ativado
+                    if doc.get("chip_id"):
+                        await db.chips.update_one({"_id": ObjectId(doc["chip_id"])}, {"$set": {"status": "ativado", "msisdn": msisdn}})
+                    if doc.get("chip_id"):
+                        await db.linhas.update_one({"chip_id": doc["chip_id"]}, {"$set": {"status": "ativo", "msisdn": msisdn, "numero": msisdn or "Pendente"}})
         except Exception as e:
             logger.warning(f"Erro ao consultar portabilidade self-service: {e}")
 
@@ -3314,7 +3326,12 @@ async def _trigger_selfservice_activation(doc: dict):
 
         if result.success:
             status_str = result.status if isinstance(result.status, str) else result.status.value
-            chip_status = ChipStatus.ativado.value if status_str == "ativo" else ChipStatus.reservado.value
+            is_portability = doc.get("portability", False)
+            # Para portabilidade, o chip fica "reservado" ate a conclusao; para ativacao normal, se a API retornou sucesso, considerar ativado
+            if status_str == "ativo" or (not is_portability and result.success):
+                chip_status = ChipStatus.ativado.value
+            else:
+                chip_status = ChipStatus.reservado.value
             msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
 
             await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
