@@ -28,6 +28,7 @@ export function Ativacoes() {
   const [selectedCliente, setSelectedCliente] = useState('');
   const [selectedChip, setSelectedChip] = useState('');
   const [selectedChipData, setSelectedChipData] = useState(null);
+  const [ddd, setDdd] = useState('');
   const [portability, setPortability] = useState(false);
   const [portDdd, setPortDdd] = useState('');
   const [portNumber, setPortNumber] = useState('');
@@ -82,6 +83,7 @@ export function Ativacoes() {
       const payload = {
         cliente_id: selectedCliente,
         chip_id: selectedChip,
+        ddd: ddd || undefined,
         portability,
       };
       if (portability) {
@@ -252,6 +254,24 @@ export function Ativacoes() {
                 </div>
               </div>
             )}
+
+            {/* DDD da nova linha */}
+            <div className="space-y-1">
+              <Label className="text-zinc-400 text-xs flex items-center gap-1">DDD da Linha</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={ddd}
+                  onChange={(e) => setDdd(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                  placeholder="83"
+                  className="form-input font-mono w-24"
+                  data-testid="ddd-input"
+                />
+                <span className="text-xs text-zinc-500">Ex: 11 SP, 21 RJ, 83 PB</span>
+              </div>
+            </div>
 
             {/* Portabilidade toggle */}
             <div className="space-y-3">

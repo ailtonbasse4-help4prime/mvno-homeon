@@ -56,7 +56,7 @@ export default function AtivarSelfService() {
     nome: '', documento: '', telefone: '', data_nascimento: '',
     cep: '', endereco: '', numero_endereco: '', bairro: '',
     cidade: '', estado: '', email: '', billing_type: 'PIX',
-    portability: false, port_ddd: '', port_number: '',
+    ddd: '', portability: false, port_ddd: '', port_number: '',
   });
 
   // Activation result
@@ -170,6 +170,7 @@ export default function AtivarSelfService() {
         estado: form.estado,
         email: form.email || undefined,
         billing_type: form.billing_type,
+        ddd: form.ddd || undefined,
         portability: form.portability,
       };
       if (form.portability) {
@@ -419,6 +420,24 @@ export default function AtivarSelfService() {
                   <Input value={form.cidade} onChange={e => updateForm('cidade', e.target.value)}
                     className="form-input" data-testid="cidade-input" />
                 </div>
+              </div>
+            </div>
+
+            {/* DDD da nova linha */}
+            <div className="space-y-1 mt-4">
+              <Label className="text-zinc-400 text-xs">DDD da Linha</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={form.ddd}
+                  onChange={(e) => updateForm('ddd', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                  placeholder="83"
+                  className="form-input font-mono w-20"
+                  data-testid="selfservice-ddd-input"
+                />
+                <span className="text-xs text-zinc-500">Ex: 11 SP, 21 RJ, 83 PB</span>
               </div>
             </div>
 

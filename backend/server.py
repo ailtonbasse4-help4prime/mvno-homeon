@@ -293,6 +293,7 @@ class LineResponse(BaseModel):
 class ActivationRequest(BaseModel):
     cliente_id: str
     chip_id: str
+    ddd: Optional[str] = None
     portability: bool = False
     port_ddd: Optional[str] = None
     port_number: Optional[str] = None
@@ -1160,7 +1161,7 @@ async def activate_line(data: ActivationRequest, request: Request):
     # Build activation payload for Ta Telecom
     tipo_pessoa = cliente.get("tipo_pessoa", "pf")
     telefone_clean = re.sub(r'\D', '', cliente.get("telefone", ""))
-    ddd = telefone_clean[:2] if len(telefone_clean) >= 2 else "11"
+    ddd = data.ddd if data.ddd and len(data.ddd) == 2 else (telefone_clean[:2] if len(telefone_clean) >= 2 else "11")
 
     activation_payload = {
         "person_type": tipo_pessoa,
@@ -2822,6 +2823,7 @@ class SelfServiceActivationRequest(BaseModel):
     portability: bool = False
     port_ddd: Optional[str] = None
     port_number: Optional[str] = None
+    ddd: Optional[str] = None
 
 class SelfServiceActivationResponse(BaseModel):
     id: str
@@ -3004,6 +3006,7 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
         "portability": data.portability,
         "port_ddd": data.port_ddd if data.portability else None,
         "port_number": data.port_number if data.portability else None,
+        "ddd": data.ddd,
         "created_at": datetime.now(timezone.utc),
     }
 
@@ -3152,7 +3155,8 @@ async def _trigger_selfservice_activation(doc: dict):
             return
 
         telefone_clean = re.sub(r'\D', '', cliente.get("telefone", ""))
-        ddd = telefone_clean[:2] if len(telefone_clean) >= 2 else "11"
+        chosen_ddd = doc.get("ddd")
+        ddd = chosen_ddd if chosen_ddd and len(chosen_ddd) == 2 else (telefone_clean[:2] if len(telefone_clean) >= 2 else "11")
 
         activation_payload = {
             "person_type": cliente.get("tipo_pessoa", "pf"),
