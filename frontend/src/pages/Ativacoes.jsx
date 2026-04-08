@@ -4,13 +4,7 @@ import { safeArray } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { IccidInput } from '../components/IccidInput';
 import { toast } from 'sonner';
 import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package, ExternalLink, ArrowRightLeft } from 'lucide-react';
@@ -185,24 +179,19 @@ export function Ativacoes() {
             {/* Cliente */}
             <div className="space-y-2">
               <Label className="text-zinc-300">1. Selecione o Cliente</Label>
-              <Select value={selectedCliente} onValueChange={setSelectedCliente}>
-                <SelectTrigger className="form-input" data-testid="select-cliente">
-                  <SelectValue placeholder="Escolha um cliente" />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
-                  {clientes.length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      Nenhum cliente ativo disponivel
-                    </SelectItem>
-                  ) : (
-                    clientes.map((cliente) => (
-                      <SelectItem key={cliente.id} value={cliente.id}>
-                        {cliente.nome} - CPF: {cliente.cpf}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={selectedCliente}
+                onValueChange={setSelectedCliente}
+                placeholder="Escolha um cliente"
+                searchPlaceholder="Buscar por nome, CPF ou telefone..."
+                testId="select-cliente"
+                disabled={activating}
+                options={clientes.map(c => ({
+                  value: c.id,
+                  label: c.nome,
+                  sublabel: `${c.documento || c.cpf || ''} | ${c.telefone || ''}`,
+                }))}
+              />
             </div>
 
             {/* ICCID com input inteligente */}

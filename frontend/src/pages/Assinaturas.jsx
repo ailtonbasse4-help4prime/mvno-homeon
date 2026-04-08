@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../components/ui/dialog';
+import { SearchableSelect } from '../components/SearchableSelect';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
@@ -235,14 +236,18 @@ export function Assinaturas() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label className="text-zinc-300">Cliente</Label>
-              <Select value={formData.cliente_id} onValueChange={(v) => setFormData({ ...formData, cliente_id: v, linha_id: '' })}>
-                <SelectTrigger className="form-input" data-testid="assinatura-cliente-select"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
-                  {clientes.filter(c => c.status === 'ativo').map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.nome} - {c.documento}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={formData.cliente_id}
+                onValueChange={(v) => setFormData({ ...formData, cliente_id: v, linha_id: '' })}
+                placeholder="Selecione o cliente"
+                searchPlaceholder="Buscar por nome, CPF..."
+                testId="assinatura-cliente-select"
+                options={clientes.filter(c => c.status === 'ativo').map(c => ({
+                  value: c.id,
+                  label: c.nome,
+                  sublabel: c.documento || '',
+                }))}
+              />
             </div>
             {clienteLinhas.length > 0 && (
               <div className="space-y-2">

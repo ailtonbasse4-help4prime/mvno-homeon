@@ -677,7 +677,8 @@ async def list_clients(request: Request, search: Optional[str] = None):
             {"nome": {"$regex": search, "$options": "i"}},
             {"documento": {"$regex": search, "$options": "i"}},
             {"cpf": {"$regex": search, "$options": "i"}},
-            {"telefone": {"$regex": search, "$options": "i"}}
+            {"telefone": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
         ]}
     clients = await db.clientes.find(query).to_list(1000)
     # Pre-fetch all lines in bulk for performance
@@ -710,6 +711,7 @@ async def list_clients(request: Request, search: Optional[str] = None):
             tipo_pessoa=c.get("tipo_pessoa", "pf"),
             documento=c.get("documento", c.get("cpf", "")),
             telefone=c.get("telefone", ""),
+            email=c.get("email"),
             data_nascimento=c.get("data_nascimento"),
             cep=c.get("cep"), endereco=c.get("endereco"),
             numero_endereco=c.get("numero_endereco"),
