@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio, ArrowRightLeft } from 'lucide-react';
+import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio, ArrowRightLeft, RotateCcw } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -168,6 +168,8 @@ export function Chips() {
   };
 
   const [checkingPort, setCheckingPort] = useState(null);
+  const [resettingChip, setResettingChip] = useState(null);
+
   const handleVerificarPortabilidade = async (chip) => {
     setCheckingPort(chip.iccid);
     try {
@@ -183,6 +185,19 @@ export function Chips() {
       toast.error(error.response?.data?.detail || 'Erro ao verificar portabilidade');
     }
     setCheckingPort(null);
+  };
+
+  const handleResetarChip = async (chip) => {
+    if (!window.confirm(`Resetar chip ${chip.iccid} para Disponivel?\n\nIsso vai:\n- Remover vinculo com cliente\n- Cancelar ativacoes pendentes\n- Permitir nova ativacao\n\nContinuar?`)) return;
+    setResettingChip(chip.iccid);
+    try {
+      const res = await axios.post(`${API_URL}/api/chips/${chip.iccid}/resetar`, {}, { withCredentials: true });
+      toast.success(res.data.message);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao resetar chip');
+    }
+    setResettingChip(null);
   };
 
   const getStatusBadge = (status) => {
@@ -366,6 +381,18 @@ export function Chips() {
                               title="Verificar portabilidade na operadora"
                             >
                               <ArrowRightLeft className={`w-4 h-4 ${checkingPort === chip.iccid ? 'animate-spin' : ''}`} />
+                            </Button>
+                          )}
+                          {chip.status === 'reservado' && (
+                            <Button
+                              variant="ghost" size="sm"
+                              onClick={() => handleResetarChip(chip)}
+                              disabled={resettingChip === chip.iccid}
+                              className="text-red-400 hover:text-red-300"
+                              data-testid={`reset-chip-${chip.id}`}
+                              title="Resetar chip para Disponivel (permite nova ativacao)"
+                            >
+                              <RotateCcw className={`w-4 h-4 ${resettingChip === chip.iccid ? 'animate-spin' : ''}`} />
                             </Button>
                           )}
                         </div>

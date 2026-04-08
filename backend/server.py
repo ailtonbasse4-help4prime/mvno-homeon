@@ -1373,6 +1373,31 @@ async def verificar_portabilidade_chip(iccid: str, request: Request):
         "atualizado": bool(updates_chip or updates_linha),
     }
 
+@api_router.post("/chips/{iccid}/resetar")
+async def resetar_chip(iccid: str, request: Request):
+    """Reseta um chip de 'reservado' para 'disponivel', removendo vinculo com cliente e linha."""
+    user = await require_admin(request)
+    iccid_clean = re.sub(r'\D', '', iccid)
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip.get("status") == ChipStatus.ativado.value:
+        raise HTTPException(status_code=400, detail="Chip ativado nao pode ser resetado. Use bloqueio/desbloqueio.")
+    old_status = chip.get("status", "?")
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+        "status": ChipStatus.disponivel.value,
+        "cliente_id": None, "msisdn": None,
+    }})
+    # Remover linha vinculada
+    await db.linhas.delete_many({"chip_id": str(chip["_id"])})
+    # Cancelar ativacao selfservice pendente
+    await db.ativacoes_selfservice.update_many(
+        {"iccid": iccid_clean, "status": {"$in": ["ativando", "portabilidade_em_andamento", "pago"]}},
+        {"$set": {"status": "cancelado"}}
+    )
+    await create_log("cadastro", f"Chip {iccid_clean} resetado: {old_status} -> disponivel", user["id"], user["name"])
+    return {"message": f"Chip resetado com sucesso ({old_status} -> disponivel)", "iccid": iccid_clean}
+
 # ==================== LINES ROUTES ====================
 async def build_line_response(line: dict) -> LineResponse:
     cliente_nome, plano_nome, oferta_nome, franquia, plan_code, iccid, msisdn = None, None, None, None, None, None, None
