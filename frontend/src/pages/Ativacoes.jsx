@@ -117,13 +117,17 @@ export function Ativacoes() {
         toast.error(response.data.message);
       }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Erro ao ativar linha';
-      toast.error(typeof message === 'string' ? message : 'Erro ao ativar linha');
-      setActivationResult({
-        success: false,
-        status: 'erro',
-        message: typeof message === 'string' ? message : 'Erro ao ativar linha',
-      });
+      let message = 'Erro ao ativar linha';
+      const detail = error.response?.data?.detail;
+      if (typeof detail === 'string') {
+        message = detail;
+      } else if (Array.isArray(detail)) {
+        message = detail.map(d => d.msg || d.message || JSON.stringify(d)).join('; ');
+      } else if (detail?.msg) {
+        message = detail.msg;
+      }
+      toast.error(message);
+      setActivationResult({ success: false, status: 'erro', message });
     } finally {
       setActivating(false);
     }

@@ -352,34 +352,48 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
                     else:
                         wrapped = data
                     msg = wrapped.get("message", "OK") if isinstance(wrapped, dict) else "OK"
+                    if isinstance(msg, list):
+                        msg = "; ".join(str(m) for m in msg)
                     return req, OperadoraResponse(
-                        success=True, status="ok", message=msg,
+                        success=True, status="ok", message=str(msg),
                         data=wrapped, raw_response=r.text, response_time_ms=elapsed, http_status_code=r.status_code,
                     )
                 elif r.status_code in (401, 403):
                     err_data = data if isinstance(data, dict) else {"raw": data}
+                    msg = err_data.get("message", "Erro de autenticacao")
+                    if isinstance(msg, list):
+                        msg = "; ".join(str(m) for m in msg)
                     return req, OperadoraResponse(
-                        success=False, status=OperadoraStatus.ERRO, message=err_data.get("message", "Erro de autenticacao"),
+                        success=False, status=OperadoraStatus.ERRO, message=str(msg),
                         error_code=ErrorCode.AUTHENTICATION, raw_response=r.text, response_time_ms=elapsed, http_status_code=r.status_code,
                     )
                 elif r.status_code == 404:
                     err_data = data if isinstance(data, dict) else {"raw": data}
+                    msg = err_data.get("message", "Nao encontrado")
+                    if isinstance(msg, list):
+                        msg = "; ".join(str(m) for m in msg)
                     return req, OperadoraResponse(
-                        success=False, status=OperadoraStatus.ERRO, message=err_data.get("message", "Nao encontrado"),
+                        success=False, status=OperadoraStatus.ERRO, message=str(msg),
                         error_code=ErrorCode.NOT_FOUND, raw_response=r.text, response_time_ms=elapsed, http_status_code=r.status_code,
                     )
                 elif 400 <= r.status_code < 500:
                     err_data = data if isinstance(data, dict) else {"raw": data}
+                    msg = err_data.get("message", f"Erro de validacao ({r.status_code})")
+                    if isinstance(msg, list):
+                        msg = "; ".join(str(m) for m in msg)
                     return req, OperadoraResponse(
                         success=False, status=OperadoraStatus.ERRO,
-                        message=err_data.get("message", f"Erro de validacao ({r.status_code})"),
+                        message=str(msg),
                         data=err_data, error_code=ErrorCode.VALIDATION, raw_response=r.text, response_time_ms=elapsed, http_status_code=r.status_code,
                     )
                 else:
                     err_data = data if isinstance(data, dict) else {"raw": data}
+                    msg = err_data.get("message", f"Erro do servidor ({r.status_code})")
+                    if isinstance(msg, list):
+                        msg = "; ".join(str(m) for m in msg)
                     return req, OperadoraResponse(
                         success=False, status=OperadoraStatus.ERRO,
-                        message=err_data.get("message", f"Erro do servidor ({r.status_code})"),
+                        message=str(msg),
                         error_code=ErrorCode.SERVER_ERROR, raw_response=r.text, response_time_ms=elapsed, http_status_code=r.status_code,
                     )
         except httpx.TimeoutException:

@@ -1160,15 +1160,38 @@ async def activate_line(data: ActivationRequest, request: Request):
 
     # Build activation payload for Ta Telecom
     tipo_pessoa = cliente.get("tipo_pessoa", "pf")
+    # Ta Telecom espera 'F' (Fisica) ou 'J' (Juridica)
+    person_type_map = {"pf": "F", "pj": "J", "F": "F", "J": "J"}
+    person_type = person_type_map.get(tipo_pessoa, "F")
+
     telefone_clean = re.sub(r'\D', '', cliente.get("telefone", ""))
     ddd = data.ddd if data.ddd and len(data.ddd) == 2 else (telefone_clean[:2] if len(telefone_clean) >= 2 else "11")
 
+    # Converter data_nascimento para dd/mm/YYYY
+    raw_dob = cliente.get("data_nascimento", "")
+    dob_formatted = ""
+    if raw_dob:
+        try:
+            # Tenta YYYY-MM-DD (ISO)
+            if "-" in raw_dob and len(raw_dob) >= 10:
+                parts = raw_dob[:10].split("-")
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    dob_formatted = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                else:
+                    dob_formatted = raw_dob
+            elif "/" in raw_dob:
+                dob_formatted = raw_dob  # Ja esta em dd/mm/YYYY
+            else:
+                dob_formatted = raw_dob
+        except Exception:
+            dob_formatted = raw_dob
+
     activation_payload = {
-        "person_type": tipo_pessoa,
+        "person_type": person_type,
         "person_name": cliente["nome"],
         "document_number": clean_document(cliente.get("documento", "")),
         "phone_number": telefone_clean,
-        "date_of_birth": cliente.get("data_nascimento", ""),
+        "date_of_birth": dob_formatted,
         "type_of_street": "",
         "address": cliente.get("endereco", ""),
         "address_number": cliente.get("numero_endereco", ""),
@@ -1213,10 +1236,15 @@ async def activate_line(data: ActivationRequest, request: Request):
         }
         await db.linhas.insert_one(line_doc)
 
+    msg = result.message
+    if isinstance(msg, list):
+        msg = "; ".join(str(m) for m in msg)
+    msg = str(msg) if msg else "Resultado da ativacao"
+
     return ActivationResponse(
         success=result.success,
         status=result.status if isinstance(result.status, str) else result.status.value,
-        message=result.message,
+        message=msg,
         numero=result.numero or (result.data.get("msisdn") if result.data else None),
         oferta_nome=oferta["nome"],
         plano_nome=plano["nome"],
@@ -3158,12 +3186,35 @@ async def _trigger_selfservice_activation(doc: dict):
         chosen_ddd = doc.get("ddd")
         ddd = chosen_ddd if chosen_ddd and len(chosen_ddd) == 2 else (telefone_clean[:2] if len(telefone_clean) >= 2 else "11")
 
+        # Mapear tipo_pessoa para formato Ta Telecom
+        tipo_pessoa = cliente.get("tipo_pessoa", "pf")
+        person_type_map = {"pf": "F", "pj": "J", "F": "F", "J": "J"}
+        person_type = person_type_map.get(tipo_pessoa, "F")
+
+        # Converter data_nascimento para dd/mm/YYYY
+        raw_dob = cliente.get("data_nascimento", "")
+        dob_formatted = ""
+        if raw_dob:
+            try:
+                if "-" in raw_dob and len(raw_dob) >= 10:
+                    parts = raw_dob[:10].split("-")
+                    if len(parts) == 3 and len(parts[0]) == 4:
+                        dob_formatted = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                    else:
+                        dob_formatted = raw_dob
+                elif "/" in raw_dob:
+                    dob_formatted = raw_dob
+                else:
+                    dob_formatted = raw_dob
+            except Exception:
+                dob_formatted = raw_dob
+
         activation_payload = {
-            "person_type": cliente.get("tipo_pessoa", "pf"),
+            "person_type": person_type,
             "person_name": cliente["nome"],
             "document_number": clean_document(cliente.get("documento", "")),
             "phone_number": telefone_clean,
-            "date_of_birth": cliente.get("data_nascimento", ""),
+            "date_of_birth": dob_formatted,
             "type_of_street": "",
             "address": cliente.get("endereco", ""),
             "address_number": cliente.get("numero_endereco", ""),
@@ -3210,10 +3261,13 @@ async def _trigger_selfservice_activation(doc: dict):
             }})
             await create_log("ativacao", f"Self-service ativacao concluida: {cliente['nome']} - chip {chip['iccid']} - {msisdn}", None, "self-service")
         else:
+            err_msg = result.message
+            if isinstance(err_msg, list):
+                err_msg = "; ".join(str(m) for m in err_msg)
             await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
-                "status": "erro", "erro_msg": result.message,
+                "status": "erro", "erro_msg": str(err_msg),
             }})
-            await create_log("erro", f"Self-service ativacao falhou: {result.message}", None, "self-service")
+            await create_log("erro", f"Self-service ativacao falhou: {err_msg}", None, "self-service")
     except Exception as e:
         logger.error(f"Erro na ativacao self-service: {e}")
         await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
