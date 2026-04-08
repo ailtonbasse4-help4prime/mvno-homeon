@@ -117,7 +117,7 @@ export function Usuarios() {
       {/* Table */}
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
-          <table className="data-table w-full table-fixed" data-testid="usuarios-table">
+          <table className="data-table w-full min-w-[700px]" data-testid="usuarios-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
                 <th className="text-blue-300 w-[25%]">Nome</th>

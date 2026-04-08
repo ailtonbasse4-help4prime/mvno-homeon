@@ -162,7 +162,7 @@ export function AtivacoesSelfService() {
         </div>
       ) : (
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] -mx-4 sm:mx-0">
-          <table className="data-table min-w-[700px] w-full table-fixed">
+          <table className="data-table min-w-[700px] w-full">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
                 <th className="text-blue-300 w-[16%]">Cliente</th>

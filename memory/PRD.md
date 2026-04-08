@@ -10,6 +10,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
 - **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - producao)
 
+## Ambiente de Producao (VPS Hostinger)
+- Docker: CRM Atendimento (homeon-crm) nas portas 3001/8001 - NAO MEXER
+- MVNO Backend: uvicorn na porta 3002 (virtualenv /app/venv)
+- MVNO Frontend: Nginx servindo /var/www/mvno/frontend (estático)
+- Nginx config: /etc/nginx/sites-enabled/app-ativacao
+- MongoDB: Docker (porta 27017), DB: mvno_management
+- Script atualizacao: bash /opt/mvno-homeon/atualizar.sh
+
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
 - **Atendente**: carlos@mvno.com / nova456
@@ -44,43 +52,48 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Confiabilidade Asaas - Sync Status (06/04/2026)
 - [x] Sync automatico de status no Portal do Cliente
 - [x] Endpoint POST /api/carteira/sincronizar-status (admin)
-- [x] Botao "Sincronizar Status" na pagina Gestao de Cobrancas
-- [x] Status RECEIVED_IN_CASH adicionado nos labels e badges
-- [x] Campo paid_at salvo quando pagamento confirmado
-- [x] Campos asaas_bankslip_url e paid_at no retorno do portal
 
 ### Correcoes Criticas (07/04/2026)
 - [x] Fix MockTaTelecomAdapter.ativar_chip
 - [x] Busca automatica de CEP via ViaCEP
-- [x] Paginacao de estoque Ta Telecom validada (525 chips)
-- [x] Fix Enter no campo CEP
 - [x] FIX DEFINITIVO Asaas API Key (leitura raw do .env)
-- [x] Botao Diagnostico da Conexao Asaas
 - [x] FIX navegacao travando (removido PageTransition framer-motion)
 
 ### UX e Padronizacao (07/04/2026)
 - [x] Campo email no cadastro de clientes
-- [x] Padronizacao visual de TODAS as tabelas (header sticky azul, ordem alfabetica, layout fixo)
-- [x] Fix global scrollbar (overflow-y: scroll no body)
-- [x] Botao download PDF boleto Asaas
-- [x] Fix filtro "Todos" em Assinaturas
-- [x] Campo DDD nas ativacoes Admin e Self-Service
-- [x] Scroll horizontal mobile em tabelas
-- [x] Hardening endpoint ativacao (ValidationError Pydantic, person_type, date_of_birth)
+- [x] Padronizacao visual de TODAS as tabelas
 - [x] Componente SearchableSelect criado e aplicado em Ativacoes, Assinaturas e Cobrancas
 
 ### Controle de Notificacoes Asaas (08/04/2026)
-- [x] `notificationDisabled: true` em todo novo cliente criado no Asaas
-- [x] Auto-desabilitacao de notificacoes ao usar clientes existentes
-- [x] Endpoint POST /api/carteira/desabilitar-notificacoes (bulk)
+- [x] notificationDisabled: true em todo novo cliente criado no Asaas
 - [x] Botao "Desabilitar Notificacoes de Todos os Clientes" na config Asaas
-- [x] Metodos update_customer e disable_customer_notifications no asaas_service
+
+### Portabilidade Self-Service (08/04/2026)
+- [x] Novo status "portabilidade_em_andamento" diferenciando portabilidade de ativacao normal
+- [x] Tela informativa para cliente: aviso SMS, janela de portabilidade, status em tempo real
+- [x] Polling inteligente com consulta a Ta Telecom
+- [x] Compatibilidade retroativa para ativacoes antigas
+- [x] Endpoint POST /api/chips/{iccid}/verificar-portabilidade (admin)
+- [x] Endpoint POST /api/chips/{iccid}/resetar (admin - volta chip para disponivel)
+- [x] Botao laranja verificar portabilidade na pagina Chips
+- [x] Botao vermelho resetar chip na pagina Chips
+- [x] Fix ativacao gratuita (valor R$0) - disparo imediato sem esperar pagamento
+- [x] Correcao fluxo admin para portabilidade
+
+### Mobile Fix (08/04/2026)
+- [x] Removido table-fixed de TODAS as tabelas
+- [x] min-w definido por tabela para scroll horizontal correto no mobile
+
+## Deploy VPS
+- Script: bash /opt/mvno-homeon/atualizar.sh (NAO toca no Docker CRM)
+- Backup CRM: /opt/backups/
 
 ## Backlog
 
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
-- [ ] Desmembrar server.py (3500+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (3700+ linhas) em roteadores separados
+- [ ] Configurar Asaas no .env da VPS (/app/.env)
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)

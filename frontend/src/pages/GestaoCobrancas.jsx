@@ -461,7 +461,7 @@ export function GestaoCobrancas() {
 
       {/* Tabela */}
       <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-340px)]">
-        <table className="w-full text-sm table-fixed" data-testid="cobrancas-table">
+        <table className="w-full text-sm min-w-[900px]" data-testid="cobrancas-table">
           <thead className="sticky top-0 z-10">
             <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50 text-left">
               <th className="p-3 text-blue-300 w-[22%]">Cliente</th>
