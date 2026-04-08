@@ -1301,6 +1301,78 @@ async def get_portability_status(numero_ou_iccid: str, request: Request):
         "chip_status": result.data.get("chip_status") if result.data else None,
     }
 
+@api_router.post("/chips/{iccid}/verificar-portabilidade")
+async def verificar_portabilidade_chip(iccid: str, request: Request):
+    """Consulta status da portabilidade na Ta Telecom e atualiza chip/linha no banco."""
+    user = await require_admin(request)
+    iccid_clean = re.sub(r'\D', '', iccid)
+
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+
+    # Consultar Ta Telecom
+    result = await operadora_service.consultar_status_portabilidade(
+        iccid_clean, db=db, user_id=user["id"], user_name=user["name"]
+    )
+
+    port_status = ""
+    port_data = {}
+    if result.success and result.data:
+        port_data = result.data
+        port_status = (port_data.get("status") or "").upper()
+
+    # Tambem consultar a linha na operadora para pegar msisdn atualizado
+    line_result = await operadora_service.consultar_linha(
+        iccid_clean, db=db, user_id=user["id"], user_name=user["name"]
+    )
+    line_data = line_result.data or {} if line_result.success else {}
+    operadora_msisdn = line_data.get("msisdn") or line_data.get("subscriber_number")
+    operadora_status_raw = line_data.get("status")
+    # status 3 = ativado/em uso na Ta Telecom
+    operadora_ativo = operadora_status_raw == 3 or str(operadora_status_raw) == "3" or "EM USO" in port_status or "CONCLUIDA" in port_status or "CONCLUÍDA" in port_status
+
+    updates_chip = {}
+    updates_linha = {}
+    new_chip_status = chip.get("status")
+
+    if operadora_ativo:
+        new_chip_status = ChipStatus.ativado.value
+        updates_chip["status"] = new_chip_status
+        if operadora_msisdn:
+            updates_chip["msisdn"] = str(operadora_msisdn)
+            updates_linha["msisdn"] = str(operadora_msisdn)
+            updates_linha["numero"] = str(operadora_msisdn)
+        updates_linha["status"] = "ativo"
+    elif "AGUARDANDO" in port_status or "PENDENTE" in port_status:
+        new_chip_status = ChipStatus.reservado.value
+        updates_chip["status"] = new_chip_status
+
+    if updates_chip:
+        await db.chips.update_one({"_id": chip["_id"]}, {"$set": updates_chip})
+    if updates_linha:
+        await db.linhas.update_one({"chip_id": str(chip["_id"])}, {"$set": updates_linha})
+
+    # Atualizar ativacao selfservice se existir
+    ss = await db.ativacoes_selfservice.find_one({"iccid": iccid_clean})
+    if ss and ss.get("status") in ("ativando", "portabilidade_em_andamento") and operadora_ativo:
+        msisdn = operadora_msisdn or ss.get("port_number") or ss.get("msisdn")
+        await db.ativacoes_selfservice.update_one({"_id": ss["_id"]}, {"$set": {"status": "ativo", "msisdn": msisdn}})
+
+    await create_log("portabilidade", f"Verificacao portabilidade ICCID {iccid_clean}: {port_status or 'sem info'} | Chip: {new_chip_status}", user["id"], user["name"])
+
+    return {
+        "iccid": iccid_clean,
+        "chip_status_anterior": chip.get("status"),
+        "chip_status_novo": new_chip_status,
+        "portabilidade_status": port_data.get("status", ""),
+        "portabilidade_janela": port_data.get("janela", ""),
+        "portabilidade_msg": port_data.get("msg_usuario", ""),
+        "operadora_msisdn": operadora_msisdn,
+        "operadora_status": operadora_status_raw,
+        "atualizado": bool(updates_chip or updates_linha),
+    }
+
 # ==================== LINES ROUTES ====================
 async def build_line_response(line: dict) -> LineResponse:
     cliente_nome, plano_nome, oferta_nome, franquia, plan_code, iccid, msisdn = None, None, None, None, None, None, None

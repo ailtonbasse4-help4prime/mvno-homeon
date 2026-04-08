@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio } from 'lucide-react';
+import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio, ArrowRightLeft } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -165,6 +165,24 @@ export function Chips() {
       const msg = error.response?.data?.detail || 'Erro ao remover chip';
       toast.error(typeof msg === 'string' ? msg : 'Erro ao remover chip');
     }
+  };
+
+  const [checkingPort, setCheckingPort] = useState(null);
+  const handleVerificarPortabilidade = async (chip) => {
+    setCheckingPort(chip.iccid);
+    try {
+      const res = await axios.post(`${API_URL}/api/chips/${chip.iccid}/verificar-portabilidade`, {}, { withCredentials: true });
+      const d = res.data;
+      if (d.atualizado) {
+        toast.success(`Chip atualizado: ${d.chip_status_anterior} → ${d.chip_status_novo}${d.operadora_msisdn ? ' | MSISDN: ' + d.operadora_msisdn : ''}`);
+      } else {
+        toast.info(`Portabilidade: ${d.portabilidade_status || 'Sem info'}${d.portabilidade_janela ? ' | Janela: ' + d.portabilidade_janela : ''}${d.portabilidade_msg ? ' | ' + d.portabilidade_msg : ''}`);
+      }
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao verificar portabilidade');
+    }
+    setCheckingPort(null);
   };
 
   const getStatusBadge = (status) => {
@@ -336,6 +354,18 @@ export function Chips() {
                               data-testid={`delete-chip-${chip.id}`}
                             >
                               <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {chip.status === 'reservado' && (
+                            <Button
+                              variant="ghost" size="sm"
+                              onClick={() => handleVerificarPortabilidade(chip)}
+                              disabled={checkingPort === chip.iccid}
+                              className="text-amber-400 hover:text-amber-300"
+                              data-testid={`check-port-${chip.id}`}
+                              title="Verificar portabilidade na operadora"
+                            >
+                              <ArrowRightLeft className={`w-4 h-4 ${checkingPort === chip.iccid ? 'animate-spin' : ''}`} />
                             </Button>
                           )}
                         </div>
