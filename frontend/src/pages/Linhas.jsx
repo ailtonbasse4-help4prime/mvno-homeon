@@ -176,11 +176,11 @@ export function Linhas() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4"><p className="text-2xl font-bold text-white font-mono">{linhas.length}</p><p className="text-xs text-zinc-500">Total</p></div>
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-4"><p className="text-2xl font-bold text-emerald-400 font-mono">{linhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-500">Ativas</p></div>
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-4"><p className="text-2xl font-bold text-amber-400 font-mono">{linhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-500">Pendentes</p></div>
-        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-4"><p className="text-2xl font-bold text-red-400 font-mono">{linhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-500">Bloqueadas</p></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-white font-mono">{linhas.length}</p><p className="text-xs text-zinc-500">Total</p></div>
+        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">{linhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-500">Ativas</p></div>
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">{linhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-500">Pendentes</p></div>
+        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-red-400 font-mono">{linhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-500">Bloqueadas</p></div>
       </div>
 
       {/* Table */}
@@ -189,13 +189,13 @@ export function Linhas() {
           <table className="data-table w-full table-fixed" data-testid="linhas-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300 w-[15%]">Numero</th>
-                <th className="text-blue-300 w-[20%]">Cliente</th>
-                <th className="text-blue-300 w-[18%]">ICCID</th>
-                <th className="text-blue-300 w-[14%]">Plano</th>
-                <th className="text-blue-300 w-[14%]">Oferta</th>
-                <th className="text-blue-300 w-[9%]">Status</th>
-                <th className="text-blue-300 text-right w-[10%]">Acoes</th>
+                <th className="text-blue-300">Numero</th>
+                <th className="text-blue-300">Cliente</th>
+                <th className="text-blue-300 hidden sm:table-cell">ICCID</th>
+                <th className="text-blue-300 hidden md:table-cell">Plano</th>
+                <th className="text-blue-300 hidden lg:table-cell">Oferta</th>
+                <th className="text-blue-300">Status</th>
+                <th className="text-blue-300 text-right">Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -203,11 +203,11 @@ export function Linhas() {
                 <tr><td colSpan={7} className="text-center text-zinc-500 py-8">Nenhuma linha encontrada</td></tr>
               ) : linhas.map((linha) => (
                 <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
-                  <td className="font-mono text-white font-semibold">{linha.msisdn || linha.numero}</td>
-                  <td className="text-zinc-300">{linha.cliente_nome || '-'}</td>
-                  <td className="font-mono text-zinc-400 text-sm">{linha.iccid || '-'}</td>
-                  <td className="text-zinc-300 text-sm">{linha.plano_nome || '-'}</td>
-                  <td className="text-zinc-400 text-sm">{linha.oferta_nome || '-'}</td>
+                  <td className="font-mono text-white font-semibold text-sm">{linha.msisdn || linha.numero}</td>
+                  <td className="text-zinc-300 text-sm">{linha.cliente_nome || '-'}</td>
+                  <td className="font-mono text-zinc-400 text-sm hidden sm:table-cell">{linha.iccid || '-'}</td>
+                  <td className="text-zinc-300 text-sm hidden md:table-cell">{linha.plano_nome || '-'}</td>
+                  <td className="text-zinc-400 text-sm hidden lg:table-cell">{linha.oferta_nome || '-'}</td>
                   <td>{getStatusBadge(linha.status)}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">

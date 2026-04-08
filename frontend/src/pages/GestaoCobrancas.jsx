@@ -370,17 +370,17 @@ export function GestaoCobrancas() {
         </div>
         {isAdmin && (
           <div className="flex gap-2 w-full sm:w-auto flex-wrap">
-            <Button onClick={handleSyncStatus} disabled={syncing} variant="outline" className="flex items-center gap-2 border-emerald-700 text-emerald-400 hover:bg-emerald-900/20" data-testid="sync-status-btn">
-              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />{syncing ? 'Sincronizando...' : 'Sincronizar Status'}
+            <Button onClick={handleSyncStatus} disabled={syncing} variant="outline" size="sm" className="flex items-center gap-1.5 border-emerald-700 text-emerald-400 hover:bg-emerald-900/20 text-xs sm:text-sm" data-testid="sync-status-btn">
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">{syncing ? 'Sincronizando...' : 'Sincronizar Status'}</span><span className="sm:hidden">{syncing ? 'Sync...' : 'Sync'}</span>
             </Button>
-            <Button onClick={() => setConfigDialogOpen(true)} variant="outline" className="flex items-center gap-2 border-blue-700 text-blue-400 hover:bg-blue-900/20" data-testid="config-asaas-btn">
-              <Settings className="w-4 h-4" />API Asaas
+            <Button onClick={() => setConfigDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-blue-700 text-blue-400 hover:bg-blue-900/20 text-xs sm:text-sm" data-testid="config-asaas-btn">
+              <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">API Asaas</span><span className="sm:hidden">API</span>
             </Button>
-            <Button onClick={() => setLoteDialogOpen(true)} variant="outline" className="flex items-center gap-2 border-zinc-700 hover:bg-zinc-800" data-testid="lote-cobranca-btn">
-              <CreditCard className="w-4 h-4" />Em Lote
+            <Button onClick={() => setLoteDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="lote-cobranca-btn">
+              <CreditCard className="w-3.5 h-3.5" /><span className="hidden sm:inline">Em Lote</span><span className="sm:hidden">Lote</span>
             </Button>
-            <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2" data-testid="nova-cobranca-btn">
-              <Plus className="w-4 h-4" />Nova Cobranca
+            <Button onClick={() => handleOpenDialog()} size="sm" className="btn-primary flex items-center gap-1.5 text-xs sm:text-sm" data-testid="nova-cobranca-btn">
+              <Plus className="w-3.5 h-3.5" />Nova
             </Button>
           </div>
         )}
