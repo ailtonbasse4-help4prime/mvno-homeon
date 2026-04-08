@@ -4,7 +4,7 @@
 Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom e Asaas para pagamentos.
 
 ## Arquitetura
-- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react + framer-motion
+- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
@@ -42,30 +42,46 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Toggle portabilidade no admin e self-service
 
 ### Confiabilidade Asaas - Sync Status (06/04/2026)
-- [x] Sync automatico de status no Portal do Cliente (consulta Asaas em tempo real ao abrir dashboard)
-- [x] Endpoint POST /api/carteira/sincronizar-status (admin) para sincronizar todas cobrancas pendentes
+- [x] Sync automatico de status no Portal do Cliente
+- [x] Endpoint POST /api/carteira/sincronizar-status (admin)
 - [x] Botao "Sincronizar Status" na pagina Gestao de Cobrancas
 - [x] Status RECEIVED_IN_CASH adicionado nos labels e badges
 - [x] Campo paid_at salvo quando pagamento confirmado
 - [x] Campos asaas_bankslip_url e paid_at no retorno do portal
 
 ### Correcoes Criticas (07/04/2026)
-- [x] Fix MockTaTelecomAdapter.ativar_chip (corrupcao do agente anterior corrigida)
-- [x] Busca automatica de CEP via ViaCEP no formulario de Clientes (Clientes.jsx)
-- [x] Paginacao de estoque Ta Telecom validada (525 chips sincronizados vs. 50 anterior)
-- [x] Fix Enter no campo CEP nao submete mais o formulario
-- [x] FIX DEFINITIVO Asaas API Key: leitura raw do .env (imune a corrupcao por $ do shell/dotenv), validacao robusta, load_dotenv(interpolate=False), aspas simples, endpoint de diagnostico
-- [x] Botao "Diagnostico da Conexao" na tela de Cobrancas > API Asaas
-- [x] FIX navegacao travando: removido PageTransition (framer-motion) que causava "Maximum update depth exceeded" ao navegar entre paginas
+- [x] Fix MockTaTelecomAdapter.ativar_chip
+- [x] Busca automatica de CEP via ViaCEP
+- [x] Paginacao de estoque Ta Telecom validada (525 chips)
+- [x] Fix Enter no campo CEP
+- [x] FIX DEFINITIVO Asaas API Key (leitura raw do .env)
+- [x] Botao Diagnostico da Conexao Asaas
+- [x] FIX navegacao travando (removido PageTransition framer-motion)
+
+### UX e Padronizacao (07/04/2026)
+- [x] Campo email no cadastro de clientes
+- [x] Padronizacao visual de TODAS as tabelas (header sticky azul, ordem alfabetica, layout fixo)
+- [x] Fix global scrollbar (overflow-y: scroll no body)
+- [x] Botao download PDF boleto Asaas
+- [x] Fix filtro "Todos" em Assinaturas
+- [x] Campo DDD nas ativacoes Admin e Self-Service
+- [x] Scroll horizontal mobile em tabelas
+- [x] Hardening endpoint ativacao (ValidationError Pydantic, person_type, date_of_birth)
+- [x] Componente SearchableSelect criado e aplicado em Ativacoes, Assinaturas e Cobrancas
+
+### Controle de Notificacoes Asaas (08/04/2026)
+- [x] `notificationDisabled: true` em todo novo cliente criado no Asaas
+- [x] Auto-desabilitacao de notificacoes ao usar clientes existentes
+- [x] Endpoint POST /api/carteira/desabilitar-notificacoes (bulk)
+- [x] Botao "Desabilitar Notificacoes de Todos os Clientes" na config Asaas
+- [x] Metodos update_customer e disable_customer_notifications no asaas_service
 
 ## Backlog
 
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
+- [ ] Desmembrar server.py (3500+ linhas) em roteadores separados
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
 - [ ] Historico de ativacoes
-
-### Refatoracao
-- [ ] Desmembrar server.py (3400+ linhas) em roteadores separados

@@ -173,7 +173,11 @@ class AsaasService:
                               address_number: Optional[str] = None, province: Optional[str] = None,
                               postal_code: Optional[str] = None) -> Dict[str, Any]:
         self._check_configured()
-        payload = {"name": name, "cpfCnpj": cpf_cnpj}
+        payload = {
+            "name": name,
+            "cpfCnpj": cpf_cnpj,
+            "notificationDisabled": True,
+        }
         if email:
             payload["email"] = email
         if phone:
@@ -187,6 +191,15 @@ class AsaasService:
         if postal_code:
             payload["postalCode"] = postal_code
         return await self._request("POST", "/customers", payload)
+
+    async def update_customer(self, customer_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Atualiza dados de um cliente no Asaas."""
+        self._check_configured()
+        return await self._request("PUT", f"/customers/{customer_id}", data)
+
+    async def disable_customer_notifications(self, customer_id: str) -> Dict[str, Any]:
+        """Desabilita todas as notificacoes de um cliente no Asaas."""
+        return await self.update_customer(customer_id, {"notificationDisabled": True})
 
     async def find_customer_by_cpf(self, cpf_cnpj: str) -> Optional[Dict[str, Any]]:
         self._check_configured()

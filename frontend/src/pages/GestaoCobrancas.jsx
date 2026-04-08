@@ -12,6 +12,7 @@ import {
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
   Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download,
 } from 'lucide-react';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -38,6 +39,7 @@ export function GestaoCobrancas() {
   const [configSubmitting, setConfigSubmitting] = useState(false);
   const [diagResult, setDiagResult] = useState(null);
   const [diagLoading, setDiagLoading] = useState(false);
+  const [disablingNotifs, setDisablingNotifs] = useState(false);
 
   const [form, setForm] = useState({
     cliente_id: '', linha_id: '', billing_type: 'BOLETO',
@@ -350,6 +352,26 @@ export function GestaoCobrancas() {
     setDiagLoading(false);
   };
 
+  const handleDisableNotifications = async () => {
+    if (!window.confirm('Desabilitar TODAS as notificacoes automaticas do Asaas para todos os clientes cadastrados? O envio sera feito apenas pelo seu atendimento.')) return;
+    setDisablingNotifs(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/desabilitar-notificacoes`, {}, { withCredentials: true });
+      const { total, updated, errors } = res.data;
+      if (updated > 0) {
+        toast.success(`Notificacoes desabilitadas para ${updated} de ${total} clientes`);
+      } else if (total === 0) {
+        toast.info('Nenhum cliente sincronizado com Asaas encontrado');
+      } else {
+        toast.info('Nenhuma alteracao necessaria');
+      }
+      if (errors?.length) toast.warning(`${errors.length} erro(s) ao processar`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao desabilitar notificacoes');
+    }
+    setDisablingNotifs(false);
+  };
+
   return (
     <div className="space-y-6" data-testid="gestao-cobrancas-page">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -635,11 +657,16 @@ export function GestaoCobrancas() {
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="cobranca-form">
             <div>
               <label className="text-sm text-zinc-400">Cliente *</label>
-              <select value={form.cliente_id} onChange={e => setForm({ ...form, cliente_id: e.target.value, linha_id: '' })}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm mt-1" required>
-                <option value="">Selecione...</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nome} - {c.documento}</option>)}
-              </select>
+              <div className="mt-1">
+                <SearchableSelect
+                  value={form.cliente_id}
+                  onValueChange={(val) => setForm({ ...form, cliente_id: val, linha_id: '' })}
+                  options={clientes.map(c => ({ value: c.id, label: `${c.nome} - ${c.documento}` }))}
+                  placeholder="Selecione o cliente..."
+                  searchPlaceholder="Buscar por nome ou documento..."
+                  testId="cobranca-cliente-select"
+                />
+              </div>
             </div>
             {form.cliente_id && clienteLinhas(form.cliente_id).length > 0 && (
               <div>
@@ -782,6 +809,13 @@ export function GestaoCobrancas() {
               className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800" data-testid="diagnostico-asaas-btn">
               {diagLoading ? 'Testando...' : 'Diagnostico da Conexao'}
             </Button>
+            <div className="border-t border-zinc-800 pt-4">
+              <p className="text-xs text-zinc-500 mb-2">Notificacoes automaticas do Asaas (e-mail, SMS, Correios) geram custo. Desabilite para que o envio seja feito apenas pelo seu atendimento.</p>
+              <Button onClick={handleDisableNotifications} disabled={disablingNotifs} variant="outline"
+                className="w-full border-red-800 text-red-400 hover:bg-red-900/20" data-testid="disable-notifs-btn">
+                {disablingNotifs ? 'Desabilitando...' : 'Desabilitar Notificacoes de Todos os Clientes'}
+              </Button>
+            </div>
             {diagResult && (
               <div className={`p-3 rounded-lg text-sm space-y-1 ${diagResult.api_test === 'OK' ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-red-500/10 border border-red-500/30'}`}
                 data-testid="diagnostico-result">

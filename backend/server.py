@@ -1787,7 +1787,13 @@ async def _get_asaas_customer_id(cliente: dict, user: dict) -> str:
     if cached_id:
         # Verify it exists in current environment
         try:
-            await asaas_service._request("GET", f"/customers/{cached_id}")
+            existing = await asaas_service._request("GET", f"/customers/{cached_id}")
+            # Garante que notificacoes estao desabilitadas
+            if not existing.get("notificationDisabled"):
+                try:
+                    await asaas_service.disable_customer_notifications(cached_id)
+                except Exception:
+                    pass
             return cached_id
         except Exception:
             logger.info(f"Customer {cached_id} nao encontrado no ambiente atual. Recriando.")
@@ -2440,6 +2446,26 @@ async def sync_cliente_asaas(cliente_id: str, request: Request):
         return {"message": f"Cliente sincronizado com Asaas", "asaas_customer_id": asaas_id}
     except AsaasApiError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+
+@api_router.post("/carteira/desabilitar-notificacoes")
+async def disable_asaas_notifications_bulk(request: Request):
+    """Desabilita notificacoes do Asaas para TODOS os clientes que ja possuem asaas_customer_id."""
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+    clientes_cursor = db.clientes.find({"asaas_customer_id": {"$exists": True, "$ne": ""}})
+    clientes_list = await clientes_cursor.to_list(length=5000)
+    total = len(clientes_list)
+    updated = 0
+    errors = []
+    for cli in clientes_list:
+        try:
+            await asaas_service.disable_customer_notifications(cli["asaas_customer_id"])
+            updated += 1
+        except Exception as e:
+            errors.append({"cliente": cli.get("nome", "?"), "error": str(e)})
+    await create_log("financeiro", f"Notificacoes Asaas desabilitadas: {updated}/{total}", user["id"], user["name"])
+    return {"total": total, "updated": updated, "errors": errors}
 
 # --- Webhook Asaas ---
 @api_router.post("/webhooks/asaas")
