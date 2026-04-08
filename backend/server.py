@@ -1212,9 +1212,23 @@ async def activate_line(data: ActivationRequest, request: Request):
         db=db, user_id=user["id"], user_name=user["name"]
     )
 
+    # Normalizar status e message para strings
+    if isinstance(result.status, str):
+        status_str = result.status
+    elif hasattr(result.status, 'value'):
+        status_str = result.status.value
+    else:
+        status_str = str(result.status)
+    # Mapear "ok" para "ativo" (Ta Telecom retorna "ok" quando sucesso)
+    if result.success and status_str == "ok":
+        status_str = "ativo"
+
+    msg = result.message
+    if isinstance(msg, list):
+        msg = "; ".join(str(m) for m in msg)
+    msg = str(msg) if msg else "Resultado da ativacao"
+
     if result.success:
-        status_str = result.status if isinstance(result.status, str) else result.status.value
-        # Pendente = reservado (aguardando confirmacao), Ativo = ativado
         chip_status = ChipStatus.ativado.value if status_str == "ativo" else ChipStatus.reservado.value
         msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
 
@@ -1236,22 +1250,31 @@ async def activate_line(data: ActivationRequest, request: Request):
         }
         await db.linhas.insert_one(line_doc)
 
-    msg = result.message
-    if isinstance(msg, list):
-        msg = "; ".join(str(m) for m in msg)
-    msg = str(msg) if msg else "Resultado da ativacao"
-
-    return ActivationResponse(
-        success=result.success,
-        status=result.status if isinstance(result.status, str) else result.status.value,
-        message=msg,
-        numero=result.numero or (result.data.get("msisdn") if result.data else None),
-        oferta_nome=oferta["nome"],
-        plano_nome=plano["nome"],
-        franquia=plano["franquia"],
-        valor=oferta["valor"],
-        response_time_ms=result.response_time_ms,
-    )
+    try:
+        return ActivationResponse(
+            success=result.success,
+            status=status_str,
+            message=msg,
+            numero=result.numero or (result.data.get("msisdn") if result.data else None),
+            oferta_nome=str(oferta["nome"]),
+            plano_nome=str(plano["nome"]),
+            franquia=str(plano["franquia"]),
+            valor=float(oferta["valor"]),
+            response_time_ms=int(result.response_time_ms or 0),
+        )
+    except Exception as e:
+        logger.error(f"Erro ao construir ActivationResponse: {e}")
+        return ActivationResponse(
+            success=result.success,
+            status=status_str,
+            message=msg,
+            numero=None,
+            oferta_nome=str(oferta.get("nome", "")),
+            plano_nome=str(plano.get("nome", "")),
+            franquia=str(plano.get("franquia", "")),
+            valor=float(oferta.get("valor", 0)),
+            response_time_ms=0,
+        )
 
 
 # ==================== PORTABILITY STATUS ====================
