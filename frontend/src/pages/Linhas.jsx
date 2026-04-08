@@ -191,9 +191,9 @@ export function Linhas() {
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
                 <th className="text-blue-300">Numero</th>
                 <th className="text-blue-300">Cliente</th>
-                <th className="text-blue-300 hidden sm:table-cell">ICCID</th>
-                <th className="text-blue-300 hidden md:table-cell">Plano</th>
-                <th className="text-blue-300 hidden lg:table-cell">Oferta</th>
+                <th className="text-blue-300">ICCID</th>
+                <th className="text-blue-300">Plano</th>
+                <th className="text-blue-300">Oferta</th>
                 <th className="text-blue-300">Status</th>
                 <th className="text-blue-300 text-right">Acoes</th>
               </tr>
@@ -205,9 +205,9 @@ export function Linhas() {
                 <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
                   <td className="font-mono text-white font-semibold text-sm">{linha.msisdn || linha.numero}</td>
                   <td className="text-zinc-300 text-sm">{linha.cliente_nome || '-'}</td>
-                  <td className="font-mono text-zinc-400 text-sm hidden sm:table-cell">{linha.iccid || '-'}</td>
-                  <td className="text-zinc-300 text-sm hidden md:table-cell">{linha.plano_nome || '-'}</td>
-                  <td className="text-zinc-400 text-sm hidden lg:table-cell">{linha.oferta_nome || '-'}</td>
+                  <td className="font-mono text-zinc-400 text-sm">{linha.iccid || '-'}</td>
+                  <td className="text-zinc-300 text-sm">{linha.plano_nome || '-'}</td>
+                  <td className="text-zinc-400 text-sm">{linha.oferta_nome || '-'}</td>
                   <td>{getStatusBadge(linha.status)}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">

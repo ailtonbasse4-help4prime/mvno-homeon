@@ -216,11 +216,11 @@ export function Clientes() {
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
                 <th className="text-blue-300">Nome</th>
-                <th className="text-blue-300 hidden lg:table-cell">Tipo</th>
-                <th className="text-blue-300 hidden sm:table-cell">Documento</th>
-                <th className="text-blue-300 hidden md:table-cell">Telefone</th>
-                <th className="text-blue-300 hidden md:table-cell">Linhas</th>
-                <th className="text-blue-300 hidden lg:table-cell">Dados</th>
+                <th className="text-blue-300">Tipo</th>
+                <th className="text-blue-300">Documento</th>
+                <th className="text-blue-300">Telefone</th>
+                <th className="text-blue-300">Linhas</th>
+                <th className="text-blue-300">Dados</th>
                 <th className="text-blue-300">Status</th>
                 <th className="text-blue-300 text-right">Acoes</th>
               </tr>
@@ -231,10 +231,10 @@ export function Clientes() {
               ) : [...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map((c) => (
                 <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
                   <td className="font-medium text-white text-sm">{c.nome}</td>
-                  <td className="text-zinc-400 text-xs uppercase hidden lg:table-cell">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
-                  <td className="font-mono text-zinc-300 text-sm hidden sm:table-cell">{c.documento}</td>
-                  <td className="font-mono text-zinc-300 text-sm hidden md:table-cell">{c.telefone}</td>
-                  <td className="hidden md:table-cell">
+                  <td className="text-zinc-400 text-xs uppercase">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
+                  <td className="font-mono text-zinc-300 text-sm">{c.documento}</td>
+                  <td className="font-mono text-zinc-300 text-sm">{c.telefone}</td>
+                  <td>
                     {c.linhas_count > 0 ? (
                       <div className="space-y-0.5">
                         {(c.linhas || []).map((l, i) => (
@@ -249,7 +249,7 @@ export function Clientes() {
                       <span className="text-xs text-zinc-500">Nenhuma</span>
                     )}
                   </td>
-                  <td className="hidden lg:table-cell">
+                  <td>
                     {c.dados_completos ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle className="w-3 h-3" />Completo</span>
                     ) : (

@@ -144,18 +144,17 @@
 
     .data-table td {
         @apply px-4 py-3 border-b border-zinc-800 text-sm text-zinc-200;
+        white-space: normal;
+        word-break: break-word;
     }
 
     @media (max-width: 768px) {
         .data-table th, .data-table td {
-            @apply px-2 py-2 text-xs;
+            @apply px-3 py-2.5 text-xs;
         }
         .data-table {
             table-layout: auto !important;
-        }
-        .data-table th, .data-table td {
-            white-space: normal;
-            word-break: break-word;
+            min-width: 700px;
         }
     }
 
