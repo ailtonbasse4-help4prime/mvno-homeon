@@ -3245,6 +3245,17 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
 
     await create_log("ativacao", f"Self-service: {data.nome} ({doc_clean}) solicitou ativacao do chip {iccid_clean}", None, "self-service")
 
+    # Se valor final = 0 (100% desconto), disparar ativacao imediatamente
+    if valor_final <= 0:
+        try:
+            await _trigger_selfservice_activation(activation_doc)
+            # Recarregar o doc atualizado
+            updated_doc = await db.ativacoes_selfservice.find_one({"_id": inserted.inserted_id})
+            if updated_doc:
+                activation_doc = updated_doc
+        except Exception as e:
+            logger.warning(f"Erro ao disparar ativacao gratuita self-service: {e}")
+
     return SelfServiceActivationResponse(
         id=str(inserted.inserted_id),
         status=activation_doc["status"],
@@ -3282,6 +3293,14 @@ async def public_check_activation_status(activation_id: str):
                 doc = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
         except Exception as e:
             logger.warning(f"Erro ao consultar status pagamento self-service: {e}")
+
+    # If status is "pago" but activation was not triggered yet (e.g. free activation retry)
+    if doc["status"] == "pago":
+        try:
+            await _trigger_selfservice_activation(doc)
+            doc = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+        except Exception as e:
+            logger.warning(f"Erro ao disparar ativacao pendente: {e}")
 
     # If portability in progress, check with Ta Telecom
     if doc["status"] in ("portabilidade_em_andamento", "ativando") and doc.get("portability"):
