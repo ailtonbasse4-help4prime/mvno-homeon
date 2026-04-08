@@ -3179,6 +3179,28 @@ async def public_check_activation_status(activation_id: str):
         except Exception as e:
             logger.warning(f"Erro ao consultar status pagamento self-service: {e}")
 
+    # If portability in progress, check with Ta Telecom
+    if doc["status"] in ("portabilidade_em_andamento", "ativando") and doc.get("portability"):
+        try:
+            iccid = doc.get("iccid", "")
+            port_result = await operadora_service.consultar_status_portabilidade(iccid, db=db)
+            if port_result.success and port_result.data:
+                port_data = port_result.data
+                port_status = (port_data.get("status") or "").upper()
+                doc["portability_status"] = port_data.get("status", "")
+                doc["portability_window"] = port_data.get("janela", "")
+                doc["portability_msg"] = port_data.get("msg_usuario", "")
+                # If portability is concluded, update to ativo
+                if "CONCLUIDA" in port_status or "CONCLUÍDA" in port_status:
+                    msisdn = doc.get("port_number") or doc.get("msisdn")
+                    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                        "status": "ativo", "msisdn": msisdn,
+                    }})
+                    doc["status"] = "ativo"
+                    doc["msisdn"] = msisdn
+        except Exception as e:
+            logger.warning(f"Erro ao consultar portabilidade self-service: {e}")
+
     plano_nome, oferta_nome = None, None
     if doc.get("plano_id"):
         plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])})
@@ -3193,6 +3215,7 @@ async def public_check_activation_status(activation_id: str):
         "aguardando_pagamento": "Aguardando confirmacao do pagamento.",
         "pago": "Pagamento confirmado! Ativando seu chip...",
         "ativando": "Ativacao em andamento na operadora...",
+        "portabilidade_em_andamento": "Portabilidade solicitada! Voce recebera um SMS da sua operadora anterior para confirmar. Apos a confirmacao, a portabilidade sera agendada.",
         "ativo": "Chip ativado com sucesso!",
         "erro": "Erro na ativacao. Contate o suporte.",
     }
@@ -3212,6 +3235,10 @@ async def public_check_activation_status(activation_id: str):
         "asaas_pix_qrcode": doc.get("asaas_pix_qrcode"),
         "barcode": doc.get("barcode"),
         "msisdn": doc.get("msisdn"),
+        "portability": doc.get("portability", False),
+        "portability_status": doc.get("portability_status", ""),
+        "portability_window": doc.get("portability_window", ""),
+        "portability_msg": doc.get("portability_msg", ""),
         "message": status_messages.get(doc["status"], ""),
     }
 
@@ -3295,7 +3322,7 @@ async def _trigger_selfservice_activation(doc: dict):
             }})
 
             line_doc = {
-                "numero": msisdn or "Pendente",
+                "numero": msisdn or doc.get("port_number") or "Pendente",
                 "status": status_str,
                 "cliente_id": doc["cliente_id"],
                 "chip_id": doc["chip_id"],
@@ -3306,11 +3333,20 @@ async def _trigger_selfservice_activation(doc: dict):
             }
             await db.linhas.insert_one(line_doc)
 
-            new_status = "ativo" if status_str == "ativo" else "ativando"
-            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
-                "status": new_status, "msisdn": msisdn,
-            }})
-            await create_log("ativacao", f"Self-service ativacao concluida: {cliente['nome']} - chip {chip['iccid']} - {msisdn}", None, "self-service")
+            is_portability = doc.get("portability", False)
+            if status_str == "ativo":
+                new_status = "ativo"
+            elif is_portability:
+                new_status = "portabilidade_em_andamento"
+            else:
+                new_status = "ativando"
+
+            update_fields = {"status": new_status, "msisdn": msisdn}
+            if is_portability:
+                update_fields["portability_submitted_at"] = datetime.now(timezone.utc).isoformat()
+
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+            await create_log("ativacao", f"Self-service {'portabilidade enviada' if is_portability else 'ativacao concluida'}: {cliente['nome']} - chip {chip['iccid']} - {msisdn or 'pendente'}", None, "self-service")
         else:
             err_msg = result.message
             if isinstance(err_msg, list):

@@ -8,7 +8,7 @@ import { Label } from '../components/ui/label';
 import {
   QrCode, CreditCard, ArrowRight, ArrowLeft, CheckCircle, Clock,
   AlertCircle, Wifi, ScanLine, Loader2, Copy, ExternalLink, XCircle,
-  ArrowRightLeft,
+  ArrowRightLeft, Smartphone, MessageSquare,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -199,7 +199,7 @@ export default function AtivarSelfService() {
           setStatusPolling(false);
         }
       } catch {} // eslint-disable-line no-empty
-    }, 10000);
+    }, activation?.status === 'portabilidade_em_andamento' ? 30000 : 10000);
     return () => { clearInterval(interval); setStatusPolling(false); };
   }, [activation?.id, activation?.status]);
 
@@ -572,6 +572,15 @@ export default function AtivarSelfService() {
                   <p className="text-zinc-400 text-sm mt-1">Sua linha esta sendo ativada na operadora</p>
                 </>
               )}
+              {activation.status === 'portabilidade_em_andamento' && (
+                <>
+                  <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Smartphone className="w-8 h-8 text-amber-400 animate-pulse" />
+                  </div>
+                  <h2 className="text-xl font-bold text-amber-400">Portabilidade Solicitada!</h2>
+                  <p className="text-zinc-300 text-sm mt-2">Sua solicitacao de portabilidade foi enviada com sucesso.</p>
+                </>
+              )}
               {activation.status === 'ativo' && (
                 <>
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -594,6 +603,45 @@ export default function AtivarSelfService() {
                 </>
               )}
             </div>
+
+            {/* Portabilidade Info */}
+            {activation.status === 'portabilidade_em_andamento' && (
+              <Card className="bg-amber-950/30 border-amber-800/40">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-amber-300 font-medium text-sm">Confirme o SMS da operadora anterior</p>
+                      <p className="text-zinc-400 text-xs mt-1">
+                        Voce recebera um SMS no seu numero atual pedindo a confirmacao da portabilidade. 
+                        Responda conforme as instrucoes para prosseguir.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-blue-300 font-medium text-sm">Apos confirmar, aguarde a janela de portabilidade</p>
+                      <p className="text-zinc-400 text-xs mt-1">
+                        A portabilidade sera concluida na proxima janela disponivel (geralmente durante a madrugada).
+                      </p>
+                    </div>
+                  </div>
+                  {activation.portability_status && (
+                    <div className="mt-2 p-2 bg-zinc-900/50 rounded text-xs">
+                      <span className="text-zinc-400">Status: </span>
+                      <span className="text-white font-medium">{activation.portability_status}</span>
+                      {activation.portability_window && (
+                        <span className="text-zinc-400 ml-2">| Janela: <span className="text-white">{activation.portability_window}</span></span>
+                      )}
+                    </div>
+                  )}
+                  {activation.portability_msg && (
+                    <p className="text-xs text-zinc-500 italic">{activation.portability_msg}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Payment Info */}
             {activation.status === 'aguardando_pagamento' && (
