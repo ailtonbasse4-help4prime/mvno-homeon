@@ -212,17 +212,17 @@ export function Clientes() {
 
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
-          <table className="data-table w-full min-w-[900px]" data-testid="clientes-table">
+          <table className="data-table w-full min-w-[1300px]" data-testid="clientes-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300">Nome</th>
-                <th className="text-blue-300">Tipo</th>
-                <th className="text-blue-300">Documento</th>
-                <th className="text-blue-300">Telefone</th>
-                <th className="text-blue-300">Linhas</th>
-                <th className="text-blue-300">Dados</th>
-                <th className="text-blue-300">Status</th>
-                <th className="text-blue-300 text-right">Acoes</th>
+                <th className="text-blue-300 min-w-[180px]">Nome</th>
+                <th className="text-blue-300 w-[50px]">Tipo</th>
+                <th className="text-blue-300 min-w-[130px]">Documento</th>
+                <th className="text-blue-300 min-w-[150px]">Telefone</th>
+                <th className="text-blue-300 min-w-[220px]">Linhas</th>
+                <th className="text-blue-300 min-w-[110px]">Dados</th>
+                <th className="text-blue-300 w-[80px]">Status</th>
+                <th className="text-blue-300 text-right w-[90px]">Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -230,16 +230,16 @@ export function Clientes() {
                 <tr><td colSpan={8} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
               ) : [...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map((c) => (
                 <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
-                  <td className="font-medium text-white text-sm">{c.nome}</td>
+                  <td className="font-medium text-white text-sm whitespace-nowrap">{c.nome}</td>
                   <td className="text-zinc-400 text-xs uppercase">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
-                  <td className="font-mono text-zinc-300 text-sm">{c.documento}</td>
-                  <td className="font-mono text-zinc-300 text-sm">{c.telefone}</td>
+                  <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.documento}</td>
+                  <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.telefone}</td>
                   <td>
                     {c.linhas_count > 0 ? (
                       <div className="space-y-0.5">
                         {(c.linhas || []).map((l, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs">
-                            <Phone className="w-3 h-3 text-zinc-500" />
+                          <div key={i} className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                            <Phone className="w-3 h-3 text-zinc-500 shrink-0" />
                             <span className="font-mono text-zinc-200">{l.numero}</span>
                             <span className={l.status === 'ativo' ? 'badge-active' : l.status === 'bloqueado' ? 'badge-blocked' : 'badge-pending'}>{l.status}</span>
                           </div>
@@ -249,7 +249,7 @@ export function Clientes() {
                       <span className="text-xs text-zinc-500">Nenhuma</span>
                     )}
                   </td>
-                  <td>
+                  <td className="whitespace-nowrap">
                     {c.dados_completos ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle className="w-3 h-3" />Completo</span>
                     ) : (
