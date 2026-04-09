@@ -320,7 +320,7 @@ export function Chips() {
                 <th className="text-blue-300 min-w-[100px]">Oferta</th>
                 <th className="text-blue-300 w-[90px]">Categoria</th>
                 <th className="text-blue-300 min-w-[180px]">Plano / Franquia</th>
-                <th className="text-blue-300 w-[80px]">Valor</th>
+                <th className="text-blue-300 min-w-[100px]">Valor</th>
                 <th className="text-blue-300 min-w-[130px]">Cliente</th>
                 <th className="text-blue-300 w-[90px]">Data</th>
                 {isAdmin && <th className="text-blue-300 text-right min-w-[120px]">Acoes</th>}
