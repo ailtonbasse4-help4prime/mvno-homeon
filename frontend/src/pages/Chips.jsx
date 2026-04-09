@@ -311,19 +311,19 @@ export function Chips() {
           </div>
         )}
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)]">
-          <table className="data-table w-full min-w-[800px]" data-testid="chips-table">
+          <table className="data-table w-full min-w-[1400px]" data-testid="chips-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300">ICCID</th>
-                <th className="text-blue-300">MSISDN</th>
-                <th className="text-blue-300">Status</th>
-                <th className="text-blue-300">Oferta</th>
-                <th className="text-blue-300">Categoria</th>
-                <th className="text-blue-300">Plano / Franquia</th>
-                <th className="text-blue-300">Valor</th>
-                <th className="text-blue-300">Cliente</th>
-                <th className="text-blue-300">Data</th>
-                {isAdmin && <th className="text-blue-300 text-right">Acoes</th>}
+                <th className="text-blue-300 min-w-[200px]">ICCID</th>
+                <th className="text-blue-300 min-w-[120px]">MSISDN</th>
+                <th className="text-blue-300 w-[90px]">Status</th>
+                <th className="text-blue-300 min-w-[100px]">Oferta</th>
+                <th className="text-blue-300 w-[90px]">Categoria</th>
+                <th className="text-blue-300 min-w-[180px]">Plano / Franquia</th>
+                <th className="text-blue-300 w-[80px]">Valor</th>
+                <th className="text-blue-300 min-w-[130px]">Cliente</th>
+                <th className="text-blue-300 w-[90px]">Data</th>
+                {isAdmin && <th className="text-blue-300 text-right min-w-[120px]">Acoes</th>}
               </tr>
             </thead>
             <tbody>
@@ -336,17 +336,17 @@ export function Chips() {
               ) : (
                 filteredChips.map((chip) => (
                   <tr key={chip.id} data-testid={`chip-row-${chip.id}`}>
-                    <td className="font-mono text-white text-xs sm:text-sm">{chip.iccid}</td>
-                    <td className="font-mono text-zinc-400 text-sm">{chip.msisdn || '-'}</td>
-                    <td>{getStatusBadge(chip.status)}</td>
-                    <td className="text-zinc-300 text-sm">{chip.oferta_nome || <span className="text-amber-400 italic">Sem oferta</span>}</td>
-                    <td>{getCategoriaBadge(chip.categoria)}</td>
-                    <td className="text-zinc-400 text-sm">
+                    <td className="font-mono text-white text-xs sm:text-sm whitespace-nowrap">{chip.iccid}</td>
+                    <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{chip.msisdn || '-'}</td>
+                    <td className="whitespace-nowrap">{getStatusBadge(chip.status)}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{chip.oferta_nome || <span className="text-amber-400 italic">Sem oferta</span>}</td>
+                    <td className="whitespace-nowrap">{getCategoriaBadge(chip.categoria)}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">
                       {chip.plano_nome ? `${chip.plano_nome} (${chip.franquia})` : '-'}
                     </td>
-                    <td className="text-emerald-400 font-mono text-sm">{formatCurrency(chip.valor)}</td>
-                    <td className="text-zinc-400">{chip.cliente_nome || '-'}</td>
-                    <td className="text-zinc-400 text-sm">{new Date(chip.created_at).toLocaleDateString('pt-BR')}</td>
+                    <td className="text-emerald-400 font-mono text-sm whitespace-nowrap">{formatCurrency(chip.valor)}</td>
+                    <td className="text-zinc-400 whitespace-nowrap">{chip.cliente_nome || '-'}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{new Date(chip.created_at).toLocaleDateString('pt-BR')}</td>
                     {isAdmin && (
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">
