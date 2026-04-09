@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -7,6 +7,22 @@ import { Smartphone, Signal, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+// Register service worker and switch manifest for PWA install
+function usePortalPWA() {
+  useEffect(() => {
+    // Switch manifest to portal-specific
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) manifestLink.href = '/portal-manifest.json';
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    return () => {
+      if (manifestLink) manifestLink.href = '/manifest.json';
+    };
+  }, []);
+}
 
 function formatCPF(value) {
   const digits = value.replace(/\D/g, '').slice(0, 11);
@@ -24,6 +40,7 @@ function formatPhone(value) {
 }
 
 export default function PortalLogin() {
+  usePortalPWA();
   const [documento, setDocumento] = useState('');
   const [telefone, setTelefone] = useState('');
   const [error, setError] = useState('');

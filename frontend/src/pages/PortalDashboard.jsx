@@ -12,6 +12,20 @@ import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
+// Register service worker and switch manifest for PWA install
+function usePortalPWA() {
+  useEffect(() => {
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    if (manifestLink) manifestLink.href = '/portal-manifest.json';
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    return () => {
+      if (manifestLink) manifestLink.href = '/manifest.json';
+    };
+  }, []);
+}
+
 function getPortalAuth() {
   const token = sessionStorage.getItem('portal_token');
   const cliente = JSON.parse(sessionStorage.getItem('portal_cliente') || 'null');
@@ -143,6 +157,7 @@ function StatCard({ icon: Icon, label, value, unit, color = '#007AFF' }) {
 }
 
 export default function PortalDashboard() {
+  usePortalPWA();
   const navigate = useNavigate();
   const { token, cliente } = getPortalAuth();
 

@@ -684,13 +684,19 @@ async def list_clients(request: Request, search: Optional[str] = None):
     clients = await db.clientes.find(query).to_list(1000)
     # Pre-fetch all lines in bulk for performance
     client_ids = [str(c["_id"]) for c in clients]
-    all_lines = await db.linhas.find({"cliente_id": {"$in": client_ids}}, {"_id": 0, "cliente_id": 1, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1}).to_list(5000)
+    all_lines = await db.linhas.find({"cliente_id": {"$in": client_ids}}, {"_id": 0, "cliente_id": 1, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1, "chip_id": 1}).to_list(5000)
     # Pre-fetch plan names
     plano_ids = list(set(l["plano_id"] for l in all_lines if l.get("plano_id")))
     planos_map = {}
     if plano_ids:
         planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}, {"nome": 1}).to_list(100)
         planos_map = {str(p["_id"]): p["nome"] for p in planos}
+    # Pre-fetch chip ICCIDs
+    chip_ids = list(set(l["chip_id"] for l in all_lines if l.get("chip_id")))
+    chips_map = {}
+    if chip_ids:
+        chips = await db.chips.find({"_id": {"$in": [ObjectId(cid) for cid in chip_ids]}}, {"iccid": 1}).to_list(5000)
+        chips_map = {str(ch["_id"]): ch.get("iccid", "") for ch in chips}
     # Group lines by client_id
     lines_by_client = {}
     for l in all_lines:
@@ -701,6 +707,7 @@ async def list_clients(request: Request, search: Optional[str] = None):
             "numero": l.get("numero") or l.get("msisdn", ""),
             "status": l.get("status", ""),
             "plano_nome": planos_map.get(l.get("plano_id"), None),
+            "iccid": chips_map.get(l.get("chip_id"), ""),
         })
     results = []
     for c in clients:

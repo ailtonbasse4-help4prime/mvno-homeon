@@ -212,59 +212,79 @@ export function Clientes() {
 
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
-          <table className="data-table w-full min-w-[1300px]" data-testid="clientes-table">
+          <table className="data-table w-full min-w-[1600px]" data-testid="clientes-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
                 <th className="text-blue-300 min-w-[180px]">Nome</th>
-                <th className="text-blue-300 w-[50px]">Tipo</th>
+                <th className="text-blue-300 w-[40px]">Tipo</th>
                 <th className="text-blue-300 min-w-[130px]">Documento</th>
-                <th className="text-blue-300 min-w-[150px]">Telefone</th>
-                <th className="text-blue-300 min-w-[220px]">Linhas</th>
-                <th className="text-blue-300 min-w-[110px]">Dados</th>
+                <th className="text-blue-300 min-w-[155px]">Telefone</th>
+                <th className="text-blue-300 min-w-[155px]">Numero</th>
+                <th className="text-blue-300 min-w-[200px]">ICCID</th>
+                <th className="text-blue-300 min-w-[130px]">Plano</th>
+                <th className="text-blue-300 min-w-[100px]">Dados</th>
                 <th className="text-blue-300 w-[80px]">Status</th>
                 <th className="text-blue-300 text-right w-[90px]">Acoes</th>
               </tr>
             </thead>
             <tbody>
               {clientes.length === 0 ? (
-                <tr><td colSpan={8} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
-              ) : [...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map((c) => (
-                <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
-                  <td className="font-medium text-white text-sm whitespace-nowrap">{c.nome}</td>
-                  <td className="text-zinc-400 text-xs uppercase">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
-                  <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.documento}</td>
-                  <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.telefone}</td>
-                  <td>
-                    {c.linhas_count > 0 ? (
-                      <div className="space-y-0.5">
-                        {(c.linhas || []).map((l, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                            <Phone className="w-3 h-3 text-zinc-500 shrink-0" />
-                            <span className="font-mono text-zinc-200">{l.numero}</span>
-                            <span className={l.status === 'ativo' ? 'badge-active' : l.status === 'bloqueado' ? 'badge-blocked' : 'badge-pending'}>{l.status}</span>
-                          </div>
-                        ))}
+                <tr><td colSpan={10} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
+              ) : [...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).flatMap((c) => {
+                const linhas = c.linhas || [];
+                if (linhas.length === 0) {
+                  return [(
+                    <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
+                      <td className="font-medium text-white text-sm whitespace-nowrap">{c.nome}</td>
+                      <td className="text-zinc-400 text-xs uppercase whitespace-nowrap">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
+                      <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.documento}</td>
+                      <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.telefone}</td>
+                      <td className="text-xs text-zinc-500 whitespace-nowrap">-</td>
+                      <td className="text-xs text-zinc-500 whitespace-nowrap">-</td>
+                      <td className="text-xs text-zinc-500 whitespace-nowrap">-</td>
+                      <td className="whitespace-nowrap">
+                        {c.dados_completos ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-400 whitespace-nowrap"><CheckCircle className="w-3 h-3" />Completo</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-400 whitespace-nowrap"><AlertCircle className="w-3 h-3" />Incompleto</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap"><span className={`whitespace-nowrap ${c.status === 'ativo' ? 'badge-active' : 'badge-inactive'}`}>{c.status}</span></td>
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(c)} className="text-zinc-400 hover:text-white" data-testid={`edit-cliente-${c.id}`}><Edit className="w-4 h-4" /></Button>
+                          {isAdmin && <Button variant="ghost" size="sm" onClick={() => { setClienteToDelete(c); setDeleteDialogOpen(true); }} className="text-zinc-400 hover:text-red-400" data-testid={`delete-cliente-${c.id}`}><Trash2 className="w-4 h-4" /></Button>}
+                        </div>
+                      </td>
+                    </tr>
+                  )];
+                }
+                return linhas.map((l, i) => (
+                  <tr key={`${c.id}-${i}`} data-testid={`cliente-row-${c.id}-${i}`}>
+                    <td className="font-medium text-white text-sm whitespace-nowrap">{c.nome}</td>
+                    <td className="text-zinc-400 text-xs uppercase whitespace-nowrap">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
+                    <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.documento}</td>
+                    <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.telefone}</td>
+                    <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{l.numero || '-'}</td>
+                    <td className="font-mono text-zinc-400 text-xs whitespace-nowrap">{l.iccid || '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{l.plano_nome || '-'}</td>
+                    <td className="whitespace-nowrap">
+                      {c.dados_completos ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-400 whitespace-nowrap"><CheckCircle className="w-3 h-3" />Completo</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-400 whitespace-nowrap"><AlertCircle className="w-3 h-3" />Incompleto</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap"><span className={`whitespace-nowrap ${l.status === 'ativo' ? 'badge-active' : l.status === 'bloqueado' ? 'badge-blocked' : 'badge-inactive'}`}>{l.status}</span></td>
+                    <td className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(c)} className="text-zinc-400 hover:text-white" data-testid={`edit-cliente-${c.id}`}><Edit className="w-4 h-4" /></Button>
+                        {isAdmin && <Button variant="ghost" size="sm" onClick={() => { setClienteToDelete(c); setDeleteDialogOpen(true); }} className="text-zinc-400 hover:text-red-400" data-testid={`delete-cliente-${c.id}`}><Trash2 className="w-4 h-4" /></Button>}
                       </div>
-                    ) : (
-                      <span className="text-xs text-zinc-500">Nenhuma</span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap">
-                    {c.dados_completos ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle className="w-3 h-3" />Completo</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-amber-400"><AlertCircle className="w-3 h-3" />Incompleto</span>
-                    )}
-                  </td>
-                  <td><span className={c.status === 'ativo' ? 'badge-active' : 'badge-inactive'}>{c.status}</span></td>
-                  <td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(c)} className="text-zinc-400 hover:text-white" data-testid={`edit-cliente-${c.id}`}><Edit className="w-4 h-4" /></Button>
-                      {isAdmin && <Button variant="ghost" size="sm" onClick={() => { setClienteToDelete(c); setDeleteDialogOpen(true); }} className="text-zinc-400 hover:text-red-400" data-testid={`delete-cliente-${c.id}`}><Trash2 className="w-4 h-4" /></Button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                ));
+              })}
             </tbody>
           </table>
         </div>
