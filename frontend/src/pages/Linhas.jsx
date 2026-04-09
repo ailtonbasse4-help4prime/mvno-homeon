@@ -9,18 +9,21 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Users } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Linhas() {
   const { isAdmin } = useAuth();
   const [linhas, setLinhas] = useState([]);
+  const [clientes, setClientes] = useState([]);
   const [ofertas, setOfertas] = useState([]);
   const [blockReasons, setBlockReasons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [clienteFilter, setClienteFilter] = useState('');
 
   // Dialogs
   const [blockPartialDialog, setBlockPartialDialog] = useState(false);
@@ -39,14 +42,16 @@ export function Linhas() {
   const fetchLinhas = useCallback(async () => {
     try {
       const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
-      const [linhasRes, ofertasRes, reasonsRes] = await Promise.all([
+      const [linhasRes, ofertasRes, reasonsRes, clientesRes] = await Promise.all([
         axios.get(`${API_URL}/api/linhas`, { params, withCredentials: true }),
         axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
         axios.get(`${API_URL}/api/operadora/motivos-bloqueio`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
       ]);
       setLinhas(safeArray(linhasRes.data));
       setOfertas(safeArray(ofertasRes.data));
       setBlockReasons(safeArray(reasonsRes.data?.reasons));
+      setClientes(safeArray(clientesRes.data));
     } catch (error) {
       toast.error('Erro ao carregar linhas');
     } finally {
@@ -162,25 +167,49 @@ export function Linhas() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 overflow-x-auto">
-        <Filter className="w-4 h-4 text-zinc-500" />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48 form-input" data-testid="linha-status-filter"><SelectValue placeholder="Todos" /></SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="ativo">Ativo</SelectItem>
-            <SelectItem value="pendente">Pendente</SelectItem>
-            <SelectItem value="bloqueado">Bloqueado</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-zinc-500" />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-48 form-input" data-testid="linha-status-filter"><SelectValue placeholder="Todos" /></SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800">
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="pendente">Pendente</SelectItem>
+              <SelectItem value="bloqueado">Bloqueado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-72">
+          <Users className="w-4 h-4 text-zinc-500 shrink-0" />
+          <SearchableSelect
+            value={clienteFilter}
+            onValueChange={setClienteFilter}
+            options={[
+              { value: '', label: 'Todos os clientes' },
+              ...clientes.map(c => ({
+                value: c.id,
+                label: c.nome,
+                sublabel: `${c.documento || ''} | ${c.telefone || ''}`,
+              }))
+            ]}
+            placeholder="Filtrar por cliente..."
+            searchPlaceholder="Buscar por nome, CPF ou telefone..."
+            testId="linha-cliente-filter"
+          />
+        </div>
       </div>
 
       {/* Stats */}
+      {(() => {
+        const displayLinhas = clienteFilter ? linhas.filter(l => l.cliente_id === clienteFilter) : linhas;
+        return (
+          <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-white font-mono">{linhas.length}</p><p className="text-xs text-zinc-500">Total</p></div>
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">{linhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-500">Ativas</p></div>
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">{linhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-500">Pendentes</p></div>
-        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-red-400 font-mono">{linhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-500">Bloqueadas</p></div>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-white font-mono">{displayLinhas.length}</p><p className="text-xs text-zinc-500">Total</p></div>
+        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">{displayLinhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-500">Ativas</p></div>
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">{displayLinhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-500">Pendentes</p></div>
+        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-red-400 font-mono">{displayLinhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-500">Bloqueadas</p></div>
       </div>
 
       {/* Table */}
@@ -199,9 +228,9 @@ export function Linhas() {
               </tr>
             </thead>
             <tbody>
-              {linhas.length === 0 ? (
+              {displayLinhas.length === 0 ? (
                 <tr><td colSpan={7} className="text-center text-zinc-500 py-8">Nenhuma linha encontrada</td></tr>
-              ) : linhas.map((linha) => (
+              ) : displayLinhas.map((linha) => (
                 <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
                   <td className="font-mono text-white font-semibold text-sm">{linha.msisdn || linha.numero}</td>
                   <td className="text-zinc-300 text-sm">{linha.cliente_nome || '-'}</td>
@@ -242,6 +271,9 @@ export function Linhas() {
           </table>
         </div>
       </div>
+          </>
+        );
+      })()}
 
       {/* Block Partial Dialog */}
       <Dialog open={blockPartialDialog} onOpenChange={setBlockPartialDialog}>

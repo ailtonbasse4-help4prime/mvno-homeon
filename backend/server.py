@@ -3717,6 +3717,10 @@ async def startup_event():
     # Load configs from DB (survives restarts/redeploys)
     await asaas_service.load_config_from_db(db)
     await operadora_service.load_config_from_db(db)
+    # Cleanup: fix legacy lines with status "ok" -> "ativo"
+    fix_result = await db.linhas.update_many({"status": "ok"}, {"$set": {"status": "ativo"}})
+    if fix_result.modified_count > 0:
+        logger.info(f"Startup cleanup: {fix_result.modified_count} linhas corrigidas de 'ok' para 'ativo'")
     logger.info("Application started successfully")
 
 app.include_router(api_router)

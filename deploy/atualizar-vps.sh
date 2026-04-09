@@ -4,6 +4,10 @@ echo "=== MVNO Manager - Atualizacao Segura ==="
 echo "PROTECAO: Este script NAO toca no Docker (CRM Atendimento)"
 echo ""
 
+echo "[0/5] Executando backup automatico antes de atualizar..."
+bash /opt/mvno-homeon/deploy/backup-mvno.sh || bash /tmp/mvno-homeon/deploy/backup-mvno.sh || echo "AVISO: Backup nao disponivel, continuando..."
+echo ""
+
 echo "[1/5] Baixando codigo atualizado..."
 cd /tmp/mvno-homeon && git pull
 
