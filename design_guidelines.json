@@ -1,98 +1,108 @@
 {
-  "theme": "dark",
-  "archetype": "4 (Swiss & High-Contrast - Dark Mode Adaptation)",
-  "domain": "Portal do Cliente / Dashboard / Analytics",
-  "emotional_tone": "Authoritative, Clear, Professional, Modern",
-  "colors": {
-    "background": "#09090b",
-    "surface": "#18181b",
-    "border": "#27272a",
-    "primary": "#3b82f6",
-    "primary_hover": "#2563eb",
-    "text": {
-      "heading": "#ffffff",
-      "body_primary": "#f4f4f5",
-      "body_secondary": "#d4d4d8",
-      "muted": "#a1a1aa",
-      "inactive": "#71717a"
-    },
-    "status": {
-      "success": "#10b981",
-      "warning": "#f59e0b",
-      "danger": "#ef4444",
-      "info": "#3b82f6"
-    }
-  },
+  "theme": "Dark",
+  "archetype": "Archetype 2: The Performance Pro",
+  "reasoning": "A telecom portal requires a high-visibility, 'command-center' feel. The Performance Pro archetype uses Deep Obsidian as a base with high-contrast Volt Blue and Electric Blaze accents, ensuring complex data (like usage gauges and invoice statuses) is easily legible while maintaining a premium, mobile-first aesthetic similar to top carriers.",
   "typography": {
-    "headings": {
-      "family": "Chivo, sans-serif",
-      "weight": "600-700",
-      "tracking": "tracking-tight"
-    },
-    "body": {
-      "family": "IBM Plex Sans, sans-serif",
-      "weight": "400-500",
-      "leading": "leading-relaxed"
-    },
-    "data": {
-      "family": "JetBrains Mono, monospace",
-      "weight": "400-500",
-      "tracking": "tracking-tight"
-    },
-    "instructions": "UPGRADE TEXT VISIBILITY: Replace text-zinc-500/text-zinc-400 with text-zinc-300/text-zinc-400 for better APCA contrast. Use text-white for primary values and headings. Small texts should not fall below text-zinc-400."
-  },
-  "components": {
-    "cards": {
-      "base": "bg-zinc-900 border border-zinc-800 rounded-lg p-6",
-      "hover": "hover:border-zinc-600 hover:bg-zinc-800/40 hover:shadow-lg transition-all duration-300 ease-out hover:-translate-y-0.5",
-      "active": "active:scale-[0.98] active:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/50 cursor-pointer",
-      "instructions": "Transform static cards into interactive surfaces. Add hover lift (-translate-y-0.5), active scale-down (scale-[0.98]), and border brightness increase to give tactile feedback. Clickable cards must show obvious interaction states."
-    },
-    "stat_cards": {
-      "base": "bg-zinc-900 border border-zinc-800 rounded-lg p-5 flex flex-col relative overflow-hidden group transition-all duration-300 ease-out",
-      "hover": "hover:border-zinc-600 hover:bg-zinc-800/30 hover:-translate-y-0.5 cursor-pointer",
-      "active": "active:scale-[0.98]",
-      "value_text": "text-3xl font-bold text-white font-mono group-hover:text-blue-400 transition-colors",
-      "label_text": "text-sm text-zinc-300 font-medium",
-      "instructions": "Increase contrast of labels from zinc-400 to zinc-300. Add subtle primary color bleed on hover for values. Add click animation (scale down) to make stats feel tactile."
-    },
-    "navigation": {
-      "sidebar": "w-64 h-screen bg-zinc-950 border-r border-zinc-800 flex flex-col z-40",
-      "link_base": "flex items-center gap-3 px-4 py-3 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-all duration-200 rounded-md mx-2",
-      "link_active": "text-white bg-blue-500/10 border-l-2 border-blue-500 shadow-[inset_4px_0_0_0_rgba(59,130,246,0.1)]",
-      "instructions": "Make the sidebar feel snappy. Links should have a subtle background shift (bg-white/5) and text should brighten significantly. The active link gets a clear visual indicator without overwhelming."
-    },
-    "data_tables": {
-      "header": "text-left text-xs font-semibold uppercase tracking-wider text-zinc-300 px-4 py-3 border-b border-zinc-800",
-      "row": "hover:bg-zinc-800/50 transition-colors duration-150 cursor-default border-b border-zinc-800",
-      "cell": "px-4 py-3 text-sm text-zinc-200",
-      "instructions": "Data tables need high legibility. Upgrade header text to zinc-300. Upgrade cell text to zinc-200. Ensure clear hover state on rows to help the eye track data horizontally."
+    "headings": "Outfit",
+    "body": "Manrope",
+    "font_imports": "@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Outfit:wght@300;400;600;800;900&display=swap');",
+    "hierarchy": {
+      "h1": "font-outfit text-4xl sm:text-5xl font-black tracking-tight",
+      "h2": "font-outfit text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "font-outfit text-xl sm:text-2xl font-bold",
+      "h4": "font-outfit text-lg sm:text-xl font-semibold",
+      "body": "font-manrope text-base leading-relaxed tracking-wide",
+      "labels": "font-outfit text-xs font-bold uppercase tracking-[0.2em]"
     }
   },
-  "motion_and_interactions": {
-    "philosophy": "Frictionless and Tactile. Every interactive element must react to hover and click.",
-    "page_transitions": "Use Framer Motion to wrap page content in a subtle fade and slight slide up (initial={opacity:0, y:10}, animate={opacity:1, y:0}, transition={duration: 0.3, ease: 'easeOut'}).",
-    "scrolling": "Implement smooth scrolling to make navigation feel modern and fluid. Use standard CSS `scroll-behavior: smooth` on html/body element.",
-    "micro_interactions": "All buttons and clickable cards MUST scale down slightly on click (active:scale-[0.98]) to simulate a physical button press."
+  "colors": {
+    "backgrounds": {
+      "app": "#0A0A0A",
+      "surface_base": "#141414",
+      "surface_elevated": "#1A1A1A"
+    },
+    "borders": {
+      "subtle": "rgba(255, 255, 255, 0.1)",
+      "strong": "rgba(255, 255, 255, 0.2)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "muted": "#71717A"
+    },
+    "brand_accents": {
+      "primary": "#007AFF",
+      "primary_hover": "#3395FF",
+      "electric_blaze": "#FF3B30",
+      "success_green": "#34C759"
+    }
   },
-  "accessibility": {
-    "contrast": "Ensure minimum 4.5:1 for body text and 3:1 for large text. The shift from zinc-500 to zinc-400/300 resolves the washed-out text issue.",
-    "focus_states": "All focusable elements (links, inputs, buttons, clickable cards) MUST have a focus ring: focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-zinc-950.",
-    "testing": "All interactive elements must include 'data-testid' attributes (e.g., data-testid='sidebar-nav-link')."
+  "layout_and_spacing": {
+    "grid_system": "MODE B: The 'Control Room' Grid",
+    "spacing_scale": "Use tight gaps (gap-4 or gap-6) between widgets, but generous internal padding (p-6) inside bordered containers to prevent collision.",
+    "alignment": "Mobile-first. Left-align dense data, labels, and lists. Center align only major hero metrics if it improves visual rhythm.",
+    "borders": "Cardless or subtle roundness. Maximum border-radius of 8px (rounded-lg). Avoid heavy soft shadows."
   },
-  "dependencies_to_add": [
-    "framer-motion"
-  ],
+  "surfaces_and_components": {
+    "header": {
+      "style": "Crystal Glassmorphism",
+      "classes": "bg-black/60 backdrop-blur-xl border-b border-white/10 z-50 sticky top-0"
+    },
+    "cards_and_widgets": {
+      "style": "Tactical Minimalism",
+      "classes": "bg-[#141414] border border-white/10 rounded-lg shadow-sm"
+    },
+    "data_visualizations": {
+      "style": "High-Contrast Gauges",
+      "description": "Use thick strokes for data consumption bars. Base track in #262626, active progress in #007AFF. Text inside gauge must be Pure White."
+    },
+    "badges": {
+      "paid": "bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20 rounded-md px-2 py-1 text-xs font-bold",
+      "overdue": "bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20 rounded-md px-2 py-1 text-xs font-bold",
+      "pending": "bg-[#FF9500]/10 text-[#FF9500] border border-[#FF9500]/20 rounded-md px-2 py-1 text-xs font-bold"
+    },
+    "buttons": {
+      "primary": "bg-[#007AFF] hover:bg-[#3395FF] text-white font-bold rounded-lg px-6 py-3 transition-colors",
+      "outline": "bg-transparent border border-white/20 hover:bg-white/10 text-white font-bold rounded-lg px-6 py-3 transition-colors"
+    }
+  },
+  "interactions_and_motion": {
+    "hover_states": "Always explicitly define hover text color (e.g., hover:bg-white/10 hover:text-white). Ensure active states have a lighter hue than resting.",
+    "focus_states": "Must use focus:ring-2 focus:ring-[#007AFF] focus:ring-offset-2 focus:ring-offset-[#0A0A0A] for accessibility.",
+    "transitions": "Use specific property transitions: transition-colors duration-200 ease-in-out or transition-transform for micro-interactions (-translate-y-1 on card hover)."
+  },
+  "media_and_assets": {
+    "icons": "lucide-react",
+    "image_urls": {
+      "avatar_female": {
+        "url": "https://images.unsplash.com/photo-1517945577684-acd9255116a7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwyfHxicmF6aWxpYW4lMjB3b21hbiUyMHNtaWxpbmclMjBwb3J0cmFpdCUyMG1vYmlsZSUyMGF2YXRhcnxlbnwwfHx8fDE3NzU3NzM2MzV8MA&ixlib=rb-4.1.0&q=85",
+        "category": "user_avatar",
+        "description": "Smiling Brazilian woman profile picture for the personalized header greeting."
+      },
+      "texture_bg": {
+        "url": "https://images.unsplash.com/photo-1659185934209-454d02a134dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxkYXJrJTIwZnV0dXJpc3RpYyUyMGFic3RyYWN0JTIwdGV4dHVyZXxlbnwwfHx8fDE3NzU3NzM2NDZ8MA&ixlib=rb-4.1.0&q=85",
+        "category": "abstract_background",
+        "description": "Subtle dark futuristic abstract texture to be used sparingly behind major cards or the hero header area."
+      }
+    }
+  },
+  "accessibility_and_testing": {
+    "testing_attributes": "Every interactive element (PIX copy button, view invoice, expand line details) MUST include a data-testid attribute formatted as kebab-case, role-based.",
+    "contrast": "Ensure a minimum 4.5:1 ratio for normal text and 3:1 for large text. No transparent backgrounds behind critical text."
+  },
   "instructions_to_main_agent": [
-    "1. You are working with a React app using JS/JSX, DO NOT use TS/TSX.",
-    "2. Edit `/app/frontend/src/index.css` to update base text colors and component classes (`.dashboard-card`, `.sidebar-link`, `.stat-card`, etc.) to match the new high-visibility and interactive classes specified in this JSON. Specifically, update `.stat-label` text to `text-zinc-300`, and `.sidebar-link` text to `text-zinc-300`.",
-    "3. Overhaul `.dashboard-card` and `.stat-card` to include `hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 cursor-pointer`.",
-    "4. Search and replace instances of `text-zinc-500` and `text-zinc-400` in JSX files with `text-zinc-400` and `text-zinc-300` respectively.",
-    "5. Install `framer-motion` using yarn and wrap the main page layouts or routes in an `<AnimatePresence>` / `<motion.div>` setup for a smooth fade-in page transition.",
-    "6. Add `scroll-behavior: smooth` to the `:root` or `html` block in CSS.",
-    "7. Add `data-testid` attributes to all links, buttons, and cards."
-  ],
-  "media": {
-    "image_urls": []
-  }
+    "Read this JSON and implement a responsive, mobile-first dashboard layout.",
+    "Update tailwind.config.js to include the exact colors (Obsidian base #0A0A0A, Volt Blue #007AFF) and font families (Outfit, Manrope).",
+    "Add 'Manrope' and 'Outfit' fonts via Google Fonts in index.html or global css.",
+    "Create a sticky top navigation header using the Crystal Glassmorphism surface styling. Display a placeholder styled text 'HomeOn' as the logo and the 'avatar_female' image.",
+    "Below the header, display a personalized greeting: 'Good morning, [Name]!' in H2 font.",
+    "Implement the 'Control Room' grid layout for the data widgets.",
+    "Build a primary 'Data Usage' card showcasing a progress bar or circular gauge component utilizing the brand_accents.primary color.",
+    "Add tightly packed, colored summary mini-cards for 'Minutes Used' and 'SMS Used'.",
+    "Create a 'Quick Summary' section showing active lines and next invoice status.",
+    "Build an 'Invoices' list section where each invoice item uses the provided status badges (Paid/Overdue/Pending). Include a highly visible 'Copy PIX Code' button.",
+    "Ensure the UI uses 'Tactical Minimalism': 1px solid borders on cards instead of soft drop shadows, keeping it flat, dense, and tech-forward.",
+    "All components should be pure HTML+Tailwind or heavily customized Shadcn components meeting the 1px border rule.",
+    "Ensure you use 'lucide-react' for all icons. Add 'data-testid' to every interactive button and link."
+  ]
 }
