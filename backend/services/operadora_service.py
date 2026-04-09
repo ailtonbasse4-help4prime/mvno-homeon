@@ -511,8 +511,12 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
         if cpf_cnpj:
             payload["cpf_cnpj"] = cpf_cnpj
         if linha:
-            payload["linha_contrato"] = linha
-        return await self._request("POST", "/consumoconsolidado", payload)
+            # API exige 11 digitos (sem prefixo 55)
+            clean = linha.replace("+", "").strip()
+            if len(clean) == 13 and clean.startswith("55"):
+                clean = clean[2:]
+            payload["linha_contrato"] = clean
+        return await self._request("POST", "/consumo-consolidado", payload)
 
 
 # ==================== SERVICO PRINCIPAL ====================

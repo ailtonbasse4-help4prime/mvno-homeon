@@ -2974,9 +2974,10 @@ async def portal_consumo(numero: str, request: Request, periodo: Optional[str] =
                 r = results[0]
                 return {
                     "success": True,
-                    "consumo_dados_gb": float(r.get("consumo_dados", 0)),
+                    "consumo_dados_mb": float(r.get("consumo_dados", 0)),
+                    "consumo_dados_gb": float(r.get("consumo_dados", 0)) / 1024,
                     "consumo_sms": int(r.get("consumo_sms", 0)),
-                    "consumo_minutos": float(r.get("consumo_minutos", 0)),
+                    "consumo_minutos": float(r.get("consumo_segundos", 0)) / 60,
                     "consumo_segundos": int(r.get("consumo_segundos", 0)),
                     "plano": r.get("plano"),
                     "contrato_status": r.get("contrato_status"),

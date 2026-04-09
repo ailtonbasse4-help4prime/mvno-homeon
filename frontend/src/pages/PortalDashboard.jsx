@@ -390,7 +390,7 @@ export default function PortalDashboard() {
 
             {/* Data gauge */}
             <DataGauge
-              usedMb={consumoPrincipal?.success ? consumoPrincipal.consumo_dados_gb * 1024 : 0}
+              usedMb={consumoPrincipal?.success ? consumoPrincipal.consumo_dados_mb : 0}
               totalMb={getFranchiseMb(primeiraLinha)}
               label="Consumo de Dados"
             />
@@ -489,7 +489,7 @@ export default function PortalDashboard() {
                     {isExpanded && (
                       <div className="border-t border-white/5 p-4 space-y-4">
                         <DataGauge
-                          usedMb={consumo?.success ? consumo.consumo_dados_gb * 1024 : 0}
+                          usedMb={consumo?.success ? consumo.consumo_dados_mb : 0}
                           totalMb={franchiseMb}
                           label="Consumo de Dados"
                         />
