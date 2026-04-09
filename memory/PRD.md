@@ -13,10 +13,11 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ## Ambiente de Producao (VPS Hostinger)
 - Docker: CRM Atendimento (homeon-crm) nas portas 3001/8001 - NAO MEXER
 - MVNO Backend: uvicorn na porta 3002 (virtualenv /app/venv)
-- MVNO Frontend: Nginx servindo /var/www/mvno/frontend (estático)
+- MVNO Frontend: Nginx servindo /var/www/mvno/frontend (estatico)
 - Nginx config: /etc/nginx/sites-enabled/app-ativacao
 - MongoDB: Docker (porta 27017), DB: mvno_management
 - Script atualizacao: bash /opt/mvno-homeon/atualizar.sh
+- Script backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
@@ -84,16 +85,25 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Removido table-fixed de TODAS as tabelas
 - [x] min-w definido por tabela para scroll horizontal correto no mobile
 
+### Correcao Status + SearchableSelect Linhas + Backup (09/04/2026)
+- [x] Fix mapeamento status sync: clientes pendente->ativo, linhas ok->ativo
+- [x] Startup cleanup: corrige automaticamente linhas legadas com status "ok"
+- [x] SearchableSelect adicionado a pagina Linhas.jsx com filtro por cliente
+- [x] Stats cards da pagina Linhas atualizam ao filtrar por cliente
+- [x] Script de backup robusto criado (deploy/backup-mvno.sh)
+- [x] Backup automatico integrado ao script de atualizacao (atualizar-vps.sh)
+- [x] Rotacao de backups (mantendo ultimos 10)
+
 ## Deploy VPS
 - Script: bash /opt/mvno-homeon/atualizar.sh (NAO toca no Docker CRM)
-- Backup CRM: /opt/backups/
+- Backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
+- Backup dir: /opt/backups/mvno/
 
 ## Backlog
 
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
 - [ ] Desmembrar server.py (3700+ linhas) em roteadores separados
-- [ ] Configurar Asaas no .env da VPS (/app/.env)
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
