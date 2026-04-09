@@ -1770,6 +1770,9 @@ async def sync_clients_from_operator(request: Request):
                 update_fields["telefone"] = telefone_clean
             if not existing_client.get("cidade") and cidade:
                 update_fields["cidade"] = cidade
+            # Sempre atualizar o status do cliente conforme a operadora
+            if existing_client.get("status") != local_status:
+                update_fields["status"] = local_status
             if update_fields:
                 await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": update_fields})
             client_id = str(existing_client["_id"])
