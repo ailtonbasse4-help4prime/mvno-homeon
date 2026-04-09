@@ -87,12 +87,10 @@ export default function PortalLogin() {
         <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/90 to-zinc-950/50" />
         <div className="relative z-10 p-12 max-w-lg">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-sm bg-blue-600 flex items-center justify-center">
-              <Smartphone className="w-7 h-7 text-white" />
-            </div>
+            <img src="/logo192.png" alt="HomeOn" className="w-14 h-14 rounded-xl object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
             <div>
               <h1 className="text-2xl font-bold text-white">Portal do Cliente</h1>
-              <p className="text-sm text-zinc-400">Sua conta em um so lugar</p>
+              <p className="text-sm text-zinc-400">HomeOn Internet</p>
             </div>
           </div>
           <h2 className="text-3xl font-bold text-white mb-4">
@@ -109,9 +107,7 @@ export default function PortalLogin() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-10 h-10 rounded-sm bg-blue-600 flex items-center justify-center">
-              <Smartphone className="w-6 h-6 text-white" />
-            </div>
+            <img src="/logo192.png" alt="HomeOn" className="w-12 h-12 rounded-xl object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
             <div>
               <h1 className="text-xl font-bold text-white">Portal do Cliente</h1>
             </div>

@@ -1,4 +1,4 @@
-# PRD - Sistema MVNO Manager - Ta Telecom
+# PRD - Sistema MVNO Manager - HomeOn Internet
 
 ## Problema Original
 Sistema web completo para gestao de telefonia movel (MVNO), com integracao real com a API da Ta Telecom e Asaas para pagamentos.
@@ -44,7 +44,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Ativacao Self-Service + QR Code (04-05/04/2026)
 - [x] Pagina publica /ativar com leitor QR Code e ativacao automatica
 
-### Portal do Cliente (05/04/2026)
+### Portal do Cliente v1 (05/04/2026)
 - [x] Login CPF+telefone, Dashboard com linhas, saldo, consumo, faturas
 
 ### Portabilidade de Numero (05/04/2026)
@@ -52,47 +52,43 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ### Confiabilidade Asaas - Sync Status (06/04/2026)
 - [x] Sync automatico de status no Portal do Cliente
-- [x] Endpoint POST /api/carteira/sincronizar-status (admin)
 
 ### Correcoes Criticas (07/04/2026)
-- [x] Fix MockTaTelecomAdapter.ativar_chip
-- [x] Busca automatica de CEP via ViaCEP
-- [x] FIX DEFINITIVO Asaas API Key (leitura raw do .env)
-- [x] FIX navegacao travando (removido PageTransition framer-motion)
+- [x] Fix MockTaTelecomAdapter.ativar_chip, CEP ViaCEP, Asaas API Key, navegacao
 
 ### UX e Padronizacao (07/04/2026)
-- [x] Campo email no cadastro de clientes
-- [x] Padronizacao visual de TODAS as tabelas
-- [x] Componente SearchableSelect criado e aplicado em Ativacoes, Assinaturas e Cobrancas
+- [x] Campo email, padronizacao tabelas, SearchableSelect
 
 ### Controle de Notificacoes Asaas (08/04/2026)
-- [x] notificationDisabled: true em todo novo cliente criado no Asaas
-- [x] Botao "Desabilitar Notificacoes de Todos os Clientes" na config Asaas
+- [x] notificationDisabled: true, botao desabilitar lote
 
 ### Portabilidade Self-Service (08/04/2026)
-- [x] Novo status "portabilidade_em_andamento" diferenciando portabilidade de ativacao normal
-- [x] Tela informativa para cliente: aviso SMS, janela de portabilidade, status em tempo real
-- [x] Polling inteligente com consulta a Ta Telecom
-- [x] Compatibilidade retroativa para ativacoes antigas
-- [x] Endpoint POST /api/chips/{iccid}/verificar-portabilidade (admin)
-- [x] Endpoint POST /api/chips/{iccid}/resetar (admin - volta chip para disponivel)
-- [x] Botao laranja verificar portabilidade na pagina Chips
-- [x] Botao vermelho resetar chip na pagina Chips
-- [x] Fix ativacao gratuita (valor R$0) - disparo imediato sem esperar pagamento
-- [x] Correcao fluxo admin para portabilidade
+- [x] Fluxo completo portabilidade via QR Code
 
-### Mobile Fix (08/04/2026)
-- [x] Removido table-fixed de TODAS as tabelas
-- [x] min-w definido por tabela para scroll horizontal correto no mobile
+### Correcao Status + Busca + Backup (09/04/2026)
+- [x] Fix mapeamento status sync: pendente->ativo, ok->ativo
+- [x] SearchableSelect em Linhas.jsx, busca geral (nome, CPF, ICCID, numero)
+- [x] Script backup robusto (deploy/backup-mvno.sh)
+- [x] Clientes ordenados alfabeticamente em todas as paginas
+- [x] Tabelas Clientes e Chips ajustadas para notebook (whitespace-nowrap, min-w)
 
-### Correcao Status + SearchableSelect Linhas + Backup (09/04/2026)
-- [x] Fix mapeamento status sync: clientes pendente->ativo, linhas ok->ativo
-- [x] Startup cleanup: corrige automaticamente linhas legadas com status "ok"
-- [x] SearchableSelect adicionado a pagina Linhas.jsx com filtro por cliente
-- [x] Stats cards da pagina Linhas atualizam ao filtrar por cliente
-- [x] Script de backup robusto criado (deploy/backup-mvno.sh)
-- [x] Backup automatico integrado ao script de atualizacao (atualizar-vps.sh)
-- [x] Rotacao de backups (mantendo ultimos 10)
+### Favicon + Logo + Portal v2 Premium (09/04/2026)
+- [x] Favicon e icones PWA configurados com logo HomeOn
+- [x] manifest.json para instalacao como app no celular
+- [x] Titulo "HomeOn Internet - Telefonia Movel" na aba
+- [x] Portal do Assinante v2 redesenhado nivel operadora grande:
+  - Header com logo HomeOn + glassmorphism
+  - Saudacao personalizada ("Bom dia, Adriano!")
+  - Resumo: linhas ativas + proxima fatura + alerta de vencimento
+  - Card principal com gauge de consumo de dados (barra visual % da franquia)
+  - Saldo restante em destaque (verde)
+  - Cards de Minutos e SMS em grid
+  - Secao de faturas com badges (Pago/Vencido/A vencer) e botao copiar PIX
+  - Auto-fetch de saldo e consumo ao abrir
+  - Formatacao de telefone com DDD (remove prefixo 55)
+  - Design system: Outfit + Manrope fonts, cores #007AFF, #34C759, #FF3B30
+  - Mobile-first, max-w-lg centralizado
+  - Login com logo HomeOn
 
 ## Deploy VPS
 - Script: bash /opt/mvno-homeon/atualizar.sh (NAO toca no Docker CRM)
