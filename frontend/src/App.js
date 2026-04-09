@@ -21,6 +21,7 @@ import { AtivacoesSelfService } from "./pages/AtivacoesSelfService";
 import AtivarSelfService from "./pages/AtivarSelfService";
 import PortalLogin from "./pages/PortalLogin";
 import PortalDashboard from "./pages/PortalDashboard";
+import Divulgacao from "./pages/Divulgacao";
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
             <Route path="/assinaturas" element={<ErrorBoundary><Assinaturas /></ErrorBoundary>} />
             <Route path="/revendedores" element={<ErrorBoundary><Revendedores /></ErrorBoundary>} />
             <Route path="/ativacoes-selfservice" element={<ErrorBoundary><AtivacoesSelfService /></ErrorBoundary>} />
+            <Route path="/divulgacao" element={<ErrorBoundary><Divulgacao /></ErrorBoundary>} />
             <Route path="/usuarios" element={<ErrorBoundary><Usuarios /></ErrorBoundary>} />
             <Route path="/logs" element={<ErrorBoundary><Logs /></ErrorBoundary>} />
           </Route>
