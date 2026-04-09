@@ -9,21 +9,19 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
-import { SearchableSelect } from '../components/SearchableSelect';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Users } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Linhas() {
   const { isAdmin } = useAuth();
   const [linhas, setLinhas] = useState([]);
-  const [clientes, setClientes] = useState([]);
   const [ofertas, setOfertas] = useState([]);
   const [blockReasons, setBlockReasons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
-  const [clienteFilter, setClienteFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Dialogs
   const [blockPartialDialog, setBlockPartialDialog] = useState(false);
@@ -42,16 +40,14 @@ export function Linhas() {
   const fetchLinhas = useCallback(async () => {
     try {
       const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
-      const [linhasRes, ofertasRes, reasonsRes, clientesRes] = await Promise.all([
+      const [linhasRes, ofertasRes, reasonsRes] = await Promise.all([
         axios.get(`${API_URL}/api/linhas`, { params, withCredentials: true }),
         axios.get(`${API_URL}/api/ofertas?ativo=true`, { withCredentials: true }),
         axios.get(`${API_URL}/api/operadora/motivos-bloqueio`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
       ]);
       setLinhas(safeArray(linhasRes.data));
       setOfertas(safeArray(ofertasRes.data));
       setBlockReasons(safeArray(reasonsRes.data?.reasons));
-      setClientes(safeArray(clientesRes.data));
     } catch (error) {
       toast.error('Erro ao carregar linhas');
     } finally {
@@ -180,29 +176,36 @@ export function Linhas() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-72">
-          <Users className="w-4 h-4 text-zinc-500 shrink-0" />
-          <SearchableSelect
-            value={clienteFilter}
-            onValueChange={setClienteFilter}
-            options={[
-              { value: '', label: 'Todos os clientes' },
-              ...clientes.map(c => ({
-                value: c.id,
-                label: c.nome,
-                sublabel: `${c.documento || ''} | ${c.telefone || ''}`,
-              }))
-            ]}
-            placeholder="Filtrar por cliente..."
-            searchPlaceholder="Buscar por nome, CPF ou telefone..."
-            testId="linha-cliente-filter"
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por nome, CPF, ICCID, numero..."
+            className="form-input w-full pl-9 pr-9 py-2 text-sm"
+            data-testid="linha-search-input"
           />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white" data-testid="linha-search-clear">
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Stats */}
       {(() => {
-        const displayLinhas = clienteFilter ? linhas.filter(l => l.cliente_id === clienteFilter) : linhas;
+        const q = searchTerm.toLowerCase().trim();
+        const displayLinhas = q
+          ? linhas.filter(l =>
+              (l.msisdn || '').toLowerCase().includes(q) ||
+              (l.numero || '').toLowerCase().includes(q) ||
+              (l.cliente_nome || '').toLowerCase().includes(q) ||
+              (l.iccid || '').toLowerCase().includes(q) ||
+              (l.cliente_documento || '').toLowerCase().includes(q)
+            )
+          : linhas;
         return (
           <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">

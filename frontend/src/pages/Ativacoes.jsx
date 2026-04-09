@@ -186,7 +186,7 @@ export function Ativacoes() {
                 searchPlaceholder="Buscar por nome, CPF ou telefone..."
                 testId="select-cliente"
                 disabled={activating}
-                options={clientes.map(c => ({
+                options={[...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map(c => ({
                   value: c.id,
                   label: c.nome,
                   sublabel: `${c.documento || c.cpf || ''} | ${c.telefone || ''}`,

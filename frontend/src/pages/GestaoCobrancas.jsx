@@ -661,7 +661,7 @@ export function GestaoCobrancas() {
                 <SearchableSelect
                   value={form.cliente_id}
                   onValueChange={(val) => setForm({ ...form, cliente_id: val, linha_id: '' })}
-                  options={clientes.map(c => ({ value: c.id, label: `${c.nome} - ${c.documento}` }))}
+                  options={[...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map(c => ({ value: c.id, label: `${c.nome} - ${c.documento}` }))}
                   placeholder="Selecione o cliente..."
                   searchPlaceholder="Buscar por nome ou documento..."
                   testId="cobranca-cliente-select"

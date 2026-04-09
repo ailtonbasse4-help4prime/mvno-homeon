@@ -242,7 +242,7 @@ export function Assinaturas() {
                 placeholder="Selecione o cliente"
                 searchPlaceholder="Buscar por nome, CPF..."
                 testId="assinatura-cliente-select"
-                options={clientes.filter(c => c.status === 'ativo').map(c => ({
+                options={[...clientes].filter(c => c.status === 'ativo').sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).map(c => ({
                   value: c.id,
                   label: c.nome,
                   sublabel: c.documento || '',

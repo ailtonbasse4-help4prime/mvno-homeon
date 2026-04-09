@@ -281,6 +281,7 @@ class LineResponse(BaseModel):
     plano_id: str
     oferta_id: Optional[str] = None
     cliente_nome: Optional[str] = None
+    cliente_documento: Optional[str] = None
     plano_nome: Optional[str] = None
     oferta_nome: Optional[str] = None
     franquia: Optional[str] = None
@@ -1470,6 +1471,7 @@ async def list_lines(request: Request, status: Optional[str] = None):
             cliente_id=line["cliente_id"], chip_id=line["chip_id"],
             plano_id=line["plano_id"], oferta_id=line.get("oferta_id"),
             cliente_nome=cl["nome"] if cl else None,
+            cliente_documento=cl.get("documento") if cl else None,
             plano_nome=plano["nome"] if plano else None,
             oferta_nome=oferta["nome"] if oferta else None,
             franquia=plano["franquia"] if plano else None,
