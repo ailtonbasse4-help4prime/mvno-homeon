@@ -157,12 +157,6 @@ export function Login() {
                 )}
               </Button>
             </form>
-
-            <div className="mt-6 pt-6 border-t border-zinc-800">
-              <p className="text-xs text-zinc-500 text-center">
-                Demo: admin@mvno.com / admin123
-              </p>
-            </div>
           </div>
         </div>
       </div>
