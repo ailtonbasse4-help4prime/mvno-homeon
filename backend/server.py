@@ -1452,10 +1452,10 @@ async def list_lines(request: Request, status: Optional[str] = None):
     lines = await db.linhas.find(query).to_list(1000)
 
     # Batch load related data
-    cliente_ids = list(set(l["cliente_id"] for l in lines if l.get("cliente_id")))
-    plano_ids = list(set(l["plano_id"] for l in lines if l.get("plano_id")))
-    oferta_ids = list(set(l["oferta_id"] for l in lines if l.get("oferta_id")))
-    chip_ids = list(set(l["chip_id"] for l in lines if l.get("chip_id")))
+    cliente_ids = list(set(l.get("cliente_id") for l in lines if l.get("cliente_id") and ObjectId.is_valid(l.get("cliente_id"))))
+    plano_ids = list(set(l.get("plano_id") for l in lines if l.get("plano_id") and ObjectId.is_valid(l.get("plano_id"))))
+    oferta_ids = list(set(l.get("oferta_id") for l in lines if l.get("oferta_id") and ObjectId.is_valid(l.get("oferta_id"))))
+    chip_ids = list(set(l.get("chip_id") for l in lines if l.get("chip_id") and ObjectId.is_valid(l.get("chip_id"))))
 
     clientes_lookup, planos_lookup, ofertas_lookup, chips_lookup = {}, {}, {}, {}
     if cliente_ids:

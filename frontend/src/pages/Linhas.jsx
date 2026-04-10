@@ -197,7 +197,7 @@ export function Linhas() {
       {/* Stats */}
       {(() => {
         const q = searchTerm.toLowerCase().trim();
-        const displayLinhas = q
+        const filteredLinhas = q
           ? linhas.filter(l =>
               (l.msisdn || '').toLowerCase().includes(q) ||
               (l.numero || '').toLowerCase().includes(q) ||
@@ -206,6 +206,9 @@ export function Linhas() {
               (l.cliente_documento || '').toLowerCase().includes(q)
             )
           : linhas;
+        const displayLinhas = [...filteredLinhas].sort((a, b) =>
+          (a.cliente_nome || '').localeCompare(b.cliente_nome || '', 'pt-BR', { sensitivity: 'base' })
+        );
         return (
           <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
