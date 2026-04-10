@@ -221,12 +221,12 @@ export function Linhas() {
       {/* Table */}
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
-          <table className="data-table w-full min-w-[1100px]" data-testid="linhas-table">
+          <table className="data-table w-full min-w-[1400px]" data-testid="linhas-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300 whitespace-nowrap">Numero</th>
-                <th className="text-blue-300 whitespace-nowrap">Cliente</th>
-                <th className="text-blue-300 whitespace-nowrap">ICCID</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[160px]">Numero</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[200px]">Cliente</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[200px]">ICCID</th>
                 <th className="text-blue-300 whitespace-nowrap">Plano</th>
                 <th className="text-blue-300 whitespace-nowrap">Oferta</th>
                 <th className="text-blue-300 whitespace-nowrap">Status</th>
@@ -238,9 +238,9 @@ export function Linhas() {
                 <tr><td colSpan={7} className="text-center text-zinc-500 py-8">Nenhuma linha encontrada</td></tr>
               ) : displayLinhas.map((linha) => (
                 <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
-                  <td className="font-mono text-white font-semibold text-sm whitespace-nowrap">{linha.msisdn || linha.numero}</td>
-                  <td className="text-zinc-300 text-sm whitespace-nowrap">{linha.cliente_nome || '-'}</td>
-                  <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{linha.iccid || '-'}</td>
+                  <td className="font-mono text-white font-semibold text-sm whitespace-nowrap min-w-[160px]">{linha.msisdn || linha.numero}</td>
+                  <td className="text-zinc-300 text-sm whitespace-nowrap min-w-[200px]">{linha.cliente_nome || '-'}</td>
+                  <td className="font-mono text-zinc-400 text-sm whitespace-nowrap min-w-[200px]">{linha.iccid || '-'}</td>
                   <td className="text-zinc-300 text-sm whitespace-nowrap">{linha.plano_nome || '-'}</td>
                   <td className="text-zinc-400 text-sm whitespace-nowrap">{linha.oferta_nome || '-'}</td>
                   <td className="whitespace-nowrap">{getStatusBadge(linha.status)}</td>
