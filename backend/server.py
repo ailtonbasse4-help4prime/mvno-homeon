@@ -35,7 +35,7 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
 JWT_ALGORITHM = "HS256"
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
-COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "none")
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
 SITE_URL = os.environ.get("SITE_URL", "")
 
 def _append_portal_link(desc: str) -> str:
