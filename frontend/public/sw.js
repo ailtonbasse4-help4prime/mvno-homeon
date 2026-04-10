@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homeon-portal-v1';
+const CACHE_NAME = 'homeon-portal-v2';
 const PRECACHE_URLS = [
   '/portal',
   '/logo192.png',
