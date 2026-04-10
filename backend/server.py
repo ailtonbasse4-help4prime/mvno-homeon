@@ -2778,7 +2778,7 @@ async def portal_login(data: PortalLoginRequest):
 
     cliente = await db.clientes.find_one({"documento": doc_clean})
     if not cliente:
-        raise HTTPException(status_code=401, detail="CPF nao encontrado. Verifique seus dados.")
+        raise HTTPException(status_code=401, detail="CPF nao encontrado. Entre em contato com a operadora para verificar seu cadastro.")
 
     # Find line matching the phone number
     linhas = await db.linhas.find({"cliente_id": str(cliente["_id"])}).to_list(100)
