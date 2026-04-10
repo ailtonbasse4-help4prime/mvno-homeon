@@ -165,7 +165,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 # Client Models - expanded for Ta Telecom
 class ClientCreate(BaseModel):
@@ -187,10 +187,10 @@ class ClientCreate(BaseModel):
 
 class ClientResponse(BaseModel):
     id: str
-    nome: str
-    tipo_pessoa: str
-    documento: str
-    telefone: str
+    nome: str = ""
+    tipo_pessoa: str = "PF"
+    documento: str = ""
+    telefone: str = ""
     email: Optional[str] = None
     data_nascimento: Optional[str] = None
     cep: Optional[str] = None
@@ -201,9 +201,9 @@ class ClientResponse(BaseModel):
     estado: Optional[str] = None
     city_code: Optional[str] = None
     complemento: Optional[str] = None
-    status: str
+    status: str = "ativo"
     dados_completos: bool = False
-    created_at: datetime
+    created_at: Optional[datetime] = None
     linhas_count: int = 0
     linhas: list = []
 
@@ -220,7 +220,7 @@ class PlanResponse(BaseModel):
     franquia: str
     descricao: Optional[str] = None
     plan_code: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 class CategoriaOferta(str, Enum):
     movel = "movel"
@@ -246,7 +246,7 @@ class OfferResponse(BaseModel):
     descricao: Optional[str] = None
     categoria: str = "movel"
     ativo: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 # Chip Models - with msisdn
 class ChipCreate(BaseModel):
@@ -258,8 +258,8 @@ class ChipUpdate(BaseModel):
 
 class ChipResponse(BaseModel):
     id: str
-    iccid: str
-    status: str
+    iccid: str = ""
+    status: str = "disponivel"
     msisdn: Optional[str] = None
     oferta_id: Optional[str] = None
     oferta_nome: Optional[str] = None
@@ -270,16 +270,16 @@ class ChipResponse(BaseModel):
     valor: Optional[float] = None
     cliente_id: Optional[str] = None
     cliente_nome: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 # Line Models
 class LineResponse(BaseModel):
     id: str
-    numero: str
-    status: str
-    cliente_id: str
-    chip_id: str
-    plano_id: str
+    numero: str = ""
+    status: str = "desconhecido"
+    cliente_id: str = ""
+    chip_id: str = ""
+    plano_id: Optional[str] = None
     oferta_id: Optional[str] = None
     cliente_nome: Optional[str] = None
     cliente_documento: Optional[str] = None
@@ -289,7 +289,7 @@ class LineResponse(BaseModel):
     plan_code: Optional[str] = None
     iccid: Optional[str] = None
     msisdn: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 # Activation Models
 class ActivationRequest(BaseModel):
@@ -325,7 +325,7 @@ class LogEntry(BaseModel):
     details: str
     user_id: Optional[str] = None
     user_name: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
     api_request: Optional[dict] = None
     api_response: Optional[dict] = None
     is_mock: Optional[bool] = None
@@ -358,7 +358,7 @@ class CobrancaResponse(BaseModel):
     asaas_pix_qrcode: Optional[str] = None
     barcode: Optional[str] = None
     paid_at: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 class AssinaturaCreate(BaseModel):
     cliente_id: str
@@ -384,7 +384,7 @@ class AssinaturaResponse(BaseModel):
     status: str
     asaas_subscription_id: Optional[str] = None
     asaas_customer_id: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 # ==================== PASSWORD UTILS ====================
 def hash_password(password: str) -> str:
@@ -2671,7 +2671,7 @@ class RevendedorResponse(BaseModel):
     observacoes: Optional[str] = None
     total_chips: int = 0
     chips_ativados: int = 0
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 async def _build_revendedor_response(doc: dict) -> RevendedorResponse:
     rev_id = str(doc["_id"])
