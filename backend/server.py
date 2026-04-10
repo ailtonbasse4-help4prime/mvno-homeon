@@ -682,7 +682,7 @@ async def list_clients(request: Request, search: Optional[str] = None):
             {"telefone": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}},
         ]}
-    clients = await db.clientes.find(query).sort("nome", 1).collation({"locale": "pt", "strength": 1}).to_list(1000)
+    clients = await db.clientes.find(query).sort("nome", 1).to_list(1000)
     # Pre-fetch all lines in bulk for performance
     client_ids = [str(c["_id"]) for c in clients]
     all_lines = await db.linhas.find({"cliente_id": {"$in": client_ids}}, {"_id": 0, "cliente_id": 1, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1, "chip_id": 1}).to_list(5000)
@@ -3738,19 +3738,22 @@ async def startup_event():
     await asaas_service.load_config_from_db(db)
     await operadora_service.load_config_from_db(db)
     # Cleanup: fix legacy lines with status "ok" -> "ativo"
-    fix_result = await db.linhas.update_many({"status": "ok"}, {"$set": {"status": "ativo"}})
-    if fix_result.modified_count > 0:
-        logger.info(f"Startup cleanup: {fix_result.modified_count} linhas corrigidas de 'ok' para 'ativo'")
-    # Cleanup: fix lines stuck as "pendente" where client is "ativo"
-    active_clients = await db.clientes.find({"status": "ativo"}, {"_id": 1}).to_list(5000)
-    active_ids = [str(c["_id"]) for c in active_clients]
-    if active_ids:
-        fix_pending = await db.linhas.update_many(
-            {"status": "pendente", "cliente_id": {"$in": active_ids}},
-            {"$set": {"status": "ativo"}}
-        )
-        if fix_pending.modified_count > 0:
-            logger.info(f"Startup cleanup: {fix_pending.modified_count} linhas 'pendente' corrigidas para 'ativo' (cliente ativo)")
+    try:
+        fix_result = await db.linhas.update_many({"status": "ok"}, {"$set": {"status": "ativo"}})
+        if fix_result.modified_count > 0:
+            logger.info(f"Startup cleanup: {fix_result.modified_count} linhas corrigidas de 'ok' para 'ativo'")
+        # Cleanup: fix lines stuck as "pendente" where client is "ativo"
+        active_clients = await db.clientes.find({"status": "ativo"}, {"_id": 1}).to_list(5000)
+        active_ids = [str(c["_id"]) for c in active_clients]
+        if active_ids:
+            fix_pending = await db.linhas.update_many(
+                {"status": "pendente", "cliente_id": {"$in": active_ids}},
+                {"$set": {"status": "ativo"}}
+            )
+            if fix_pending.modified_count > 0:
+                logger.info(f"Startup cleanup: {fix_pending.modified_count} linhas 'pendente' corrigidas para 'ativo' (cliente ativo)")
+    except Exception as e:
+        logger.warning(f"Startup cleanup error (non-fatal): {e}")
     logger.info("Application started successfully")
 
 app.include_router(api_router)
