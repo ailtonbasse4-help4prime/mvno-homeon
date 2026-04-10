@@ -681,7 +681,7 @@ async def list_clients(request: Request, search: Optional[str] = None):
             {"telefone": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}},
         ]}
-    clients = await db.clientes.find(query).to_list(1000)
+    clients = await db.clientes.find(query).sort("nome", 1).collation({"locale": "pt", "strength": 1}).to_list(1000)
     # Pre-fetch all lines in bulk for performance
     client_ids = [str(c["_id"]) for c in clients]
     all_lines = await db.linhas.find({"cliente_id": {"$in": client_ids}}, {"_id": 0, "cliente_id": 1, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1, "chip_id": 1}).to_list(5000)
