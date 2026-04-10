@@ -3741,6 +3741,16 @@ async def startup_event():
     fix_result = await db.linhas.update_many({"status": "ok"}, {"$set": {"status": "ativo"}})
     if fix_result.modified_count > 0:
         logger.info(f"Startup cleanup: {fix_result.modified_count} linhas corrigidas de 'ok' para 'ativo'")
+    # Cleanup: fix lines stuck as "pendente" where client is "ativo"
+    active_clients = await db.clientes.find({"status": "ativo"}, {"_id": 1}).to_list(5000)
+    active_ids = [str(c["_id"]) for c in active_clients]
+    if active_ids:
+        fix_pending = await db.linhas.update_many(
+            {"status": "pendente", "cliente_id": {"$in": active_ids}},
+            {"$set": {"status": "ativo"}}
+        )
+        if fix_pending.modified_count > 0:
+            logger.info(f"Startup cleanup: {fix_pending.modified_count} linhas 'pendente' corrigidas para 'ativo' (cliente ativo)")
     logger.info("Application started successfully")
 
 app.include_router(api_router)
