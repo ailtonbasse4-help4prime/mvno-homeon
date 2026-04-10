@@ -7,7 +7,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react
 - **Backend**: FastAPI (Python)
 - **Banco de Dados**: MongoDB
-- **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=None)
+- **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=lax)
 - **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - producao)
 
 ## Ambiente de Producao (VPS Hostinger)
@@ -16,22 +16,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - MVNO Frontend: Nginx servindo /var/www/mvno/frontend (estatico)
 - Nginx config: /etc/nginx/sites-enabled/app-ativacao
 - MongoDB: Docker (porta 27017), DB: mvno_management
-- Script atualizacao: bash /opt/mvno-homeon/atualizar.sh
-- Script backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
-- DNS: Registro A mvno.homeonapp.com.br -> 187.127.11.235 (Hostinger DNS, NAO Cloudflare)
-
-## Deploy VPS
-- Script: bash /opt/mvno-homeon/atualizar.sh (NAO toca no Docker CRM)
-- O script compila frontend com REACT_APP_BACKEND_URL="" (URLs relativas via Nginx)
-- Nginx faz proxy /api/ -> porta 3002 (backend MVNO)
-- Backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
-- Backup dir: /opt/backups/mvno/
+- DNS: Registro A mvno.homeonapp.com.br -> 187.127.11.235 (Hostinger DNS)
+- Deploy: cd /tmp/mvno-homeon && git pull && bash /opt/mvno-homeon/atualizar.sh
+- .env VPS: /opt/mvno-homeon/backend/.env (COOKIE_SECURE=true, COOKIE_SAMESITE=lax)
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
 - **Atendente**: carlos@mvno.com / nova456
 - **Admin (producao)**: ailtonhomeon@gmail.com / gi157258
-- **Portal Cliente (teste)**: CPF 02962261493 / Tel 83999056284
+- **Admin (producao)**: elizpestilho@gmail.com / eliz22
 - **Portal Adriana**: CPF 23211311874 / Tel 19920090179
 
 ## Implementado
@@ -42,67 +35,39 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Carteira Movel + Asaas (01/04/2026)
 - [x] CRUD cobrancas/assinaturas, dashboard financeiro, webhook
 
-### Mobile + Deploy (02/04/2026)
-- [x] Layout responsivo, scripts deploy VPS
-
 ### Sincronizacao Clientes Ta Telecom (03/04/2026)
 - [x] 94 clientes, 108 linhas, 104 chips sincronizados
 
-### Gestao de Cobrancas + Revendedores (04/04/2026)
-- [x] Integracao real Asaas producao + Revendedores
+### Portal do Cliente v2 Premium (05-09/04/2026)
+- [x] Login CPF+telefone, Dashboard com linhas, saldo, consumo, faturas
+- [x] PWA instalavel, barra circular de consumo de dados reais
 
 ### Ativacao Self-Service + QR Code (04-05/04/2026)
 - [x] Pagina publica /ativar com leitor QR Code e ativacao automatica
 
-### Portal do Cliente v1 (05/04/2026)
-- [x] Login CPF+telefone, Dashboard com linhas, saldo, consumo, faturas
+### Correcoes Producao (10/04/2026)
+- [x] DNS corrigido: CNAME preview -> Registro A VPS
+- [x] Deploy script corrigido: URLs relativas, proxy Nginx /api -> porta 3002
+- [x] Nginx: headers no-cache para HTML, CDN-Cache-Control no-store
+- [x] CORS: allow_credentials com origins especificas
+- [x] Cookie: SameSite=lax para mesmo dominio
+- [x] Modelos Pydantic defensivos: todos campos Optional com defaults
+- [x] ObjectId.is_valid() em todas queries com IDs de referencia
+- [x] Dados Adriana corrigidos na VPS (chip_id invalido, numero/msisdn)
+- [x] Asaas reconfigurado na VPS (chave producao reinserida no MongoDB)
+- [x] ErrorBoundary reseta ao navegar entre paginas
+- [x] Linhas em ordem alfabetica e sem quebra de linha (min-w-[1400px])
+- [x] Service Worker v2 com auto-limpeza de cache
 
-### Portabilidade de Numero (05/04/2026)
-- [x] Toggle portabilidade no admin e self-service
-
-### Confiabilidade Asaas - Sync Status (06/04/2026)
-- [x] Sync automatico de status no Portal do Cliente
-
-### Correcoes Criticas (07/04/2026)
-- [x] Fix MockTaTelecomAdapter.ativar_chip, CEP ViaCEP, Asaas API Key, navegacao
-
-### UX e Padronizacao (07/04/2026)
-- [x] Campo email, padronizacao tabelas, SearchableSelect
-
-### Controle de Notificacoes Asaas (08/04/2026)
-- [x] notificationDisabled: true, botao desabilitar lote
-
-### Portabilidade Self-Service (08/04/2026)
-- [x] Fluxo completo portabilidade via QR Code
-
-### Correcao Status + Busca + Backup (09/04/2026)
-- [x] Fix mapeamento status sync: pendente->ativo, ok->ativo
-- [x] SearchableSelect em Linhas.jsx, busca geral (nome, CPF, ICCID, numero)
-- [x] Script backup robusto (deploy/backup-mvno.sh)
-- [x] Clientes ordenados alfabeticamente em todas as paginas
-- [x] Tabelas Clientes e Chips ajustadas para notebook (whitespace-nowrap, min-w)
-
-### Favicon + Logo + Portal v2 Premium (09/04/2026)
-- [x] Favicon e icones PWA configurados com logo HomeOn
-- [x] manifest.json para instalacao como app no celular
-- [x] Titulo "HomeOn Internet - Telefonia Movel" na aba
-- [x] Portal do Assinante v2 redesenhado nivel operadora grande
-
-### Correcoes Robustez Portal + Deploy (10/04/2026)
-- [x] Portal login defensivo: try/except em ObjectId, .get() em todos campos, log de erros
-- [x] Portal dashboard defensivo: ObjectId.is_valid(), .get() com defaults em cobrancas, created_at type-safe
-- [x] Listagem de clientes defensiva: ObjectId.is_valid() em chip_ids e plano_ids
-- [x] Fix DNS: CNAME mvno apontava para chip-manager-3.emergent.host (preview) -> Alterado para registro A 187.127.11.235
-- [x] Fix deploy script: REACT_APP_BACKEND_URL="" (URLs relativas), proxy Nginx /api -> porta 3002
-- [x] Fix Nginx: headers no-cache para HTML, CDN-Cache-Control no-store
-- [x] Fix CORS: allow_credentials com origins especificas (nao wildcard)
-- [x] Fix dados Adriana: chip_id invalido removido, numero/msisdn corrigido
+## Bugs Conhecidos
+- [ ] Bug de navegacao no menu: ao clicar rapidamente em varios itens, pode travar na tela anterior (parcialmente corrigido com ErrorBoundary reset, investigar race conditions nas chamadas de API)
 
 ## Backlog
 
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
 - [ ] Desmembrar server.py (3800+ linhas) em roteadores separados
+- [ ] Investigar/corrigir bug de navegacao do menu definitivamente
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
