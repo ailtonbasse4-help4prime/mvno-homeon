@@ -3798,8 +3798,12 @@ async def download_deploy_package():
     return FileResponse(path=str(file_path), filename="mvno-vps-deploy.tar.gz", media_type="application/gzip")
 
 frontend_url = os.environ.get('FRONTEND_URL', os.environ.get('CORS_ORIGINS', '*'))
-origins = [frontend_url] if frontend_url != '*' else ["*"]
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=origins, allow_methods=["*"], allow_headers=["*"])
+if frontend_url == '*':
+    origins = ["*"]
+    app.add_middleware(CORSMiddleware, allow_credentials=False, allow_origins=origins, allow_methods=["*"], allow_headers=["*"])
+else:
+    origins = [o.strip() for o in frontend_url.split(",")]
+    app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=origins, allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

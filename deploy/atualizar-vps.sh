@@ -11,11 +11,15 @@ echo ""
 echo "[1/6] Baixando codigo atualizado..."
 cd /tmp/mvno-homeon && git pull
 
-echo "[2/6] Compilando frontend (producao)..."
+echo "[2/6] Compilando frontend (producao - URLs relativas)..."
 cd /tmp/mvno-homeon/frontend && yarn install --silent
-echo "REACT_APP_BACKEND_URL=" > .env.production.local
-yarn build
-rm -f .env.production.local
+REACT_APP_BACKEND_URL="" yarn build
+echo "Build OK - verificando URL..."
+if grep -q "chip-manager-3" build/static/js/main.*.js 2>/dev/null; then
+  echo "ERRO: Build ainda contem URL do preview! Abortando."
+  exit 1
+fi
+echo "URL OK - nenhuma referencia ao preview encontrada."
 
 echo "[3/6] Atualizando frontend MVNO..."
 sudo cp -r /tmp/mvno-homeon/frontend/build/* /var/www/mvno/frontend/
@@ -25,7 +29,7 @@ sudo cp /tmp/mvno-homeon/backend/server.py /opt/mvno-homeon/backend/server.py
 sudo cp -r /tmp/mvno-homeon/backend/services/* /opt/mvno-homeon/backend/services/
 
 echo "[5/6] Atualizando Nginx (proxy /api -> porta 3002)..."
-sudo cp /tmp/mvno-homeon/deploy/vps-backend/nginx-mvno.conf /etc/nginx/sites-enabled/app-ativacao || echo "AVISO: Nginx config nao copiada, verifique manualmente"
+sudo cp /tmp/mvno-homeon/deploy/vps-backend/nginx-mvno.conf /etc/nginx/sites-enabled/app-ativacao || echo "AVISO: Nginx config nao copiada"
 sudo nginx -t && sudo systemctl reload nginx || echo "AVISO: Nginx reload falhou"
 
 echo "[6/6] Reiniciando backend MVNO..."
