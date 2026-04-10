@@ -18,11 +18,21 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - MongoDB: Docker (porta 27017), DB: mvno_management
 - Script atualizacao: bash /opt/mvno-homeon/atualizar.sh
 - Script backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
+- DNS: Registro A mvno.homeonapp.com.br -> 187.127.11.235 (Hostinger DNS, NAO Cloudflare)
+
+## Deploy VPS
+- Script: bash /opt/mvno-homeon/atualizar.sh (NAO toca no Docker CRM)
+- O script compila frontend com REACT_APP_BACKEND_URL="" (URLs relativas via Nginx)
+- Nginx faz proxy /api/ -> porta 3002 (backend MVNO)
+- Backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
+- Backup dir: /opt/backups/mvno/
 
 ## Credenciais
 - **Admin**: admin@mvno.com / admin123
 - **Atendente**: carlos@mvno.com / nova456
+- **Admin (producao)**: ailtonhomeon@gmail.com / gi157258
 - **Portal Cliente (teste)**: CPF 02962261493 / Tel 83999056284
+- **Portal Adriana**: CPF 23211311874 / Tel 19920090179
 
 ## Implementado
 
@@ -76,36 +86,25 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Favicon e icones PWA configurados com logo HomeOn
 - [x] manifest.json para instalacao como app no celular
 - [x] Titulo "HomeOn Internet - Telefonia Movel" na aba
-- [x] Portal do Assinante v2 redesenhado nivel operadora grande:
-  - Header com logo HomeOn + glassmorphism
-  - Saudacao personalizada ("Bom dia, Adriano!")
-  - Resumo: linhas ativas + proxima fatura + alerta de vencimento
-  - Card principal com gauge de consumo de dados (barra visual % da franquia)
-  - Saldo restante em destaque (verde)
-  - Cards de Minutos e SMS em grid
-  - Secao de faturas com badges (Pago/Vencido/A vencer) e botao copiar PIX
-  - Auto-fetch de saldo e consumo ao abrir
-  - Formatacao de telefone com DDD (remove prefixo 55)
-  - Design system: Outfit + Manrope fonts, cores #007AFF, #34C759, #FF3B30
-  - Mobile-first, max-w-lg centralizado
-  - Login com logo HomeOn
+- [x] Portal do Assinante v2 redesenhado nivel operadora grande
 
-## Deploy VPS
-- Script: bash /opt/mvno-homeon/atualizar.sh (NAO toca no Docker CRM)
-- Backup: bash /opt/mvno-homeon/deploy/backup-mvno.sh
-- Backup dir: /opt/backups/mvno/
+### Correcoes Robustez Portal + Deploy (10/04/2026)
+- [x] Portal login defensivo: try/except em ObjectId, .get() em todos campos, log de erros
+- [x] Portal dashboard defensivo: ObjectId.is_valid(), .get() com defaults em cobrancas, created_at type-safe
+- [x] Listagem de clientes defensiva: ObjectId.is_valid() em chip_ids e plano_ids
+- [x] Fix DNS: CNAME mvno apontava para chip-manager-3.emergent.host (preview) -> Alterado para registro A 187.127.11.235
+- [x] Fix deploy script: REACT_APP_BACKEND_URL="" (URLs relativas), proxy Nginx /api -> porta 3002
+- [x] Fix Nginx: headers no-cache para HTML, CDN-Cache-Control no-store
+- [x] Fix CORS: allow_credentials com origins especificas (nao wildcard)
+- [x] Fix dados Adriana: chip_id invalido removido, numero/msisdn corrigido
 
 ## Backlog
 
-### Correções Robustez Portal (10/04/2026)
-- [x] Portal login defensivo: try/except em ObjectId, .get() em todos campos, log de erros
-- [x] Portal dashboard defensivo: ObjectId.is_valid(), .get() com defaults em cobrancas, created_at type-safe
-- [x] Testado com dados incompletos (sem plano, oferta, chip) - funciona sem 500
-
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
-- [ ] Desmembrar server.py (3700+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (3800+ linhas) em roteadores separados
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
 - [ ] Historico de ativacoes
+- [ ] Expansao Multi-Tenant (SaaS)
