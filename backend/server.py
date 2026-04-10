@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import os
 import re
+import asyncio
 import logging
 import secrets
 import json
@@ -1736,22 +1737,31 @@ async def sync_clients_from_operator(request: Request):
     lines_created = 0
     chips_linked = 0
     errors = []
-    for item in contract_chips:
+    for idx, item in enumerate(contract_chips):
         stock_status = (item.get("status") or "").upper().strip()
         iccid = item.get("sim_card") or item.get("iccid")
         if not iccid:
             continue
         iccid = str(iccid)
-        # 2. Query subscriber details from Tá Telecom
-        try:
-            detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
-        except Exception as e:
-            errors.append(f"Erro ao consultar {iccid}: {str(e)}")
-            continue
-        if not detail_resp.success or not detail_resp.data:
+        # Rate limit: delay between chips
+        if idx > 0:
+            await asyncio.sleep(0.3)
+        # 2. Query subscriber details from Tá Telecom (with retry for rate limit)
+        d = None
+        for attempt in range(3):
+            try:
+                detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+                if detail_resp.success and detail_resp.data:
+                    d = detail_resp.data
+                    break
+            except Exception as e:
+                if attempt == 2:
+                    errors.append(f"Erro ao consultar {iccid}: {str(e)}")
+            # Exponential backoff between retries
+            await asyncio.sleep(1.0 * (attempt + 1))
+        if not d:
             errors.append(f"Sem dados para ICCID {iccid}")
             continue
-        d = detail_resp.data
         cpf = d.get("cpf") or d.get("document_number") or ""
         nome = d.get("nome") or d.get("subscriber_name") or ""
         if not cpf or not nome:
