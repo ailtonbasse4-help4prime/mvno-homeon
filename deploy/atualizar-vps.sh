@@ -13,7 +13,9 @@ cd /tmp/mvno-homeon && git pull
 
 echo "[2/5] Compilando frontend..."
 cd /tmp/mvno-homeon/frontend && yarn install --silent
-REACT_APP_BACKEND_URL=https://mvno.homeonapp.com.br yarn build
+echo "REACT_APP_BACKEND_URL=https://mvno.homeonapp.com.br" > .env.production.local
+yarn build
+rm -f .env.production.local
 
 echo "[3/5] Atualizando frontend MVNO..."
 sudo cp -r /tmp/mvno-homeon/frontend/build/* /var/www/mvno/frontend/
