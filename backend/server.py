@@ -338,6 +338,8 @@ class CobrancaCreate(BaseModel):
     valor: float
     vencimento: str  # YYYY-MM-DD
     descricao: Optional[str] = None
+    modalidade: str = "avista"  # avista, parcelado, assinatura
+    parcelas: int = 1  # numero de parcelas (para parcelado e assinatura)
 
 class CobrancaResponse(BaseModel):
     id: str
@@ -351,6 +353,10 @@ class CobrancaResponse(BaseModel):
     vencimento: str
     descricao: Optional[str] = None
     status: str
+    modalidade: str = "avista"
+    parcela_num: Optional[int] = None
+    parcela_total: Optional[int] = None
+    assinatura_id: Optional[str] = None
     asaas_payment_id: Optional[str] = None
     asaas_invoice_url: Optional[str] = None
     asaas_bankslip_url: Optional[str] = None
@@ -1959,12 +1965,16 @@ async def _build_cobranca_response(doc: dict) -> CobrancaResponse:
                 if of:
                     oferta_nome = of["nome"]
     return CobrancaResponse(
-        id=str(doc["_id"]), cliente_id=doc["cliente_id"],
+        id=str(doc["_id"]), cliente_id=doc.get("cliente_id", ""),
         cliente_nome=cliente_nome, linha_id=doc.get("linha_id"),
         msisdn=msisdn, oferta_nome=oferta_nome,
-        billing_type=doc["billing_type"], valor=doc["valor"],
-        vencimento=doc["vencimento"], descricao=doc.get("descricao"),
+        billing_type=doc.get("billing_type", "BOLETO"), valor=doc.get("valor", 0),
+        vencimento=doc.get("vencimento", ""), descricao=doc.get("descricao"),
         status=doc.get("status", "PENDING"),
+        modalidade=doc.get("modalidade", "avista"),
+        parcela_num=doc.get("parcela_num"),
+        parcela_total=doc.get("parcela_total"),
+        assinatura_id=doc.get("assinatura_id"),
         asaas_payment_id=doc.get("asaas_payment_id"),
         asaas_invoice_url=doc.get("asaas_invoice_url"),
         asaas_bankslip_url=doc.get("asaas_bankslip_url"),
@@ -1972,7 +1982,7 @@ async def _build_cobranca_response(doc: dict) -> CobrancaResponse:
         asaas_pix_qrcode=doc.get("asaas_pix_qrcode"),
         barcode=doc.get("barcode"),
         paid_at=doc.get("paid_at"),
-        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+        created_at=doc.get("created_at"),
     )
 
 async def _build_assinatura_response(doc: dict) -> AssinaturaResponse:
@@ -2171,68 +2181,115 @@ async def list_cobrancas(request: Request, cliente_id: Optional[str] = None,
     docs = await db.cobrancas.find(query).sort("created_at", -1).limit(limit).to_list(limit)
     return [await _build_cobranca_response(d) for d in docs]
 
-@api_router.post("/carteira/cobrancas", response_model=CobrancaResponse)
+@api_router.post("/carteira/cobrancas", response_model=List[CobrancaResponse])
 async def create_cobranca(data: CobrancaCreate, request: Request):
     user = await require_admin(request)
     cliente = await db.clientes.find_one({"_id": ObjectId(data.cliente_id)})
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente nao encontrado")
 
-    doc = {
-        "cliente_id": data.cliente_id,
-        "linha_id": data.linha_id,
-        "billing_type": data.billing_type.value,
-        "valor": data.valor,
-        "vencimento": data.vencimento,
-        "descricao": data.descricao,
-        "status": "PENDING",
-        "asaas_payment_id": None,
-        "asaas_invoice_url": None,
-        "asaas_pix_code": None,
-        "paid_at": None,
-        "created_at": datetime.now(timezone.utc),
-    }
+    parcelas = max(1, data.parcelas)
+    modalidade = data.modalidade or "avista"
+    base_date = datetime.strptime(data.vencimento, "%Y-%m-%d")
+    results = []
 
-    if asaas_service.is_configured:
+    # Para assinatura: cria no Asaas e depois gera as cobranças locais
+    assinatura_id = None
+    if modalidade == "assinatura" and asaas_service.is_configured:
         try:
             asaas_customer_id = await _get_asaas_customer_id(cliente, user)
-            ref = f"cob-{data.cliente_id}"
-            if data.linha_id:
-                ref += f"-{data.linha_id}"
-            result = await asaas_service.create_payment(
+            sub_result = await asaas_service.create_subscription(
                 customer_id=asaas_customer_id,
                 billing_type=data.billing_type.value,
                 value=data.valor,
-                due_date=data.vencimento,
-                description=_append_portal_link(data.descricao or f"Cobranca movel - {cliente['nome']}"),
-                external_reference=ref,
+                next_due_date=data.vencimento,
+                cycle="MONTHLY",
+                description=_append_portal_link(data.descricao or f"Assinatura - {cliente.get('nome', 'Cliente')}"),
             )
-            doc["asaas_payment_id"] = result.get("id")
-            doc["asaas_invoice_url"] = result.get("invoiceUrl")
-            doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
-            doc["status"] = result.get("status", "PENDING")
-            # Fetch barcode/pix details
-            payment_id = result.get("id")
-            if payment_id:
-                try:
-                    if data.billing_type.value == "BOLETO":
-                        barcode_data = await asaas_service.get_boleto_barcode(payment_id)
-                        doc["barcode"] = barcode_data.get("identificationField")
-                    elif data.billing_type.value == "PIX":
-                        pix_data = await asaas_service.get_pix_qrcode(payment_id)
-                        doc["asaas_pix_code"] = pix_data.get("payload")
-                        doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
-                except Exception as e:
-                    logger.warning(f"Erro ao buscar detalhes do pagamento: {e}")
-        except (AsaasNotConfiguredError, AsaasApiError) as e:
-            logger.warning(f"Asaas API error ao criar cobranca: {e}")
+            assinatura_id = sub_result.get("id")
+            # Salvar assinatura localmente
+            await db.assinaturas.insert_one({
+                "cliente_id": data.cliente_id,
+                "linha_id": data.linha_id,
+                "asaas_subscription_id": assinatura_id,
+                "billing_type": data.billing_type.value,
+                "valor": data.valor,
+                "ciclo": "MONTHLY",
+                "status": "ACTIVE",
+                "created_at": datetime.now(timezone.utc),
+            })
         except Exception as e:
-            logger.warning(f"Erro inesperado ao criar cobranca no Asaas: {e}")
+            logger.warning(f"Erro ao criar assinatura Asaas: {e}")
 
-    inserted = await db.cobrancas.insert_one(doc)
-    doc["_id"] = inserted.inserted_id
-    await create_log("financeiro", f"Cobranca criada: R$ {data.valor:.2f} para {cliente['nome']}", user["id"], user["name"])
-    return await _build_cobranca_response(doc)
+    for i in range(parcelas):
+        from dateutil.relativedelta import relativedelta
+        venc_date = base_date + relativedelta(months=i)
+        vencimento_str = venc_date.strftime("%Y-%m-%d")
+
+        desc = data.descricao or f"Cobranca - {cliente.get('nome', 'Cliente')}"
+        if parcelas > 1:
+            desc = f"{desc} ({i+1}/{parcelas})"
+
+        doc = {
+            "cliente_id": data.cliente_id,
+            "linha_id": data.linha_id,
+            "billing_type": data.billing_type.value,
+            "valor": data.valor,
+            "vencimento": vencimento_str,
+            "descricao": desc,
+            "status": "PENDING",
+            "modalidade": modalidade,
+            "parcela_num": i + 1 if parcelas > 1 else None,
+            "parcela_total": parcelas if parcelas > 1 else None,
+            "assinatura_id": assinatura_id,
+            "asaas_payment_id": None,
+            "asaas_invoice_url": None,
+            "asaas_pix_code": None,
+            "paid_at": None,
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        # Cria pagamento no Asaas (para avista e parcelado)
+        if asaas_service.is_configured and modalidade != "assinatura":
+            try:
+                asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                ref = f"cob-{data.cliente_id}-{i+1}"
+                if data.linha_id:
+                    ref += f"-{data.linha_id}"
+                result = await asaas_service.create_payment(
+                    customer_id=asaas_customer_id,
+                    billing_type=data.billing_type.value,
+                    value=data.valor,
+                    due_date=vencimento_str,
+                    description=_append_portal_link(desc),
+                    external_reference=ref,
+                )
+                doc["asaas_payment_id"] = result.get("id")
+                doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
+                doc["status"] = result.get("status", "PENDING")
+                payment_id = result.get("id")
+                if payment_id:
+                    try:
+                        if data.billing_type.value == "BOLETO":
+                            barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                            doc["barcode"] = barcode_data.get("identificationField")
+                        elif data.billing_type.value == "PIX":
+                            pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                            doc["asaas_pix_code"] = pix_data.get("payload")
+                            doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar detalhes do pagamento: {e}")
+            except Exception as e:
+                logger.warning(f"Asaas API error ao criar cobranca {i+1}: {e}")
+
+        inserted = await db.cobrancas.insert_one(doc)
+        doc["_id"] = inserted.inserted_id
+        results.append(await _build_cobranca_response(doc))
+
+    label = "Cobranca" if parcelas == 1 else f"{parcelas} parcelas"
+    await create_log("financeiro", f"{label} criada: R$ {data.valor:.2f} x{parcelas} para {cliente.get('nome', 'Cliente')}", user["id"], user["name"])
+    return results
 
 @api_router.delete("/carteira/cobrancas/{cobranca_id}")
 async def delete_cobranca(cobranca_id: str, request: Request):

@@ -44,7 +44,11 @@ export function GestaoCobrancas() {
   const [form, setForm] = useState({
     cliente_id: '', linha_id: '', billing_type: 'BOLETO',
     valor: '', vencimento: '', descricao: '',
+    modalidade: 'avista', parcelas: 1,
   });
+
+  const [carneDialogOpen, setCarneDialogOpen] = useState(false);
+  const [carneCobrancas, setCarneCobrancas] = useState([]);
 
   const [loteForm, setLoteForm] = useState({
     billing_type: 'BOLETO', valor: '', vencimento: '',
@@ -82,7 +86,7 @@ export function GestaoCobrancas() {
       });
     } else {
       setEditingId(null);
-      setForm({ cliente_id: '', linha_id: '', billing_type: 'BOLETO', valor: '', vencimento: '', descricao: '' });
+      setForm({ cliente_id: '', linha_id: '', billing_type: 'BOLETO', valor: '', vencimento: '', descricao: '', modalidade: 'avista', parcelas: 1 });
     }
     setDialogOpen(true);
   };
@@ -94,13 +98,18 @@ export function GestaoCobrancas() {
     }
     setSubmitting(true);
     try {
-      const payload = { ...form, valor: parseFloat(form.valor) };
+      const payload = { ...form, valor: parseFloat(form.valor), parcelas: parseInt(form.parcelas) || 1 };
       if (editingId) {
         await axios.put(`${API_URL}/api/carteira/cobrancas/${editingId}`, payload, { withCredentials: true });
         toast.success('Cobranca atualizada');
       } else {
-        await axios.post(`${API_URL}/api/carteira/cobrancas`, payload, { withCredentials: true });
-        toast.success('Cobranca criada');
+        const res = await axios.post(`${API_URL}/api/carteira/cobrancas`, payload, { withCredentials: true });
+        const created = Array.isArray(res.data) ? res.data : [res.data];
+        if (form.modalidade !== 'avista' && created.length > 1) {
+          toast.success(`${created.length} parcelas criadas com sucesso!`);
+        } else {
+          toast.success('Cobranca criada');
+        }
       }
       setDialogOpen(false);
       fetchAll();
@@ -225,6 +234,81 @@ export function GestaoCobrancas() {
     if (c.barcode) msg += `\n\nCodigo de barras:\n${c.barcode}`;
     if (c.asaas_pix_code) msg += `\n\nPix Copia e Cola:\n${c.asaas_pix_code}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const handlePrintCarne = (clienteId) => {
+    const clienteCobrancas = cobrancas
+      .filter(c => c.cliente_id === clienteId)
+      .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    if (!clienteCobrancas.length) {
+      toast.error('Nenhuma cobranca encontrada para este cliente');
+      return;
+    }
+    setCarneCobrancas(clienteCobrancas);
+    setCarneDialogOpen(true);
+  };
+
+  const printCarne = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { toast.error('Popup bloqueado. Permita popups.'); return; }
+    const clienteNome = carneCobrancas[0]?.cliente_nome || 'Cliente';
+    const html = `<!DOCTYPE html><html><head><title>Carne - ${clienteNome}</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
+      @media print { @page { margin: 10mm; size: A4; } .no-print { display: none; } }
+      .page { page-break-after: always; padding: 10px; }
+      .page:last-child { page-break-after: avoid; }
+      .boleto { border: 2px solid #333; padding: 12px; margin-bottom: 15px; border-radius: 4px; min-height: 240px; }
+      .boleto-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 10px; }
+      .boleto-header h2 { font-size: 16px; }
+      .parcela-badge { background: #333; color: #fff; padding: 4px 12px; border-radius: 4px; font-weight: bold; font-size: 14px; }
+      .boleto-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .field { margin-bottom: 6px; }
+      .field label { font-weight: bold; color: #666; font-size: 10px; text-transform: uppercase; display: block; }
+      .field span { font-size: 13px; }
+      .valor-destaque { font-size: 22px; font-weight: bold; color: #000; }
+      .barcode-section { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #999; }
+      .barcode-text { font-family: monospace; font-size: 11px; letter-spacing: 1px; word-break: break-all; background: #f5f5f5; padding: 6px; border-radius: 3px; }
+      .btn-print { display: block; margin: 20px auto; padding: 12px 40px; font-size: 16px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+      .btn-print:hover { background: #555; }
+    </style></head><body>
+    <div class="no-print" style="text-align:center;padding:15px;background:#f0f0f0;">
+      <h2>Carne - ${clienteNome} (${carneCobrancas.length} parcelas)</h2>
+      <button class="btn-print" onclick="window.print()">Imprimir Carne</button>
+    </div>
+    ${carneCobrancas.reduce((pages, c, idx) => {
+      if (idx % 3 === 0) pages.push([]);
+      pages[pages.length - 1].push(c);
+      return pages;
+    }, []).map(group => `
+      <div class="page">
+        ${group.map(c => `
+          <div class="boleto">
+            <div class="boleto-header">
+              <div>
+                <h2>HomeOn Internet</h2>
+                <div style="font-size:10px;color:#666;">Telefonia Movel - MVNO</div>
+              </div>
+              ${c.parcela_num ? `<div class="parcela-badge">${c.parcela_num}/${c.parcela_total}</div>` : ''}
+            </div>
+            <div class="boleto-body">
+              <div class="field"><label>Cliente</label><span>${c.cliente_nome || '-'}</span></div>
+              <div class="field"><label>Vencimento</label><span style="font-size:15px;font-weight:bold;">${c.vencimento.split('-').reverse().join('/')}</span></div>
+              <div class="field"><label>Tipo</label><span>${c.billing_type === 'BOLETO' ? 'Boleto Bancario' : 'PIX'}</span></div>
+              <div class="field"><label>Valor</label><span class="valor-destaque">R$ ${c.valor.toFixed(2)}</span></div>
+              ${c.descricao ? `<div class="field" style="grid-column:span 2"><label>Descricao</label><span>${c.descricao}</span></div>` : ''}
+            </div>
+            ${c.barcode ? `<div class="barcode-section"><label style="font-weight:bold;color:#666;font-size:10px;">LINHA DIGITAVEL</label><div class="barcode-text">${c.barcode}</div></div>` : ''}
+            ${c.asaas_pix_code ? `<div class="barcode-section"><label style="font-weight:bold;color:#666;font-size:10px;">PIX COPIA E COLA</label><div class="barcode-text">${c.asaas_pix_code}</div></div>` : ''}
+            ${c.asaas_invoice_url ? `<div style="margin-top:6px;font-size:10px;color:#666;">Pague online: ${c.asaas_invoice_url}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `).join('')}
+    </body></html>`;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const handleLoteSubmit = async (e) => {
@@ -401,6 +485,22 @@ export function GestaoCobrancas() {
             <Button onClick={() => setLoteDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="lote-cobranca-btn">
               <CreditCard className="w-3.5 h-3.5" /><span className="hidden sm:inline">Em Lote</span><span className="sm:hidden">Lote</span>
             </Button>
+            {cobrancas.filter(c => c.parcela_total > 1).length > 0 && (
+              <select
+                onChange={(e) => { if (e.target.value) handlePrintCarne(e.target.value); e.target.value = ''; }}
+                className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-1.5 text-xs sm:text-sm text-zinc-300"
+                data-testid="carne-select"
+                defaultValue="">
+                <option value="" disabled>Imprimir Carne</option>
+                {[...new Map(cobrancas.filter(c => c.parcela_total > 1).map(c => [c.cliente_id, c])).values()]
+                  .sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '', 'pt-BR'))
+                  .map(c => (
+                    <option key={c.cliente_id} value={c.cliente_id}>
+                      {c.cliente_nome} ({cobrancas.filter(x => x.cliente_id === c.cliente_id && x.parcela_total > 1).length}x)
+                    </option>
+                  ))}
+              </select>
+            )}
             <Button onClick={() => handleOpenDialog()} size="sm" className="btn-primary flex items-center gap-1.5 text-xs sm:text-sm" data-testid="nova-cobranca-btn">
               <Plus className="w-3.5 h-3.5" />Nova
             </Button>
@@ -481,7 +581,9 @@ export function GestaoCobrancas() {
               <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50 cursor-pointer" onClick={() => handleViewDetail(c)}>
                 <td className="p-3">
                   <div className="font-medium">{c.cliente_nome || '—'}</div>
-                  <div className="text-xs text-zinc-500">{c.msisdn || c.descricao || ''}</div>
+                  <div className="text-xs text-zinc-500">
+                    {c.parcela_num ? `${c.parcela_num}/${c.parcela_total} - ` : ''}{c.msisdn || c.descricao || ''}
+                  </div>
                 </td>
                 <td className="p-3 hidden sm:table-cell">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.billing_type === 'PIX' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-blue-900/40 text-blue-400'}`}>
@@ -652,7 +754,7 @@ export function GestaoCobrancas() {
 
       {/* Dialog Nova/Editar Cobranca */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? 'Editar Cobranca' : 'Nova Cobranca'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="cobranca-form">
             <div>
@@ -678,6 +780,17 @@ export function GestaoCobrancas() {
                 </select>
               </div>
             )}
+            {!editingId && (
+              <div>
+                <label className="text-sm text-zinc-400">Modalidade *</label>
+                <select value={form.modalidade} onChange={e => setForm({ ...form, modalidade: e.target.value, parcelas: e.target.value === 'avista' ? 1 : form.parcelas })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm mt-1" data-testid="cobranca-modalidade">
+                  <option value="avista">A Vista (parcela unica)</option>
+                  <option value="parcelado">Parcelado (multiplas parcelas)</option>
+                  <option value="assinatura">Assinatura / Carne (recorrente)</option>
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm text-zinc-400">Tipo *</label>
@@ -693,18 +806,41 @@ export function GestaoCobrancas() {
                   className="bg-zinc-900 border-zinc-700 mt-1" required />
               </div>
             </div>
-            <div>
-              <label className="text-sm text-zinc-400">Vencimento *</label>
-              <Input type="date" value={form.vencimento} onChange={e => setForm({ ...form, vencimento: e.target.value })}
-                className="bg-zinc-900 border-zinc-700 mt-1" required />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-zinc-400">{form.modalidade === 'avista' ? 'Vencimento *' : '1o Vencimento *'}</label>
+                <Input type="date" value={form.vencimento} onChange={e => setForm({ ...form, vencimento: e.target.value })}
+                  className="bg-zinc-900 border-zinc-700 mt-1" required />
+              </div>
+              {form.modalidade !== 'avista' && !editingId && (
+                <div>
+                  <label className="text-sm text-zinc-400">Parcelas *</label>
+                  <Input type="number" min="2" max="48" value={form.parcelas} onChange={e => setForm({ ...form, parcelas: e.target.value })}
+                    className="bg-zinc-900 border-zinc-700 mt-1" required data-testid="cobranca-parcelas" />
+                </div>
+              )}
             </div>
+            {form.modalidade !== 'avista' && form.valor && form.parcelas > 1 && (
+              <div className="p-3 bg-blue-900/20 border border-blue-800/30 rounded-lg text-sm">
+                <div className="text-blue-400 font-medium">Resumo</div>
+                <div className="text-zinc-300 mt-1">
+                  {form.parcelas}x de R$ {parseFloat(form.valor || 0).toFixed(2)} = <span className="font-bold text-white">R$ {(parseFloat(form.valor || 0) * parseInt(form.parcelas || 1)).toFixed(2)}</span>
+                </div>
+                {form.modalidade === 'assinatura' && (
+                  <div className="text-zinc-500 text-xs mt-1">Sera criada uma assinatura recorrente no Asaas</div>
+                )}
+              </div>
+            )}
             <div>
               <label className="text-sm text-zinc-400">Descricao</label>
               <Input value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })}
                 className="bg-zinc-900 border-zinc-700 mt-1" placeholder="Ex: Mensalidade Abril" />
             </div>
-            <Button type="submit" disabled={submitting} className="w-full btn-primary">
-              {submitting ? 'Salvando...' : editingId ? 'Salvar Alteracoes' : 'Criar Cobranca'}
+            <Button type="submit" disabled={submitting} className="w-full btn-primary" data-testid="cobranca-submit">
+              {submitting ? 'Salvando...' : editingId ? 'Salvar Alteracoes' :
+                form.modalidade === 'avista' ? 'Criar Cobranca' :
+                form.modalidade === 'parcelado' ? `Gerar ${form.parcelas} Parcelas` :
+                `Criar Assinatura (${form.parcelas}x)`}
             </Button>
           </form>
         </DialogContent>
@@ -829,6 +965,32 @@ export function GestaoCobrancas() {
                 {diagResult.api_error && <p className="text-red-400 text-xs mt-1">Erro: {diagResult.api_error}</p>}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Impressao de Carne */}
+      <Dialog open={carneDialogOpen} onOpenChange={setCarneDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-lg">
+          <DialogHeader><DialogTitle>Imprimir Carne</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-zinc-400">
+              {carneCobrancas.length} parcelas encontradas para <strong className="text-white">{carneCobrancas[0]?.cliente_nome || 'Cliente'}</strong>
+            </p>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {carneCobrancas.map((c, i) => (
+                <div key={c.id} className="flex justify-between items-center p-2 bg-zinc-900 rounded text-sm">
+                  <span className="text-zinc-300">{c.parcela_num ? `${c.parcela_num}/${c.parcela_total}` : `#${i+1}`}</span>
+                  <span className="text-zinc-400">{c.vencimento.split('-').reverse().join('/')}</span>
+                  <span className="font-medium">R$ {c.valor.toFixed(2)}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-xs ${statusBg(c.status)}`}>{statusLabel(c.status)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500">Layout: 3 boletos por pagina A4, em ordem de vencimento</p>
+            <Button onClick={printCarne} className="w-full btn-primary flex items-center justify-center gap-2" data-testid="print-carne-btn">
+              <Printer className="w-4 h-4" /> Imprimir Carne ({carneCobrancas.length} parcelas)
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
