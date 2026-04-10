@@ -97,6 +97,11 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ## Backlog
 
+### Correções Robustez Portal (10/04/2026)
+- [x] Portal login defensivo: try/except em ObjectId, .get() em todos campos, log de erros
+- [x] Portal dashboard defensivo: ObjectId.is_valid(), .get() com defaults em cobrancas, created_at type-safe
+- [x] Testado com dados incompletos (sem plano, oferta, chip) - funciona sem 500
+
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
 - [ ] Desmembrar server.py (3700+ linhas) em roteadores separados

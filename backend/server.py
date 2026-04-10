@@ -2783,55 +2783,66 @@ class PortalLoginRequest(BaseModel):
 @api_router.post("/portal/login")
 async def portal_login(data: PortalLoginRequest):
     """Login do cliente por CPF + telefone."""
-    doc_clean = clean_document(data.documento)
-    tel_clean = re.sub(r'\D', '', data.telefone)
+    try:
+        doc_clean = clean_document(data.documento)
+        tel_clean = re.sub(r'\D', '', data.telefone)
 
-    cliente = await db.clientes.find_one({"documento": doc_clean})
-    if not cliente:
-        raise HTTPException(status_code=401, detail="CPF nao encontrado. Entre em contato com a operadora para verificar seu cadastro.")
+        cliente = await db.clientes.find_one({"documento": doc_clean})
+        if not cliente:
+            raise HTTPException(status_code=401, detail="CPF nao encontrado. Entre em contato com a operadora para verificar seu cadastro.")
 
-    # Find line matching the phone number
-    linhas = await db.linhas.find({"cliente_id": str(cliente["_id"])}).to_list(100)
-    chip_match = None
-    linha_match = None
-    for l in linhas:
-        msisdn = l.get("msisdn") or l.get("numero") or ""
-        msisdn_clean = re.sub(r'\D', '', msisdn)
-        if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
-            linha_match = l
-            if l.get("chip_id"):
-                chip_match = await db.chips.find_one({"_id": ObjectId(l["chip_id"])})
-            break
+        cliente_id_str = str(cliente["_id"])
 
-    if not linha_match:
-        # Try matching via chips
-        chips = await db.chips.find({"cliente_id": str(cliente["_id"])}).to_list(100)
-        for c in chips:
-            msisdn = c.get("msisdn", "")
+        # Find line matching the phone number
+        linhas = await db.linhas.find({"cliente_id": cliente_id_str}).to_list(100)
+        chip_match = None
+        linha_match = None
+        for l in linhas:
+            msisdn = l.get("msisdn") or l.get("numero") or ""
             msisdn_clean = re.sub(r'\D', '', msisdn)
             if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
-                chip_match = c
-                linha_match = await db.linhas.find_one({"chip_id": str(c["_id"])})
+                linha_match = l
+                if l.get("chip_id"):
+                    try:
+                        chip_match = await db.chips.find_one({"_id": ObjectId(l["chip_id"])})
+                    except Exception:
+                        pass
                 break
 
-    if not linha_match and not chip_match:
-        raise HTTPException(status_code=401, detail="Telefone nao encontrado para este CPF.")
+        if not linha_match:
+            # Try matching via chips
+            chips = await db.chips.find({"cliente_id": cliente_id_str}).to_list(100)
+            for c in chips:
+                msisdn = c.get("msisdn", "")
+                msisdn_clean = re.sub(r'\D', '', msisdn)
+                if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+                    chip_match = c
+                    linha_match = await db.linhas.find_one({"chip_id": str(c["_id"])})
+                    break
 
-    # Generate portal token (simple JWT with limited scope)
-    portal_token = jwt.encode({
-        "sub": str(cliente["_id"]),
-        "type": "portal",
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
-    }, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+        if not linha_match and not chip_match:
+            raise HTTPException(status_code=401, detail="Telefone nao encontrado para este CPF.")
 
-    return {
-        "token": portal_token,
-        "cliente": {
-            "nome": cliente["nome"],
-            "documento": doc_clean,
-            "telefone": data.telefone,
+        # Generate portal token (simple JWT with limited scope)
+        portal_token = jwt.encode({
+            "sub": cliente_id_str,
+            "type": "portal",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+        }, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+        return {
+            "token": portal_token,
+            "cliente": {
+                "nome": cliente.get("nome", "Cliente"),
+                "documento": doc_clean,
+                "telefone": data.telefone,
+            }
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro no portal login: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Erro interno ao processar login. Tente novamente.")
 
 async def _get_portal_cliente(request: Request) -> dict:
     """Extrai e valida o token do portal do cliente."""
@@ -2855,104 +2866,124 @@ async def _get_portal_cliente(request: Request) -> dict:
 @api_router.get("/portal/dashboard")
 async def portal_dashboard(request: Request):
     """Retorna dados completos do cliente: linhas, plano, saldo, consumo, boletos."""
-    cliente = await _get_portal_cliente(request)
-    cliente_id = str(cliente["_id"])
+    try:
+        cliente = await _get_portal_cliente(request)
+        cliente_id = str(cliente["_id"])
 
-    # Linhas do cliente
-    linhas = await db.linhas.find({"cliente_id": cliente_id}).to_list(50)
-    chips = await db.chips.find({"cliente_id": cliente_id}).to_list(50)
+        # Linhas do cliente
+        linhas = await db.linhas.find({"cliente_id": cliente_id}).to_list(50)
+        chips = await db.chips.find({"cliente_id": cliente_id}).to_list(50)
 
-    # Planos e ofertas
-    plano_ids = list(set(l.get("plano_id") for l in linhas if l.get("plano_id")))
-    oferta_ids = list(set(l.get("oferta_id") for l in linhas if l.get("oferta_id")))
-    planos_lookup = {}
-    ofertas_lookup = {}
-    if plano_ids:
-        docs = await db.planos.find({"_id": {"$in": [ObjectId(p) for p in plano_ids]}}).to_list(len(plano_ids))
-        planos_lookup = {str(d["_id"]): d for d in docs}
-    if oferta_ids:
-        docs = await db.ofertas.find({"_id": {"$in": [ObjectId(o) for o in oferta_ids]}}).to_list(len(oferta_ids))
-        ofertas_lookup = {str(d["_id"]): d for d in docs}
-
-    linhas_data = []
-    for l in linhas:
-        numero = l.get("msisdn") or l.get("numero") or ""
-        plano = planos_lookup.get(l.get("plano_id"))
-        oferta = ofertas_lookup.get(l.get("oferta_id"))
-        chip = next((c for c in chips if str(c["_id"]) == l.get("chip_id")), None)
-
-        linhas_data.append({
-            "id": str(l["_id"]),
-            "numero": numero,
-            "status": l.get("status", "desconhecido"),
-            "plano_nome": plano["nome"] if plano else None,
-            "franquia": plano["franquia"] if plano else None,
-            "plan_code": plano.get("plan_code") if plano else None,
-            "oferta_nome": oferta["nome"] if oferta else None,
-            "valor": oferta.get("valor") if oferta else None,
-            "iccid": chip["iccid"] if chip else None,
-        })
-
-    # Cobranças do cliente (Asaas) - com sync de status em tempo real
-    cobrancas = await db.cobrancas.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(50)
-    cobrancas_data = []
-    for c in cobrancas:
-        # Sync status with Asaas if payment exists and status is not final
-        status = c.get("status", "PENDING")
-        if c.get("asaas_payment_id") and status not in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "REFUNDED"]:
+        # Planos e ofertas (com proteção para ObjectId inválido)
+        plano_ids = list(set(l.get("plano_id") for l in linhas if l.get("plano_id")))
+        oferta_ids = list(set(l.get("oferta_id") for l in linhas if l.get("oferta_id")))
+        planos_lookup = {}
+        ofertas_lookup = {}
+        if plano_ids:
             try:
-                if asaas_service.is_configured:
-                    payment_data = await asaas_service.get_payment(c["asaas_payment_id"])
-                    new_status = payment_data.get("status")
-                    if new_status and new_status != status:
-                        update_fields = {"status": new_status}
-                        if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
-                            update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
-                        await db.cobrancas.update_one({"_id": c["_id"]}, {"$set": update_fields})
-                        status = new_status
+                valid_ids = [ObjectId(p) for p in plano_ids if ObjectId.is_valid(p)]
+                if valid_ids:
+                    docs = await db.planos.find({"_id": {"$in": valid_ids}}).to_list(len(valid_ids))
+                    planos_lookup = {str(d["_id"]): d for d in docs}
             except Exception as e:
-                logger.warning(f"Portal: erro ao sync status cobranca {c.get('asaas_payment_id')}: {e}")
+                logger.warning(f"Portal dashboard: erro ao buscar planos: {e}")
+        if oferta_ids:
+            try:
+                valid_ids = [ObjectId(o) for o in oferta_ids if ObjectId.is_valid(o)]
+                if valid_ids:
+                    docs = await db.ofertas.find({"_id": {"$in": valid_ids}}).to_list(len(valid_ids))
+                    ofertas_lookup = {str(d["_id"]): d for d in docs}
+            except Exception as e:
+                logger.warning(f"Portal dashboard: erro ao buscar ofertas: {e}")
 
-        cobrancas_data.append({
-            "id": str(c["_id"]),
-            "valor": c["valor"],
-            "vencimento": c["vencimento"],
-            "billing_type": c["billing_type"],
-            "status": status,
-            "descricao": c.get("descricao"),
-            "asaas_invoice_url": c.get("asaas_invoice_url"),
-            "asaas_bankslip_url": c.get("asaas_bankslip_url"),
-            "asaas_pix_code": c.get("asaas_pix_code"),
-            "barcode": c.get("barcode"),
-            "paid_at": c.get("paid_at"),
-        })
+        linhas_data = []
+        for l in linhas:
+            numero = l.get("msisdn") or l.get("numero") or ""
+            plano = planos_lookup.get(l.get("plano_id"))
+            oferta = ofertas_lookup.get(l.get("oferta_id"))
+            chip = next((c for c in chips if str(c["_id"]) == l.get("chip_id")), None)
 
-    # Ativações self-service
-    ss_ativacoes = await db.ativacoes_selfservice.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(10)
-    ss_data = []
-    for s in ss_ativacoes:
-        ss_data.append({
-            "id": str(s["_id"]),
-            "iccid": s.get("iccid"),
-            "status": s.get("status"),
-            "valor_final": s.get("valor_final", 0),
-            "asaas_invoice_url": s.get("asaas_invoice_url"),
-            "asaas_pix_code": s.get("asaas_pix_code"),
-            "barcode": s.get("barcode"),
-            "created_at": s.get("created_at", datetime.now(timezone.utc)).isoformat(),
-        })
+            linhas_data.append({
+                "id": str(l["_id"]),
+                "numero": numero,
+                "status": l.get("status", "desconhecido"),
+                "plano_nome": plano.get("nome") if plano else None,
+                "franquia": plano.get("franquia") if plano else None,
+                "plan_code": plano.get("plan_code") if plano else None,
+                "oferta_nome": oferta.get("nome") if oferta else None,
+                "valor": oferta.get("valor") if oferta else None,
+                "iccid": chip.get("iccid") if chip else None,
+            })
 
-    return {
-        "cliente": {
-            "nome": cliente["nome"],
-            "documento": cliente.get("documento"),
-            "email": cliente.get("email"),
-            "telefone": cliente.get("telefone"),
-        },
-        "linhas": linhas_data,
-        "cobrancas": cobrancas_data,
-        "ativacoes_selfservice": ss_data,
-    }
+        # Cobranças do cliente (Asaas) - com sync de status em tempo real
+        cobrancas = await db.cobrancas.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(50)
+        cobrancas_data = []
+        for c in cobrancas:
+            status = c.get("status", "PENDING")
+            if c.get("asaas_payment_id") and status not in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "REFUNDED"]:
+                try:
+                    if asaas_service.is_configured:
+                        payment_data = await asaas_service.get_payment(c["asaas_payment_id"])
+                        new_status = payment_data.get("status")
+                        if new_status and new_status != status:
+                            update_fields = {"status": new_status}
+                            if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
+                                update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                            await db.cobrancas.update_one({"_id": c["_id"]}, {"$set": update_fields})
+                            status = new_status
+                except Exception as e:
+                    logger.warning(f"Portal: erro ao sync status cobranca {c.get('asaas_payment_id')}: {e}")
+
+            cobrancas_data.append({
+                "id": str(c["_id"]),
+                "valor": c.get("valor", 0),
+                "vencimento": c.get("vencimento", ""),
+                "billing_type": c.get("billing_type", "UNDEFINED"),
+                "status": status,
+                "descricao": c.get("descricao"),
+                "asaas_invoice_url": c.get("asaas_invoice_url"),
+                "asaas_bankslip_url": c.get("asaas_bankslip_url"),
+                "asaas_pix_code": c.get("asaas_pix_code"),
+                "barcode": c.get("barcode"),
+                "paid_at": c.get("paid_at"),
+            })
+
+        # Ativações self-service
+        ss_ativacoes = await db.ativacoes_selfservice.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(10)
+        ss_data = []
+        for s in ss_ativacoes:
+            created = s.get("created_at")
+            if hasattr(created, "isoformat"):
+                created = created.isoformat()
+            elif not isinstance(created, str):
+                created = datetime.now(timezone.utc).isoformat()
+            ss_data.append({
+                "id": str(s["_id"]),
+                "iccid": s.get("iccid"),
+                "status": s.get("status"),
+                "valor_final": s.get("valor_final", 0),
+                "asaas_invoice_url": s.get("asaas_invoice_url"),
+                "asaas_pix_code": s.get("asaas_pix_code"),
+                "barcode": s.get("barcode"),
+                "created_at": created,
+            })
+
+        return {
+            "cliente": {
+                "nome": cliente.get("nome", "Cliente"),
+                "documento": cliente.get("documento"),
+                "email": cliente.get("email"),
+                "telefone": cliente.get("telefone"),
+            },
+            "linhas": linhas_data,
+            "cobrancas": cobrancas_data,
+            "ativacoes_selfservice": ss_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro no portal dashboard: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Erro interno ao carregar dashboard.")
 
 @api_router.get("/portal/saldo/{numero}")
 async def portal_saldo(numero: str, request: Request):
