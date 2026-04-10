@@ -230,6 +230,7 @@ class AsaasService:
             "billingType": billing_type,
             "value": value,
             "dueDate": due_date,
+            "notificationDisabled": True,
         }
         if description:
             payload["description"] = description
@@ -312,6 +313,7 @@ class AsaasService:
             "value": value,
             "nextDueDate": next_due_date,
             "cycle": cycle,
+            "notificationDisabled": True,
         }
         if description:
             payload["description"] = description
