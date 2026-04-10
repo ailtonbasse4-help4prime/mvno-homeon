@@ -11,6 +11,13 @@ export class ErrorBoundary extends Component {
     return { hasError: true, error };
   }
 
+  static getDerivedStateFromProps(props, state) {
+    if (state.hasError && props.resetKey !== state.lastResetKey) {
+      return { hasError: false, error: null, lastResetKey: props.resetKey };
+    }
+    return { lastResetKey: props.resetKey };
+  }
+
   componentDidCatch(error, errorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
   }

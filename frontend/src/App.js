@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { MainLayout } from "./components/layout/MainLayout";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -23,33 +23,40 @@ import PortalLogin from "./pages/PortalLogin";
 import PortalDashboard from "./pages/PortalDashboard";
 import Divulgacao from "./pages/Divulgacao";
 
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/ativar" element={<ErrorBoundary resetKey={location.pathname}><AtivarSelfService /></ErrorBoundary>} />
+      <Route path="/portal" element={<ErrorBoundary resetKey={location.pathname}><PortalLogin /></ErrorBoundary>} />
+      <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />
+      <Route element={<MainLayout />}>
+        <Route path="/" element={<ErrorBoundary resetKey={location.pathname}><Dashboard /></ErrorBoundary>} />
+        <Route path="/clientes" element={<ErrorBoundary resetKey={location.pathname}><Clientes /></ErrorBoundary>} />
+        <Route path="/chips" element={<ErrorBoundary resetKey={location.pathname}><Chips /></ErrorBoundary>} />
+        <Route path="/planos" element={<ErrorBoundary resetKey={location.pathname}><Planos /></ErrorBoundary>} />
+        <Route path="/ofertas" element={<ErrorBoundary resetKey={location.pathname}><Ofertas /></ErrorBoundary>} />
+        <Route path="/ativacoes" element={<ErrorBoundary resetKey={location.pathname}><Ativacoes /></ErrorBoundary>} />
+        <Route path="/linhas" element={<ErrorBoundary resetKey={location.pathname}><Linhas /></ErrorBoundary>} />
+        <Route path="/carteira" element={<ErrorBoundary resetKey={location.pathname}><CarteiraMovel /></ErrorBoundary>} />
+        <Route path="/cobrancas" element={<ErrorBoundary resetKey={location.pathname}><GestaoCobrancas /></ErrorBoundary>} />
+        <Route path="/assinaturas" element={<ErrorBoundary resetKey={location.pathname}><Assinaturas /></ErrorBoundary>} />
+        <Route path="/revendedores" element={<ErrorBoundary resetKey={location.pathname}><Revendedores /></ErrorBoundary>} />
+        <Route path="/ativacoes-selfservice" element={<ErrorBoundary resetKey={location.pathname}><AtivacoesSelfService /></ErrorBoundary>} />
+        <Route path="/divulgacao" element={<ErrorBoundary resetKey={location.pathname}><Divulgacao /></ErrorBoundary>} />
+        <Route path="/usuarios" element={<ErrorBoundary resetKey={location.pathname}><Usuarios /></ErrorBoundary>} />
+        <Route path="/logs" element={<ErrorBoundary resetKey={location.pathname}><Logs /></ErrorBoundary>} />
+      </Route>
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/ativar" element={<ErrorBoundary><AtivarSelfService /></ErrorBoundary>} />
-          <Route path="/portal" element={<ErrorBoundary><PortalLogin /></ErrorBoundary>} />
-          <Route path="/portal/dashboard" element={<ErrorBoundary><PortalDashboard /></ErrorBoundary>} />
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-            <Route path="/clientes" element={<ErrorBoundary><Clientes /></ErrorBoundary>} />
-            <Route path="/chips" element={<ErrorBoundary><Chips /></ErrorBoundary>} />
-            <Route path="/planos" element={<ErrorBoundary><Planos /></ErrorBoundary>} />
-            <Route path="/ofertas" element={<ErrorBoundary><Ofertas /></ErrorBoundary>} />
-            <Route path="/ativacoes" element={<ErrorBoundary><Ativacoes /></ErrorBoundary>} />
-            <Route path="/linhas" element={<ErrorBoundary><Linhas /></ErrorBoundary>} />
-            <Route path="/carteira" element={<ErrorBoundary><CarteiraMovel /></ErrorBoundary>} />
-            <Route path="/cobrancas" element={<ErrorBoundary><GestaoCobrancas /></ErrorBoundary>} />
-            <Route path="/assinaturas" element={<ErrorBoundary><Assinaturas /></ErrorBoundary>} />
-            <Route path="/revendedores" element={<ErrorBoundary><Revendedores /></ErrorBoundary>} />
-            <Route path="/ativacoes-selfservice" element={<ErrorBoundary><AtivacoesSelfService /></ErrorBoundary>} />
-            <Route path="/divulgacao" element={<ErrorBoundary><Divulgacao /></ErrorBoundary>} />
-            <Route path="/usuarios" element={<ErrorBoundary><Usuarios /></ErrorBoundary>} />
-            <Route path="/logs" element={<ErrorBoundary><Logs /></ErrorBoundary>} />
-          </Route>
-        </Routes>
+        <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
   );
