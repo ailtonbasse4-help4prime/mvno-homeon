@@ -1409,34 +1409,38 @@ async def resetar_chip(iccid: str, request: Request):
 
 # ==================== LINES ROUTES ====================
 async def build_line_response(line: dict) -> LineResponse:
-    cliente_nome, plano_nome, oferta_nome, franquia, plan_code, iccid, msisdn = None, None, None, None, None, None, None
+    cliente_nome, cliente_documento, plano_nome, oferta_nome, franquia, plan_code, iccid, msisdn = None, None, None, None, None, None, None, None
     if line.get("cliente_id"):
-        cl = await db.clientes.find_one({"_id": ObjectId(line["cliente_id"])})
-        if cl:
-            cliente_nome = cl["nome"]
-    if line.get("plano_id"):
+        try:
+            cl = await db.clientes.find_one({"_id": ObjectId(line["cliente_id"])})
+            if cl:
+                cliente_nome = cl.get("nome")
+                cliente_documento = cl.get("documento")
+        except Exception:
+            pass
+    if line.get("plano_id") and ObjectId.is_valid(line["plano_id"]):
         plano = await db.planos.find_one({"_id": ObjectId(line["plano_id"])})
         if plano:
-            plano_nome = plano["nome"]
-            franquia = plano["franquia"]
+            plano_nome = plano.get("nome")
+            franquia = plano.get("franquia")
             plan_code = plano.get("plan_code")
-    if line.get("oferta_id"):
+    if line.get("oferta_id") and ObjectId.is_valid(line["oferta_id"]):
         oferta = await db.ofertas.find_one({"_id": ObjectId(line["oferta_id"])})
         if oferta:
-            oferta_nome = oferta["nome"]
-    if line.get("chip_id"):
+            oferta_nome = oferta.get("nome")
+    if line.get("chip_id") and ObjectId.is_valid(line["chip_id"]):
         chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
         if chip:
-            iccid = chip["iccid"]
+            iccid = chip.get("iccid")
             msisdn = chip.get("msisdn")
     return LineResponse(
-        id=str(line["_id"]), numero=line["numero"], status=line["status"],
-        cliente_id=line["cliente_id"], chip_id=line["chip_id"],
-        plano_id=line["plano_id"], oferta_id=line.get("oferta_id"),
-        cliente_nome=cliente_nome, plano_nome=plano_nome,
-        oferta_nome=oferta_nome, franquia=franquia, plan_code=plan_code,
+        id=str(line["_id"]), numero=line.get("numero", ""), status=line.get("status", "desconhecido"),
+        cliente_id=line.get("cliente_id", ""), chip_id=line.get("chip_id", ""),
+        plano_id=line.get("plano_id"), oferta_id=line.get("oferta_id"),
+        cliente_nome=cliente_nome, cliente_documento=cliente_documento,
+        plano_nome=plano_nome, oferta_nome=oferta_nome, franquia=franquia, plan_code=plan_code,
         iccid=iccid, msisdn=msisdn or line.get("msisdn"),
-        created_at=line.get("created_at", datetime.now(timezone.utc))
+        created_at=line.get("created_at")
     )
 
 @api_router.get("/linhas", response_model=List[LineResponse])
@@ -1475,18 +1479,18 @@ async def list_lines(request: Request, status: Optional[str] = None):
         chip = chips_lookup.get(line.get("chip_id"))
 
         result.append(LineResponse(
-            id=str(line["_id"]), numero=line["numero"], status=line["status"],
-            cliente_id=line["cliente_id"], chip_id=line["chip_id"],
-            plano_id=line["plano_id"], oferta_id=line.get("oferta_id"),
-            cliente_nome=cl["nome"] if cl else None,
+            id=str(line["_id"]), numero=line.get("numero", ""), status=line.get("status", "desconhecido"),
+            cliente_id=line.get("cliente_id", ""), chip_id=line.get("chip_id", ""),
+            plano_id=line.get("plano_id"), oferta_id=line.get("oferta_id"),
+            cliente_nome=cl.get("nome") if cl else None,
             cliente_documento=cl.get("documento") if cl else None,
-            plano_nome=plano["nome"] if plano else None,
-            oferta_nome=oferta["nome"] if oferta else None,
-            franquia=plano["franquia"] if plano else None,
+            plano_nome=plano.get("nome") if plano else None,
+            oferta_nome=oferta.get("nome") if oferta else None,
+            franquia=plano.get("franquia") if plano else None,
             plan_code=plano.get("plan_code") if plano else None,
-            iccid=chip["iccid"] if chip else None,
+            iccid=chip.get("iccid") if chip else None,
             msisdn=(chip.get("msisdn") if chip else None) or line.get("msisdn"),
-            created_at=line.get("created_at", datetime.now(timezone.utc))
+            created_at=line.get("created_at")
         ))
     return result
 
