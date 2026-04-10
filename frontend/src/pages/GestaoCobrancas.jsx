@@ -772,11 +772,26 @@ export function GestaoCobrancas() {
             </div>
             {form.cliente_id && clienteLinhas(form.cliente_id).length > 0 && (
               <div>
-                <label className="text-sm text-zinc-400">Linha (opcional)</label>
-                <select value={form.linha_id} onChange={e => setForm({ ...form, linha_id: e.target.value })}
+                <label className="text-sm text-zinc-400">Linha / Oferta (opcional)</label>
+                <select value={form.linha_id} onChange={e => {
+                  const linhaId = e.target.value;
+                  const linha = linhas.find(l => l.id === linhaId);
+                  const updates = { linha_id: linhaId };
+                  if (linha && linha.oferta_nome) {
+                    updates.descricao = linha.oferta_nome + (linha.plano_nome ? ` - ${linha.plano_nome}` : '');
+                  }
+                  if (linha && linha.valor) {
+                    updates.valor = linha.valor;
+                  }
+                  setForm({ ...form, ...updates });
+                }}
                   className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm mt-1">
                   <option value="">Sem linha especifica</option>
-                  {clienteLinhas(form.cliente_id).map(l => <option key={l.id} value={l.id}>{l.numero || l.msisdn}</option>)}
+                  {clienteLinhas(form.cliente_id).map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.numero || l.msisdn} {l.oferta_nome ? `- ${l.oferta_nome}` : ''} {l.plano_nome ? `(${l.plano_nome})` : ''} {l.valor ? `R$${l.valor}` : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
