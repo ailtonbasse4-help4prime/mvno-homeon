@@ -1,0 +1,133 @@
+{
+  "summary": "Iteration 21 - CRITICAL: Production frontend pointing to WRONG backend URL. Preview works perfectly, Production completely broken due to deployment misconfiguration.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "critical": [
+      {
+        "component": "Production Deployment",
+        "issue": "Production frontend (https://mvno.homeonapp.com.br) is calling WRONG backend URL (https://chip-manager-3.emergent.host) instead of production backend",
+        "evidence": "Console error: Access to XMLHttpRequest at 'https://chip-manager-3.emergent.host/api/auth/login' from origin 'https://mvno.homeonapp.com.br' has been blocked by CORS policy",
+        "priority": "CRITICAL",
+        "root_cause": "Frontend was NOT rebuilt with correct REACT_APP_BACKEND_URL before deploying to VPS. The deploy script (atualizar-vps.sh line 16) should set REACT_APP_BACKEND_URL=https://mvno.homeonapp.com.br but the deployed build still has the preview URL"
+      }
+    ],
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "comparison_preview_vs_production": {
+    "admin_login": {
+      "preview": "SUCCESS - admin@mvno.com / admin123 works",
+      "production": "FAILS - 'Algo deu errado. Tente novamente.' due to CORS error calling wrong backend"
+    },
+    "portal_login": {
+      "preview": "SUCCESS - CPF 23211311874, telefone 19920090179 works, shows Adriana's dashboard",
+      "production": "FAILS - 'Erro interno ao processar login. Tente novamente.' with 500 error"
+    },
+    "clientes_alphabetical_sorting": {
+      "preview": "WORKING - Clients sorted A-Z (Adilson, Adriana, Adriano, Ailton, Alberto...)",
+      "production": "CANNOT TEST - Login fails"
+    },
+    "adriana_data": {
+      "preview": {
+        "nome": "Adriana Ferreira Da Silva",
+        "documento": "23211311874",
+        "telefone": "5519920090179",
+        "numero": "5519920090179",
+        "iccid": "8955170110392668966",
+        "plano": "Tá Conectado 10GB",
+        "status": "ativo"
+      },
+      "production": "CANNOT VERIFY - Login fails"
+    }
+  },
+  
+  "test_results": {
+    "preview_admin_login": "PASS",
+    "preview_portal_login": "PASS",
+    "preview_clientes_sorting": "PASS - Alphabetically sorted",
+    "preview_adriana_data": "PASS - Data correct",
+    "production_admin_login": "FAIL - CORS error, wrong backend URL",
+    "production_portal_login": "FAIL - 500 error",
+    "production_clientes_sorting": "BLOCKED - Cannot login",
+    "production_adriana_data": "BLOCKED - Cannot login"
+  },
+  
+  "test_report_links": [],
+  
+  "action_items": [
+    "CRITICAL: Re-deploy production frontend with correct REACT_APP_BACKEND_URL",
+    "Run the deploy script: cd /tmp/mvno-homeon && git pull && cd frontend && yarn install && REACT_APP_BACKEND_URL=https://mvno.homeonapp.com.br yarn build && sudo cp -r build/* /var/www/mvno/frontend/",
+    "Verify production backend is running on port 3002 and accessible via https://mvno.homeonapp.com.br/api/",
+    "After redeployment, test admin login with admin@mvno.com / admin123 AND ailtonhomeon@gmail.com / gi157258",
+    "After redeployment, verify Clientes page shows alphabetical sorting",
+    "After redeployment, verify Adriana's data matches preview"
+  ],
+  
+  "critical_code_review_comments": [
+    "The deploy script /app/deploy/atualizar-vps.sh is CORRECT - it sets REACT_APP_BACKEND_URL=https://mvno.homeonapp.com.br on line 16",
+    "The issue is that the script was either not run, or the frontend build was overwritten with a preview build",
+    "The production frontend JavaScript is calling https://chip-manager-3.emergent.host which is the PREVIEW backend URL",
+    "This is a deployment process issue, NOT a code issue"
+  ],
+  
+  "updated_files": [],
+  
+  "success_rate": {
+    "preview": "100% (4/4 tests passed)",
+    "production": "0% (0/4 tests passed - all blocked by wrong backend URL)"
+  },
+  
+  "test_credentials": {
+    "admin_preview": {
+      "email": "admin@mvno.com",
+      "password": "admin123"
+    },
+    "admin_production_alt": {
+      "email": "ailtonhomeon@gmail.com",
+      "password": "gi157258"
+    },
+    "portal_test": {
+      "cpf": "23211311874",
+      "telefone": "19920090179"
+    }
+  },
+  
+  "seed_data_creation": "None",
+  
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  
+  "context_for_next_testing_agent": "CRITICAL DEPLOYMENT ISSUE: Production frontend at https://mvno.homeonapp.com.br is pointing to wrong backend (https://chip-manager-3.emergent.host instead of production). The deploy script is correct but was not executed properly. Preview environment (https://chip-manager-3.preview.emergentagent.com) works perfectly - admin login, portal login, alphabetical sorting all working. After fixing deployment, retest all production features.",
+  
+  "rca_of_the_issue": {
+    "problem": "Production frontend not reflecting preview changes",
+    "root_cause": "Production frontend was deployed with WRONG REACT_APP_BACKEND_URL pointing to preview backend (https://chip-manager-3.emergent.host) instead of production backend (https://mvno.homeonapp.com.br)",
+    "evidence": [
+      "Console error shows CORS blocking requests to https://chip-manager-3.emergent.host from https://mvno.homeonapp.com.br",
+      "Admin login fails with 'Algo deu errado' on production but works on preview",
+      "Portal login fails with 500 error on production but works on preview"
+    ],
+    "reproduction_steps": [
+      "1. Go to https://mvno.homeonapp.com.br/login",
+      "2. Open browser DevTools Console",
+      "3. Enter admin@mvno.com / admin123 and click Entrar",
+      "4. Observe CORS error in console showing request to https://chip-manager-3.emergent.host"
+    ],
+    "fix": "Re-run deploy script: REACT_APP_BACKEND_URL=https://mvno.homeonapp.com.br yarn build && sudo cp -r build/* /var/www/mvno/frontend/"
+  },
+  
+  "preview_dashboard_stats": {
+    "total_clientes": 99,
+    "total_chips": 525,
+    "linhas_ativas": 92,
+    "planos": 20,
+    "ofertas_ativas": 7
+  }
+}
