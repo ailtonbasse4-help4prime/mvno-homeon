@@ -167,19 +167,19 @@ export function Assinaturas() {
       {/* Table */}
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
-          <table className="data-table w-full min-w-[800px]" data-testid="assinaturas-table">
+          <table className="data-table w-full min-w-[1200px]" data-testid="assinaturas-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300 w-[13%]">Cliente</th>
-                <th className="text-blue-300 w-[10%]">Linha</th>
-                <th className="text-blue-300 w-[12%]">Oferta</th>
-                <th className="text-blue-300 w-[8%]">Tipo</th>
-                <th className="text-blue-300 w-[8%]">Valor</th>
-                <th className="text-blue-300 w-[8%]">Ciclo</th>
-                <th className="text-blue-300 w-[11%]">Proximo Venc.</th>
-                <th className="text-blue-300 w-[9%]">Status</th>
-                <th className="text-blue-300 w-[13%]">Asaas ID</th>
-                {isAdmin && <th className="text-blue-300 text-right w-[8%]">Acoes</th>}
+                <th className="text-blue-300 whitespace-nowrap min-w-[180px]">Cliente</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[140px]">Linha</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[140px]">Oferta</th>
+                <th className="text-blue-300 whitespace-nowrap">Tipo</th>
+                <th className="text-blue-300 whitespace-nowrap">Valor</th>
+                <th className="text-blue-300 whitespace-nowrap">Ciclo</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[120px]">Proximo Venc.</th>
+                <th className="text-blue-300 whitespace-nowrap">Status</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[160px]">Asaas ID</th>
+                {isAdmin && <th className="text-blue-300 text-right whitespace-nowrap">Acoes</th>}
               </tr>
             </thead>
             <tbody>
@@ -192,9 +192,9 @@ export function Assinaturas() {
               ) : (
                 assinaturas.map((ass) => (
                   <tr key={ass.id} data-testid={`assinatura-row-${ass.id}`}>
-                    <td className="text-white text-sm">{ass.cliente_nome || '-'}</td>
-                    <td className="font-mono text-zinc-400 text-sm">{ass.msisdn || '-'}</td>
-                    <td className="text-zinc-400 text-sm">{ass.oferta_nome || '-'}</td>
+                    <td className="text-white text-sm whitespace-nowrap">{ass.cliente_nome || '-'}</td>
+                    <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{ass.msisdn || '-'}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{ass.oferta_nome || '-'}</td>
                     <td>
                       <span className={`px-2 py-0.5 rounded-sm text-xs font-medium border ${
                         ass.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
@@ -202,11 +202,11 @@ export function Assinaturas() {
                         : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                       }`}>{ass.billing_type}</span>
                     </td>
-                    <td className="text-emerald-400 font-mono text-sm font-medium">{formatCurrency(ass.valor)}</td>
-                    <td className="text-zinc-400 text-sm">{CICLO_MAP[ass.ciclo] || ass.ciclo}</td>
-                    <td className="text-zinc-400 text-sm">{ass.proximo_vencimento ? new Date(ass.proximo_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
-                    <td><StatusBadge status={ass.status} /></td>
-                    <td className="font-mono text-zinc-500 text-xs">{ass.asaas_subscription_id || '-'}</td>
+                    <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(ass.valor)}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{CICLO_MAP[ass.ciclo] || ass.ciclo}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{ass.proximo_vencimento ? new Date(ass.proximo_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="whitespace-nowrap"><StatusBadge status={ass.status} /></td>
+                    <td className="font-mono text-zinc-500 text-xs whitespace-nowrap">{ass.asaas_subscription_id || '-'}</td>
                     {isAdmin && (
                       <td className="text-right">
                         {ass.status === 'ACTIVE' && (
