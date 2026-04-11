@@ -59,7 +59,7 @@ function OfertaGroupedSelect({ value, onValueChange, ofertas, testId }) {
             )}
             {outrasOfertas.length > 0 && (
               <SelectGroup>
-                <SelectLabel className="text-zinc-400 text-xs px-2 py-1.5">Outras</SelectLabel>
+                <SelectLabel className="text-zinc-300 text-xs px-2 py-1.5">Outras</SelectLabel>
                 {outrasOfertas.map((o) => (
                   <SelectItem key={o.id} value={o.id}>
                     {o.nome} - R$ {o.valor.toFixed(2)} ({o.franquia || '-'})
@@ -214,7 +214,7 @@ export function Chips() {
       case 'cancelado':
         return <span className="badge-inactive">Cancelado</span>;
       case 'reservado':
-        return <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">Reservado</span>;
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30">Reservado</span>;
       default:
         return <span className="badge-inactive">{status}</span>;
     }
@@ -225,7 +225,7 @@ export function Chips() {
       return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-violet-500/10 text-violet-400 border border-violet-500/20"><Radio className="w-3 h-3" />M2M</span>;
     }
     if (categoria === 'movel') {
-      return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20"><Smartphone className="w-3 h-3" />Movel</span>;
+      return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-blue-500/10 text-blue-400 border border-blue-500/30"><Smartphone className="w-3 h-3" />Movel</span>;
     }
     return null;
   };
@@ -248,7 +248,7 @@ export function Chips() {
           <h1 className="page-title flex items-center gap-3">
             <CreditCard className="w-7 h-7 text-emerald-500" />Chips (SIM Cards)
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de chips vinculados a ofertas</p>
+          <p className="text-zinc-300 text-sm -mt-4">Gerenciamento de chips vinculados a ofertas</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
@@ -279,13 +279,13 @@ export function Chips() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-zinc-500" />
+          <Filter className="w-4 h-4 text-zinc-400" />
           <span className="text-sm text-zinc-300">Status:</span>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40 form-input" data-testid="chip-status-filter">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-zinc-800">
+            <SelectContent className="bg-zinc-900 border-zinc-600/50">
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="disponivel">Disponivel</SelectItem>
               <SelectItem value="ativado">Ativado</SelectItem>
@@ -340,16 +340,16 @@ export function Chips() {
                 filteredChips.map((chip) => (
                   <tr key={chip.id} data-testid={`chip-row-${chip.id}`}>
                     <td className="font-mono text-white text-xs sm:text-sm whitespace-nowrap">{chip.iccid}</td>
-                    <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{chip.msisdn || '-'}</td>
+                    <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{chip.msisdn || '-'}</td>
                     <td className="whitespace-nowrap">{getStatusBadge(chip.status)}</td>
                     <td className="text-zinc-300 text-sm whitespace-nowrap">{chip.oferta_nome || <span className="text-amber-400 italic">Sem oferta</span>}</td>
                     <td className="whitespace-nowrap">{getCategoriaBadge(chip.categoria)}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">
                       {chip.plano_nome ? `${chip.plano_nome} (${chip.franquia})` : '-'}
                     </td>
                     <td className="text-emerald-400 font-mono text-sm whitespace-nowrap">{formatCurrency(chip.valor)}</td>
                     <td className="text-zinc-400 whitespace-nowrap">{chip.cliente_nome || '-'}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{new Date(chip.created_at).toLocaleDateString('pt-BR')}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{new Date(chip.created_at).toLocaleDateString('pt-BR')}</td>
                     {isAdmin && (
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -413,7 +413,7 @@ export function Chips() {
 
       {/* Add Chip Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">Novo Chip</DialogTitle>
           </DialogHeader>
@@ -430,11 +430,11 @@ export function Chips() {
                 required
                 data-testid="chip-iccid-input"
               />
-              <p className="text-xs text-zinc-500">Numero de identificacao unico do chip (19-20 digitos)</p>
+              <p className="text-xs text-zinc-300">Numero de identificacao unico do chip (19-20 digitos)</p>
             </div>
             <div className="space-y-2">
               <Label className="text-zinc-300 flex items-center gap-2">
-                <Tag className="w-4 h-4 text-zinc-500" />Oferta Vinculada
+                <Tag className="w-4 h-4 text-zinc-400" />Oferta Vinculada
               </Label>
               <OfertaGroupedSelect
                 value={formData.oferta_id}
@@ -442,7 +442,7 @@ export function Chips() {
                 ofertas={ofertas}
                 testId="chip-oferta-select"
               />
-              <p className="text-xs text-zinc-500">Cada chip deve estar vinculado a uma oferta comercial</p>
+              <p className="text-xs text-zinc-300">Cada chip deve estar vinculado a uma oferta comercial</p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setFormData({ iccid: '', oferta_id: '' }); }} className="btn-secondary">Cancelar</Button>
@@ -456,7 +456,7 @@ export function Chips() {
 
       {/* Edit Chip Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">Vincular Oferta ao Chip</DialogTitle>
           </DialogHeader>
@@ -464,16 +464,16 @@ export function Chips() {
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div className="p-3 bg-zinc-800/50 rounded-sm border border-zinc-700 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-500">ICCID:</span>
+                  <span className="text-xs text-zinc-300">ICCID:</span>
                   <span className="font-mono text-white text-sm" data-testid="edit-chip-iccid">{chipToEdit.iccid}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-500">Status:</span>
+                  <span className="text-xs text-zinc-300">Status:</span>
                   {getStatusBadge(chipToEdit.status)}
                 </div>
                 {chipToEdit.oferta_nome && (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-500">Oferta atual:</span>
+                    <span className="text-xs text-zinc-300">Oferta atual:</span>
                     <span className="text-sm text-zinc-300">{chipToEdit.oferta_nome}</span>
                     {getCategoriaBadge(chipToEdit.categoria)}
                   </div>
@@ -481,7 +481,7 @@ export function Chips() {
               </div>
               <div className="space-y-2">
                 <Label className="text-zinc-300 flex items-center gap-2">
-                  <Tag className="w-4 h-4 text-zinc-500" />Nova Oferta
+                  <Tag className="w-4 h-4 text-zinc-400" />Nova Oferta
                 </Label>
                 <OfertaGroupedSelect
                   value={editFormData.oferta_id}
@@ -503,7 +503,7 @@ export function Chips() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">Confirmar Exclusao</DialogTitle>
           </DialogHeader>

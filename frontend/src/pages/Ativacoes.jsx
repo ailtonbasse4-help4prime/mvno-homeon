@@ -198,7 +198,7 @@ export function Ativacoes() {
             <div className="space-y-2">
               <Label className="text-zinc-300 flex items-center gap-2">
                 <span>2. Digite ou Selecione o ICCID</span>
-                <CreditCard className="w-4 h-4 text-zinc-500" />
+                <CreditCard className="w-4 h-4 text-zinc-400" />
               </Label>
               <IccidInput
                 value={selectedChip}
@@ -207,40 +207,40 @@ export function Ativacoes() {
                 chips={allChips}
                 disabled={activating}
               />
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-zinc-300">
                 A oferta e o plano vinculados ao chip serao detectados automaticamente
               </p>
             </div>
 
             {/* Oferta detectada automaticamente */}
             {selectedChipData && selectedChipData.oferta_nome && (
-              <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-sm space-y-2" data-testid="detected-offer-info">
+              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-sm space-y-2" data-testid="detected-offer-info">
                 <div className="flex items-center gap-2 mb-2">
                   <Tag className="w-4 h-4 text-blue-400" />
                   <span className="text-sm font-semibold text-blue-400">Oferta Detectada</span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-zinc-500">Oferta</p>
+                    <p className="text-xs text-zinc-300">Oferta</p>
                     <p className="text-sm text-white font-medium">{selectedChipData.oferta_nome}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-zinc-500">Valor</p>
+                    <p className="text-xs text-zinc-300">Valor</p>
                     <p className="text-sm text-emerald-400 font-mono font-bold">
                       {selectedChipData.valor != null ? formatCurrency(selectedChipData.valor) : '—'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-zinc-500">Plano</p>
+                    <p className="text-xs text-zinc-300">Plano</p>
                     <p className="text-sm text-white">{selectedChipData.plano_nome || '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-zinc-500">Franquia</p>
+                    <p className="text-xs text-zinc-300">Franquia</p>
                     <p className="text-sm text-white">{selectedChipData.franquia || '—'}</p>
                   </div>
                   {selectedChipData.plan_code && (
                     <div className="col-span-2">
-                      <p className="text-xs text-zinc-500">Codigo do Plano (plan_code)</p>
+                      <p className="text-xs text-zinc-300">Codigo do Plano (plan_code)</p>
                       <p className="text-sm text-zinc-300 font-mono">{selectedChipData.plan_code}</p>
                     </div>
                   )}
@@ -250,7 +250,7 @@ export function Ativacoes() {
 
             {/* DDD da nova linha */}
             <div className="space-y-1">
-              <Label className="text-zinc-400 text-xs flex items-center gap-1">DDD da Linha</Label>
+              <Label className="text-zinc-300 text-xs flex items-center gap-1">DDD da Linha</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="text"
@@ -262,7 +262,7 @@ export function Ativacoes() {
                   className="form-input font-mono w-24"
                   data-testid="ddd-input"
                 />
-                <span className="text-xs text-zinc-500">Ex: 11 SP, 21 RJ, 83 PB</span>
+                <span className="text-xs text-zinc-300">Ex: 11 SP, 21 RJ, 83 PB</span>
               </div>
             </div>
 
@@ -286,7 +286,7 @@ export function Ativacoes() {
               </div>
 
               {portability && (
-                <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-3" data-testid="portability-fields">
+                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-3" data-testid="portability-fields">
                   <p className="text-xs text-zinc-400">
                     Informe o numero que o cliente deseja portar de outra operadora.
                   </p>
@@ -448,21 +448,21 @@ export function Ativacoes() {
                     <div className="mt-3 p-3 bg-zinc-800/50 rounded-sm">
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <p className="text-xs text-zinc-500">Oferta</p>
+                          <p className="text-xs text-zinc-300">Oferta</p>
                           <p className="text-sm text-white">{activationResult.oferta_nome}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-zinc-500">Valor</p>
+                          <p className="text-xs text-zinc-300">Valor</p>
                           <p className="text-sm text-emerald-400 font-mono">
                             {activationResult.valor != null ? formatCurrency(activationResult.valor) : '—'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-zinc-500">Plano</p>
+                          <p className="text-xs text-zinc-300">Plano</p>
                           <p className="text-sm text-white">{activationResult.plano_nome}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-zinc-500">Franquia</p>
+                          <p className="text-xs text-zinc-300">Franquia</p>
                           <p className="text-sm text-white">{activationResult.franquia}</p>
                         </div>
                       </div>
@@ -489,7 +489,7 @@ export function Ativacoes() {
           )}
 
           {/* Info */}
-          <div className="dashboard-card bg-blue-500/5 border-blue-500/20">
+          <div className="dashboard-card bg-blue-500/10 border-blue-500/30">
             <h3 className="text-sm font-semibold text-blue-400 mb-2">Sobre a Ativacao</h3>
             <ul className="text-sm text-zinc-400 space-y-1">
               <li>- Digite ou cole o ICCID diretamente no campo</li>
@@ -502,13 +502,13 @@ export function Ativacoes() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 text-center">
+            <div className="bg-zinc-900/80 border border-zinc-600/50 rounded-sm p-3 text-center">
               <p className="text-xl font-bold text-white font-mono">{clientes.length}</p>
-              <p className="text-xs text-zinc-500">Clientes Ativos</p>
+              <p className="text-xs text-zinc-300">Clientes Ativos</p>
             </div>
-            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-3 text-center">
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-sm p-3 text-center">
               <p className="text-xl font-bold text-emerald-400 font-mono">{chipsDisponiveis.length}</p>
-              <p className="text-xs text-zinc-500">Chips Disponiveis</p>
+              <p className="text-xs text-zinc-300">Chips Disponiveis</p>
             </div>
           </div>
         </div>

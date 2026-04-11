@@ -425,13 +425,13 @@ export default function PortalDashboard() {
             {/* Plan info */}
             {primeiraLinha.plano_nome && (
               <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Plano</span>
+                <span className="text-xs text-zinc-300">Plano</span>
                 <span className="text-sm text-white font-semibold">{primeiraLinha.plano_nome}</span>
               </div>
             )}
             {primeiraLinha.oferta_nome && (
               <div className="mt-1 flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Oferta</span>
+                <span className="text-xs text-zinc-300">Oferta</span>
                 <span className="text-sm text-zinc-300">{primeiraLinha.oferta_nome}</span>
               </div>
             )}
@@ -497,7 +497,7 @@ export default function PortalDashboard() {
                             ? 'bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20'
                             : 'bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20'
                         }`}>{linha.status}</span>
-                        {isExpanded ? <ChevronUp className="w-4 h-4 text-zinc-500" /> : <ChevronDown className="w-4 h-4 text-zinc-500" />}
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-zinc-400" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}
                       </div>
                     </button>
 
@@ -566,7 +566,7 @@ export default function PortalDashboard() {
                             {info.label}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500">
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-300">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {formatDate(cob.vencimento)}

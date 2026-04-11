@@ -129,9 +129,9 @@ export function Linhas() {
 
   const getStatusBadge = (status) => {
     const styles = {
-      ativo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-      bloqueado: 'bg-red-500/10 text-red-400 border-red-500/20',
-      pendente: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      ativo: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+      bloqueado: 'bg-red-500/10 text-red-400 border-red-500/30',
+      pendente: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
       erro: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
     };
     const icons = {
@@ -156,7 +156,7 @@ export function Linhas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><Phone className="w-7 h-7 text-purple-500" />Linhas</h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de linhas ativas</p>
+          <p className="text-zinc-300 text-sm -mt-4">Gerenciamento de linhas ativas</p>
         </div>
         <Button onClick={fetchLinhas} variant="outline" className="btn-secondary flex items-center gap-2 w-full sm:w-auto" data-testid="refresh-linhas">
           <RefreshCw className="w-4 h-4" />Atualizar
@@ -165,10 +165,10 @@ export function Linhas() {
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-zinc-500" />
+          <Filter className="w-4 h-4 text-zinc-400" />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-48 form-input" data-testid="linha-status-filter"><SelectValue placeholder="Todos" /></SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-zinc-800">
+            <SelectContent className="bg-zinc-900 border-zinc-600/50">
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="ativo">Ativo</SelectItem>
               <SelectItem value="pendente">Pendente</SelectItem>
@@ -177,7 +177,7 @@ export function Linhas() {
           </Select>
         </div>
         <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="text"
             value={searchTerm}
@@ -212,10 +212,10 @@ export function Linhas() {
         return (
           <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-white font-mono">{displayLinhas.length}</p><p className="text-xs text-zinc-500">Total</p></div>
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">{displayLinhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-500">Ativas</p></div>
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">{displayLinhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-500">Pendentes</p></div>
-        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-red-400 font-mono">{displayLinhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-500">Bloqueadas</p></div>
+        <div className="bg-zinc-900/80 border border-zinc-600/50 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-white font-mono">{displayLinhas.length}</p><p className="text-xs text-zinc-300">Total</p></div>
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">{displayLinhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-300">Ativas</p></div>
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">{displayLinhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-300">Pendentes</p></div>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-red-400 font-mono">{displayLinhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-300">Bloqueadas</p></div>
       </div>
 
       {/* Table */}
@@ -240,9 +240,9 @@ export function Linhas() {
                 <tr key={linha.id} data-testid={`linha-row-${linha.id}`}>
                   <td className="font-mono text-white font-semibold text-sm whitespace-nowrap min-w-[160px]">{linha.msisdn || linha.numero}</td>
                   <td className="text-zinc-300 text-sm whitespace-nowrap min-w-[200px]">{linha.cliente_nome || '-'}</td>
-                  <td className="font-mono text-zinc-400 text-sm whitespace-nowrap min-w-[200px]">{linha.iccid || '-'}</td>
+                  <td className="font-mono text-zinc-300 text-sm whitespace-nowrap min-w-[200px]">{linha.iccid || '-'}</td>
                   <td className="text-zinc-300 text-sm whitespace-nowrap">{linha.plano_nome || '-'}</td>
-                  <td className="text-zinc-400 text-sm whitespace-nowrap">{linha.oferta_nome || '-'}</td>
+                  <td className="text-zinc-300 text-sm whitespace-nowrap">{linha.oferta_nome || '-'}</td>
                   <td className="whitespace-nowrap">{getStatusBadge(linha.status)}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -283,15 +283,15 @@ export function Linhas() {
 
       {/* Block Partial Dialog */}
       <Dialog open={blockPartialDialog} onOpenChange={setBlockPartialDialog}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Lock className="w-5 h-5 text-amber-400" />Bloqueio Parcial</DialogTitle></DialogHeader>
           <div className="py-2">
             <div className="p-3 bg-zinc-800/50 rounded-sm mb-3">
-              <p className="text-xs text-zinc-500">Numero</p>
+              <p className="text-xs text-zinc-300">Numero</p>
               <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
               <p className="text-xs text-zinc-500 mt-1">Cliente: {selectedLinha?.cliente_nome}</p>
             </div>
-            <p className="text-zinc-400 text-sm">Bloquear parcialmente esta linha? O usuario nao podera fazer chamadas mas ainda recebera.</p>
+            <p className="text-zinc-300 text-sm">Bloquear parcialmente esta linha? O usuario nao podera fazer chamadas mas ainda recebera.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBlockPartialDialog(false)} className="btn-secondary" disabled={processing}>Cancelar</Button>
@@ -304,11 +304,11 @@ export function Linhas() {
 
       {/* Block Total Dialog */}
       <Dialog open={blockTotalDialog} onOpenChange={setBlockTotalDialog}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><ShieldAlert className="w-5 h-5 text-red-400" />Bloqueio Total</DialogTitle></DialogHeader>
           <div className="py-2 space-y-3">
             <div className="p-3 bg-zinc-800/50 rounded-sm">
-              <p className="text-xs text-zinc-500">Numero</p>
+              <p className="text-xs text-zinc-300">Numero</p>
               <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
               <p className="text-xs text-zinc-500 mt-1">Cliente: {selectedLinha?.cliente_nome}</p>
             </div>
@@ -316,7 +316,7 @@ export function Linhas() {
               <p className="text-sm text-zinc-300">Motivo do bloqueio:</p>
               <Select value={selectedReason} onValueChange={setSelectedReason}>
                 <SelectTrigger className="form-input" data-testid="block-reason-select"><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800">
+                <SelectContent className="bg-zinc-900 border-zinc-600/50">
                   {blockReasons.map(r => (
                     <SelectItem key={r.code} value={String(r.code)}>{r.label}</SelectItem>
                   ))}
@@ -336,15 +336,15 @@ export function Linhas() {
 
       {/* Unblock Dialog */}
       <Dialog open={unblockDialog} onOpenChange={setUnblockDialog}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Unlock className="w-5 h-5 text-emerald-400" />Desbloquear Linha</DialogTitle></DialogHeader>
           <div className="py-2">
             <div className="p-3 bg-zinc-800/50 rounded-sm mb-3">
-              <p className="text-xs text-zinc-500">Numero</p>
+              <p className="text-xs text-zinc-300">Numero</p>
               <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
               <p className="text-xs text-zinc-500 mt-1">Cliente: {selectedLinha?.cliente_nome}</p>
             </div>
-            <p className="text-zinc-400 text-sm">Desbloquear esta linha? A linha sera reativada imediatamente.</p>
+            <p className="text-zinc-300 text-sm">Desbloquear esta linha? A linha sera reativada imediatamente.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUnblockDialog(false)} className="btn-secondary" disabled={processing}>Cancelar</Button>
@@ -357,11 +357,11 @@ export function Linhas() {
 
       {/* Plan Change Dialog */}
       <Dialog open={planChangeDialog} onOpenChange={setPlanChangeDialog}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><ArrowRightLeft className="w-5 h-5 text-blue-400" />Alterar Plano</DialogTitle></DialogHeader>
           <div className="py-2 space-y-3">
             <div className="p-3 bg-zinc-800/50 rounded-sm">
-              <p className="text-xs text-zinc-500">Numero / Plano Atual</p>
+              <p className="text-xs text-zinc-300">Numero / Plano Atual</p>
               <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
               <p className="text-sm text-zinc-400 mt-1">{selectedLinha?.plano_nome} - {selectedLinha?.oferta_nome}</p>
             </div>
@@ -393,7 +393,7 @@ export function Linhas() {
 
       {/* Status Dialog */}
       <Dialog open={statusDialog} onOpenChange={setStatusDialog}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Activity className="w-5 h-5 text-blue-400" />Consulta da Linha</DialogTitle></DialogHeader>
           <div className="py-2">
             {checkingStatus ? (
@@ -403,7 +403,7 @@ export function Linhas() {
               </div>
             ) : lineStatus ? (
               <div className="space-y-3">
-                <div className={`p-3 rounded-sm ${lineStatus.success ? 'bg-emerald-500/5 border border-emerald-500/20' : 'bg-red-500/5 border border-red-500/20'}`}>
+                <div className={`p-3 rounded-sm ${lineStatus.success ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
                   <p className="text-xs text-zinc-500 mb-1">Status</p>
                   <p className={`text-sm font-semibold ${lineStatus.success ? 'text-emerald-400' : 'text-red-400'}`}>
                     {lineStatus.success ? 'Consulta realizada' : 'Erro na consulta'}

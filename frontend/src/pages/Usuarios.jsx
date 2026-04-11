@@ -94,7 +94,7 @@ export function Usuarios() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><UserCog className="w-7 h-7 text-violet-500" />Usuarios</h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de usuarios e perfis de acesso</p>
+          <p className="text-zinc-300 text-sm -mt-4">Gerenciamento de usuarios e perfis de acesso</p>
         </div>
         <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-user-button">
           <Plus className="w-4 h-4" />Novo Usuario
@@ -103,17 +103,17 @@ export function Usuarios() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4">
+        <div className="bg-zinc-900/80 border border-zinc-600/50 rounded-sm p-4">
           <p className="text-2xl font-bold text-white font-mono">{usuarios.length}</p>
-          <p className="text-xs text-zinc-500">Total</p>
+          <p className="text-xs text-zinc-300">Total</p>
         </div>
         <div className="bg-violet-500/5 border border-violet-500/20 rounded-sm p-4">
           <p className="text-2xl font-bold text-violet-400 font-mono">{usuarios.filter(u => u.role === 'admin').length}</p>
-          <p className="text-xs text-zinc-500">Administradores</p>
+          <p className="text-xs text-zinc-300">Administradores</p>
         </div>
-        <div className="bg-blue-500/5 border border-blue-500/20 rounded-sm p-4">
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-sm p-4">
           <p className="text-2xl font-bold text-blue-400 font-mono">{usuarios.filter(u => u.role === 'atendente').length}</p>
-          <p className="text-xs text-zinc-500">Atendentes</p>
+          <p className="text-xs text-zinc-300">Atendentes</p>
         </div>
       </div>
 
@@ -141,12 +141,12 @@ export function Usuarios() {
                         <ShieldCheck className="w-3 h-3" />Admin
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30">
                         <Shield className="w-3 h-3" />Atendente
                       </span>
                     )}
                   </td>
-                  <td className="text-zinc-400 text-sm">{new Date(u.created_at).toLocaleDateString('pt-BR')}</td>
+                  <td className="text-zinc-300 text-sm">{new Date(u.created_at).toLocaleDateString('pt-BR')}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(u)} className="text-zinc-400 hover:text-white" data-testid={`edit-user-${u.id}`}>
@@ -192,7 +192,7 @@ export function Usuarios() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">{editingUser ? 'Editar Usuario' : 'Novo Usuario'}</DialogTitle>
           </DialogHeader>
@@ -215,7 +215,7 @@ export function Usuarios() {
               <Label className="text-zinc-300">Perfil de Acesso</Label>
               <Select value={formData.role} onValueChange={(v) => setFormData({ ...formData, role: v })}>
                 <SelectTrigger className="form-input" data-testid="user-role-select"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800">
+                <SelectContent className="bg-zinc-900 border-zinc-600/50">
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="atendente">Atendente</SelectItem>
                 </SelectContent>
@@ -231,7 +231,7 @@ export function Usuarios() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Remover o usuario <span className="text-white font-medium">{userToDelete?.name}</span> ({userToDelete?.email})?</p>
           <DialogFooter>

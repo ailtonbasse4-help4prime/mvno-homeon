@@ -222,7 +222,7 @@ export default function AtivarSelfService() {
       </header>
 
       {/* Stepper */}
-      <div className="px-4 py-3 bg-zinc-900/50 border-b border-zinc-800">
+      <div className="px-4 py-3 bg-zinc-900/80 border-b border-zinc-800">
         <div className="flex items-center justify-center gap-1 max-w-md mx-auto">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex items-center">
@@ -260,7 +260,7 @@ export default function AtivarSelfService() {
                 <ScanLine className="w-8 h-8 text-blue-400" />
               </div>
               <h2 className="text-xl font-bold text-white">Escanear Chip</h2>
-              <p className="text-zinc-400 text-sm mt-1">Escaneie o QR Code ou digite o ICCID do chip</p>
+              <p className="text-zinc-300 text-sm mt-1">Escaneie o QR Code ou digite o ICCID do chip</p>
             </div>
 
             {/* QR Scanner area */}
@@ -328,7 +328,7 @@ export default function AtivarSelfService() {
         {step === 1 && chipInfo && (
           <div className="space-y-4 animate-fade-in">
             {/* Chip Info Card */}
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="bg-zinc-900 border-zinc-600/50">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-emerald-600/10 rounded-lg flex items-center justify-center">
@@ -336,7 +336,7 @@ export default function AtivarSelfService() {
                   </div>
                   <div>
                     <p className="text-white font-semibold">{chipInfo.oferta_nome}</p>
-                    <p className="text-zinc-400 text-xs">{chipInfo.plano_nome} - {chipInfo.franquia}</p>
+                    <p className="text-zinc-300 text-xs">{chipInfo.plano_nome} - {chipInfo.franquia}</p>
                   </div>
                 </div>
                 <div className="flex items-end justify-between">
@@ -349,7 +349,7 @@ export default function AtivarSelfService() {
                     </p>
                   </div>
                   {chipInfo.desconto > 0 && (
-                    <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/20">
+                    <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/30">
                       -{' '}R$ {chipInfo.desconto.toFixed(2)} desconto
                     </span>
                   )}
@@ -364,59 +364,59 @@ export default function AtivarSelfService() {
             <h3 className="text-white font-semibold text-sm">Seus Dados</h3>
             <div className="space-y-3">
               <div>
-                <Label className="text-zinc-400 text-xs">Nome Completo *</Label>
+                <Label className="text-zinc-300 text-xs">Nome Completo *</Label>
                 <Input value={form.nome} onChange={e => updateForm('nome', e.target.value)}
                   className="form-input" placeholder="Nome completo" data-testid="nome-input" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-zinc-400 text-xs">CPF *</Label>
+                  <Label className="text-zinc-300 text-xs">CPF *</Label>
                   <Input value={form.documento} onChange={e => updateForm('documento', e.target.value)}
                     className="form-input" placeholder="000.000.000-00" data-testid="cpf-input" />
                 </div>
                 <div>
-                  <Label className="text-zinc-400 text-xs">Telefone *</Label>
+                  <Label className="text-zinc-300 text-xs">Telefone *</Label>
                   <Input value={form.telefone} onChange={e => updateForm('telefone', e.target.value)}
                     className="form-input" placeholder="(11) 99999-9999" data-testid="telefone-input" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-zinc-400 text-xs">Data Nascimento *</Label>
+                  <Label className="text-zinc-300 text-xs">Data Nascimento *</Label>
                   <Input type="date" value={form.data_nascimento} onChange={e => updateForm('data_nascimento', e.target.value)}
                     className="form-input" data-testid="nascimento-input" />
                 </div>
                 <div>
-                  <Label className="text-zinc-400 text-xs">E-mail</Label>
+                  <Label className="text-zinc-300 text-xs">E-mail</Label>
                   <Input type="email" value={form.email} onChange={e => updateForm('email', e.target.value)}
                     className="form-input" placeholder="email@exemplo.com" data-testid="email-input" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-zinc-400 text-xs">CEP *</Label>
+                  <Label className="text-zinc-300 text-xs">CEP *</Label>
                   <Input value={form.cep} onChange={e => handleCepLookup(e.target.value)}
                     className="form-input" placeholder="00000-000" maxLength={9} data-testid="cep-input" />
                 </div>
                 <div className="col-span-2">
-                  <Label className="text-zinc-400 text-xs">Endereco</Label>
+                  <Label className="text-zinc-300 text-xs">Endereco</Label>
                   <Input value={form.endereco} onChange={e => updateForm('endereco', e.target.value)}
                     className="form-input" placeholder="Rua..." data-testid="endereco-input" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-zinc-400 text-xs">Numero *</Label>
+                  <Label className="text-zinc-300 text-xs">Numero *</Label>
                   <Input value={form.numero_endereco} onChange={e => updateForm('numero_endereco', e.target.value)}
                     className="form-input" placeholder="123" data-testid="numero-input" />
                 </div>
                 <div>
-                  <Label className="text-zinc-400 text-xs">Bairro</Label>
+                  <Label className="text-zinc-300 text-xs">Bairro</Label>
                   <Input value={form.bairro} onChange={e => updateForm('bairro', e.target.value)}
                     className="form-input" data-testid="bairro-input" />
                 </div>
                 <div>
-                  <Label className="text-zinc-400 text-xs">Cidade</Label>
+                  <Label className="text-zinc-300 text-xs">Cidade</Label>
                   <Input value={form.cidade} onChange={e => updateForm('cidade', e.target.value)}
                     className="form-input" data-testid="cidade-input" />
                 </div>
@@ -425,7 +425,7 @@ export default function AtivarSelfService() {
 
             {/* DDD da nova linha */}
             <div className="space-y-1 mt-4">
-              <Label className="text-zinc-400 text-xs">DDD da Linha</Label>
+              <Label className="text-zinc-300 text-xs">DDD da Linha</Label>
               <div className="flex items-center gap-2">
                 <Input
                   type="text"
@@ -437,7 +437,7 @@ export default function AtivarSelfService() {
                   className="form-input font-mono w-20"
                   data-testid="selfservice-ddd-input"
                 />
-                <span className="text-xs text-zinc-500">Ex: 11 SP, 21 RJ, 83 PB</span>
+                <span className="text-xs text-zinc-300">Ex: 11 SP, 21 RJ, 83 PB</span>
               </div>
             </div>
 
@@ -461,13 +461,13 @@ export default function AtivarSelfService() {
               </div>
 
               {form.portability && (
-                <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg space-y-3">
+                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-3">
                   <p className="text-xs text-zinc-400">
                     Informe o numero que deseja portar de outra operadora.
                   </p>
                   <div className="flex gap-3">
                     <div className="w-20">
-                      <Label className="text-zinc-400 text-xs">DDD</Label>
+                      <Label className="text-zinc-300 text-xs">DDD</Label>
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -480,7 +480,7 @@ export default function AtivarSelfService() {
                       />
                     </div>
                     <div className="flex-1">
-                      <Label className="text-zinc-400 text-xs">Numero</Label>
+                      <Label className="text-zinc-300 text-xs">Numero</Label>
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -551,7 +551,7 @@ export default function AtivarSelfService() {
                     <Clock className="w-8 h-8 text-amber-400" />
                   </div>
                   <h2 className="text-xl font-bold text-white">Aguardando Pagamento</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Efetue o pagamento para ativar seu chip</p>
+                  <p className="text-zinc-300 text-sm mt-1">Efetue o pagamento para ativar seu chip</p>
                 </>
               )}
               {activation.status === 'pago' && (
@@ -560,7 +560,7 @@ export default function AtivarSelfService() {
                     <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                   </div>
                   <h2 className="text-xl font-bold text-white">Pagamento Confirmado!</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Ativando seu chip na operadora...</p>
+                  <p className="text-zinc-300 text-sm mt-1">Ativando seu chip na operadora...</p>
                 </>
               )}
               {activation.status === 'ativando' && (
@@ -569,7 +569,7 @@ export default function AtivarSelfService() {
                     <Wifi className="w-8 h-8 text-blue-400 animate-pulse" />
                   </div>
                   <h2 className="text-xl font-bold text-white">Ativando...</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Sua linha esta sendo ativada na operadora</p>
+                  <p className="text-zinc-300 text-sm mt-1">Sua linha esta sendo ativada na operadora</p>
                 </>
               )}
               {activation.status === 'portabilidade_em_andamento' && (
@@ -587,7 +587,7 @@ export default function AtivarSelfService() {
                     <CheckCircle className="w-8 h-8 text-emerald-400" />
                   </div>
                   <h2 className="text-xl font-bold text-emerald-400">Chip Ativado!</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Insira o chip no aparelho e aproveite</p>
+                  <p className="text-zinc-300 text-sm mt-1">Insira o chip no aparelho e aproveite</p>
                   {activation.msisdn && (
                     <p className="text-white font-mono text-lg mt-2">Seu numero: {activation.msisdn}</p>
                   )}
@@ -599,7 +599,7 @@ export default function AtivarSelfService() {
                     <AlertCircle className="w-8 h-8 text-red-400" />
                   </div>
                   <h2 className="text-xl font-bold text-red-400">Erro na Ativacao</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Entre em contato com o suporte</p>
+                  <p className="text-zinc-300 text-sm mt-1">Entre em contato com o suporte</p>
                 </>
               )}
             </div>
@@ -612,7 +612,7 @@ export default function AtivarSelfService() {
                     <MessageSquare className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
                     <div>
                       <p className="text-amber-300 font-medium text-sm">Confirme o SMS da operadora anterior</p>
-                      <p className="text-zinc-400 text-xs mt-1">
+                      <p className="text-zinc-300 text-xs mt-1">
                         Voce recebera um SMS no seu numero atual pedindo a confirmacao da portabilidade. 
                         Responda conforme as instrucoes para prosseguir.
                       </p>
@@ -622,7 +622,7 @@ export default function AtivarSelfService() {
                     <Clock className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
                     <div>
                       <p className="text-blue-300 font-medium text-sm">Apos confirmar, aguarde a janela de portabilidade</p>
-                      <p className="text-zinc-400 text-xs mt-1">
+                      <p className="text-zinc-300 text-xs mt-1">
                         A portabilidade sera concluida na proxima janela disponivel (geralmente durante a madrugada).
                       </p>
                     </div>
@@ -645,14 +645,14 @@ export default function AtivarSelfService() {
 
             {/* Payment Info */}
             {activation.status === 'aguardando_pagamento' && (
-              <Card className="bg-zinc-900 border-zinc-800">
+              <Card className="bg-zinc-900 border-zinc-600/50">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-zinc-400 text-sm">Valor</span>
+                    <span className="text-zinc-300 text-sm">Valor</span>
                     <span className="text-white font-bold text-lg">R$ {activation.valor_final.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-zinc-400 text-sm">Metodo</span>
+                    <span className="text-zinc-300 text-sm">Metodo</span>
                     <span className="text-white text-sm">{activation.billing_type}</span>
                   </div>
 
@@ -666,7 +666,7 @@ export default function AtivarSelfService() {
                         </div>
                       )}
                       <div>
-                        <Label className="text-zinc-400 text-xs">Pix Copia e Cola</Label>
+                        <Label className="text-zinc-300 text-xs">Pix Copia e Cola</Label>
                         <div className="flex gap-2 mt-1">
                           <Input value={activation.asaas_pix_code} readOnly
                             className="form-input text-xs font-mono" data-testid="pix-code" />
@@ -684,7 +684,7 @@ export default function AtivarSelfService() {
                     <div className="space-y-3">
                       {activation.barcode && (
                         <div>
-                          <Label className="text-zinc-400 text-xs">Codigo de Barras</Label>
+                          <Label className="text-zinc-300 text-xs">Codigo de Barras</Label>
                           <div className="flex gap-2 mt-1">
                             <Input value={activation.barcode} readOnly
                               className="form-input text-xs font-mono" data-testid="barcode" />
@@ -715,9 +715,9 @@ export default function AtivarSelfService() {
 
                   {/* No payment info (mock) */}
                   {!activation.asaas_pix_code && !activation.barcode && !activation.asaas_invoice_url && (
-                    <div className="text-center p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <div className="text-center p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                       <p className="text-amber-400 text-sm">Pagamento registrado no sistema.</p>
-                      <p className="text-zinc-400 text-xs mt-1">O administrador ira confirmar o pagamento e ativar seu chip.</p>
+                      <p className="text-zinc-300 text-xs mt-1">O administrador ira confirmar o pagamento e ativar seu chip.</p>
                     </div>
                   )}
 
@@ -732,9 +732,9 @@ export default function AtivarSelfService() {
             )}
 
             {/* Plan Summary */}
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="bg-zinc-900 border-zinc-600/50">
               <CardContent className="p-4">
-                <h4 className="text-zinc-400 text-xs uppercase tracking-wider mb-2">Resumo</h4>
+                <h4 className="text-zinc-300 text-xs uppercase tracking-wider mb-2">Resumo</h4>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between">
                     <span className="text-zinc-400">Plano</span>

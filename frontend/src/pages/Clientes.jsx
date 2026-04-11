@@ -244,7 +244,7 @@ export function Clientes() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><Users className="w-7 h-7 text-blue-500" />Clientes</h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de clientes</p>
+          <p className="text-zinc-300 text-sm -mt-4">Gerenciamento de clientes</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {isAdmin && (
@@ -266,7 +266,7 @@ export function Clientes() {
       </div>
 
       <div className="relative max-w-full sm:max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
         <Input type="text" placeholder="Buscar por nome, documento ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} className="form-input pl-10" data-testid="search-clientes" />
       </div>
 
@@ -296,7 +296,7 @@ export function Clientes() {
                   return [(
                     <tr key={c.id} data-testid={`cliente-row-${c.id}`}>
                       <td className="font-medium text-white text-sm whitespace-nowrap">{c.nome}</td>
-                      <td className="text-zinc-400 text-xs uppercase whitespace-nowrap">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
+                      <td className="text-zinc-300 text-xs uppercase whitespace-nowrap">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
                       <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.documento}</td>
                       <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.telefone}</td>
                       <td className="text-xs text-zinc-500 whitespace-nowrap">-</td>
@@ -322,11 +322,11 @@ export function Clientes() {
                 return linhas.map((l, i) => (
                   <tr key={`${c.id}-${i}`} data-testid={`cliente-row-${c.id}-${i}`}>
                     <td className="font-medium text-white text-sm whitespace-nowrap">{c.nome}</td>
-                    <td className="text-zinc-400 text-xs uppercase whitespace-nowrap">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
+                    <td className="text-zinc-300 text-xs uppercase whitespace-nowrap">{c.tipo_pessoa === 'pj' ? 'PJ' : 'PF'}</td>
                     <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.documento}</td>
                     <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{c.telefone}</td>
                     <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{l.numero || '-'}</td>
-                    <td className="font-mono text-zinc-400 text-xs whitespace-nowrap">{l.iccid || '-'}</td>
+                    <td className="font-mono text-zinc-300 text-xs whitespace-nowrap">{l.iccid || '-'}</td>
                     <td className="text-zinc-300 text-sm whitespace-nowrap">{l.plano_nome || '-'}</td>
                     <td className="whitespace-nowrap">
                       {c.dados_completos ? (
@@ -358,14 +358,14 @@ export function Clientes() {
           </DialogHeader>
           <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }} className="space-y-4">
             {/* Dados Pessoais */}
-            <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
+            <div className="border border-zinc-600/50 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Dados Pessoais</h3>
               <div className={`grid gap-3 ${editingCliente ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Tipo de Pessoa</Label>
+                  <Label className="text-zinc-300 text-xs">Tipo de Pessoa</Label>
                   <Select value={formData.tipo_pessoa} onValueChange={(v) => f('tipo_pessoa', v)}>
                     <SelectTrigger className="form-input" data-testid="cliente-tipo-pessoa"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800">
+                    <SelectContent className="bg-zinc-900 border-zinc-600/50">
                       <SelectItem value="pf">Pessoa Fisica (PF)</SelectItem>
                       <SelectItem value="pj">Pessoa Juridica (PJ)</SelectItem>
                     </SelectContent>
@@ -373,10 +373,10 @@ export function Clientes() {
                 </div>
                 {editingCliente && (
                   <div className="space-y-1">
-                    <Label className="text-zinc-400 text-xs">Status</Label>
+                    <Label className="text-zinc-300 text-xs">Status</Label>
                     <Select value={formData.status} onValueChange={(v) => f('status', v)}>
                       <SelectTrigger className="form-input" data-testid="cliente-status-select"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                      <SelectContent className="bg-zinc-900 border-zinc-600/50">
                         <SelectItem value="ativo">Ativo</SelectItem>
                         <SelectItem value="inativo">Inativo</SelectItem>
                       </SelectContent>
@@ -385,43 +385,43 @@ export function Clientes() {
                 )}
               </div>
               <div className="space-y-1">
-                <Label className="text-zinc-400 text-xs">{formData.tipo_pessoa === 'pj' ? 'Razao Social' : 'Nome Completo'}</Label>
+                <Label className="text-zinc-300 text-xs">{formData.tipo_pessoa === 'pj' ? 'Razao Social' : 'Nome Completo'}</Label>
                 <Input value={formData.nome} onChange={(e) => f('nome', e.target.value)} className="form-input" required data-testid="cliente-nome-input" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">{formData.tipo_pessoa === 'pj' ? 'CNPJ' : 'CPF'}</Label>
+                  <Label className="text-zinc-300 text-xs">{formData.tipo_pessoa === 'pj' ? 'CNPJ' : 'CPF'}</Label>
                   <Input value={formData.documento} onChange={(e) => f('documento', formatDoc(e.target.value, formData.tipo_pessoa))} className="form-input font-mono" placeholder={formData.tipo_pessoa === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'} maxLength={formData.tipo_pessoa === 'pj' ? 18 : 14} required data-testid="cliente-documento-input" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Telefone</Label>
+                  <Label className="text-zinc-300 text-xs">Telefone</Label>
                   <Input value={formData.telefone} onChange={(e) => f('telefone', formatPhone(e.target.value))} className="form-input font-mono" placeholder="(00) 00000-0000" maxLength={15} required data-testid="cliente-telefone-input" />
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-zinc-400 text-xs">Email</Label>
+                <Label className="text-zinc-300 text-xs">Email</Label>
                 <Input type="email" value={formData.email} onChange={(e) => f('email', e.target.value)} className="form-input" placeholder="cliente@email.com" data-testid="cliente-email-input" />
               </div>
               <div className="space-y-1">
-                <Label className="text-zinc-400 text-xs">Data de Nascimento</Label>
+                <Label className="text-zinc-300 text-xs">Data de Nascimento</Label>
                 <Input type="date" value={formData.data_nascimento} onChange={(e) => f('data_nascimento', e.target.value)} className="form-input" data-testid="cliente-nascimento-input" />
               </div>
             </div>
 
             {/* Endereco */}
-            <div className="border border-zinc-800 rounded-sm p-4 space-y-3">
+            <div className="border border-zinc-600/50 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Endereco</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">CEP</Label>
+                  <Label className="text-zinc-300 text-xs">CEP</Label>
                   <Input value={formData.cep} onChange={(e) => handleCepLookup(e.target.value)} className="form-input font-mono" placeholder="00000000" maxLength={8} data-testid="cliente-cep-input" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Numero</Label>
+                  <Label className="text-zinc-300 text-xs">Numero</Label>
                   <Input value={formData.numero_endereco} onChange={(e) => f('numero_endereco', e.target.value)} className="form-input" placeholder="123" data-testid="cliente-numero-input" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Estado</Label>
+                  <Label className="text-zinc-300 text-xs">Estado</Label>
                   <Select value={formData.estado} onValueChange={(v) => f('estado', v)}>
                     <SelectTrigger className="form-input" data-testid="cliente-estado-select"><SelectValue placeholder="UF" /></SelectTrigger>
                     <SelectContent className="bg-zinc-900 border-zinc-800 max-h-48">
@@ -431,26 +431,26 @@ export function Clientes() {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-zinc-400 text-xs">Endereco</Label>
+                <Label className="text-zinc-300 text-xs">Endereco</Label>
                 <Input value={formData.endereco} onChange={(e) => f('endereco', e.target.value)} className="form-input" placeholder="Rua, Avenida..." data-testid="cliente-endereco-input" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Bairro</Label>
+                  <Label className="text-zinc-300 text-xs">Bairro</Label>
                   <Input value={formData.bairro} onChange={(e) => f('bairro', e.target.value)} className="form-input" data-testid="cliente-bairro-input" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Cidade</Label>
+                  <Label className="text-zinc-300 text-xs">Cidade</Label>
                   <Input value={formData.cidade} onChange={(e) => f('cidade', e.target.value)} className="form-input" data-testid="cliente-cidade-input" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Codigo da Cidade</Label>
+                  <Label className="text-zinc-300 text-xs">Codigo da Cidade</Label>
                   <Input value={formData.city_code} onChange={(e) => f('city_code', e.target.value)} className="form-input font-mono" placeholder="3550308" data-testid="cliente-citycode-input" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-zinc-400 text-xs">Complemento</Label>
+                  <Label className="text-zinc-300 text-xs">Complemento</Label>
                   <Input value={formData.complemento} onChange={(e) => f('complemento', e.target.value)} className="form-input" placeholder="Apto, Sala..." data-testid="cliente-complemento-input" />
                 </div>
               </div>
@@ -466,7 +466,7 @@ export function Clientes() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Tem certeza que deseja remover o cliente <span className="text-white font-medium">{clienteToDelete?.nome}</span>?</p>
           <DialogFooter>

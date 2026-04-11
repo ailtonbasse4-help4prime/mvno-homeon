@@ -66,13 +66,13 @@ export function Logs() {
       case 'login':
         return <LogIn className="w-4 h-4 text-blue-500" />;
       case 'logout':
-        return <LogOut className="w-4 h-4 text-zinc-500" />;
+        return <LogOut className="w-4 h-4 text-zinc-400" />;
       case 'cadastro':
         return <UserPlus className="w-4 h-4 text-purple-500" />;
       case 'api_call':
         return <Server className="w-4 h-4 text-cyan-500" />;
       default:
-        return <FileText className="w-4 h-4 text-zinc-500" />;
+        return <FileText className="w-4 h-4 text-zinc-400" />;
     }
   };
 
@@ -132,7 +132,7 @@ export function Logs() {
             <FileText className="w-7 h-7 text-zinc-400" />
             Logs do Sistema
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">Histórico de ações e chamadas de API</p>
+          <p className="text-zinc-300 text-sm -mt-4">Histórico de ações e chamadas de API</p>
         </div>
         <Button
           onClick={fetchLogs}
@@ -147,14 +147,14 @@ export function Logs() {
       {/* Filter */}
       <div className="flex flex-wrap items-center gap-3 sm:gap-4">
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-zinc-500" />
+          <Filter className="w-4 h-4 text-zinc-400" />
           <span className="text-sm text-zinc-400">Filtrar:</span>
         </div>
         <Select value={actionFilter} onValueChange={setActionFilter}>
           <SelectTrigger className="w-44 sm:w-48 form-input" data-testid="log-action-filter">
             <SelectValue placeholder="Todas as ações" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
+          <SelectContent className="bg-zinc-900 border-zinc-600/50">
             <SelectItem value="all">Todas as ações</SelectItem>
             <SelectItem value="ativacao">Ativação</SelectItem>
             <SelectItem value="bloqueio">Bloqueio</SelectItem>
@@ -169,27 +169,27 @@ export function Logs() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-sm p-4">
+        <div className="bg-zinc-900/80 border border-zinc-600/50 rounded-sm p-4">
           <p className="text-2xl font-bold text-white font-mono">{logs.length}</p>
-          <p className="text-xs text-zinc-500">Total de Logs</p>
+          <p className="text-xs text-zinc-300">Total de Logs</p>
         </div>
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-sm p-4">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-sm p-4">
           <p className="text-2xl font-bold text-emerald-400 font-mono">
             {logs.filter(l => l.action === 'ativacao').length}
           </p>
-          <p className="text-xs text-zinc-500">Ativações</p>
+          <p className="text-xs text-zinc-300">Ativações</p>
         </div>
-        <div className="bg-red-500/5 border border-red-500/20 rounded-sm p-4">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-4">
           <p className="text-2xl font-bold text-red-400 font-mono">
             {logs.filter(l => l.action === 'erro').length}
           </p>
-          <p className="text-xs text-zinc-500">Erros</p>
+          <p className="text-xs text-zinc-300">Erros</p>
         </div>
         <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-sm p-4">
           <p className="text-2xl font-bold text-cyan-400 font-mono">
             {logs.filter(l => l.api_request).length}
           </p>
-          <p className="text-xs text-zinc-500">Chamadas API</p>
+          <p className="text-xs text-zinc-300">Chamadas API</p>
         </div>
       </div>
 
@@ -219,7 +219,7 @@ export function Logs() {
                   <div className="flex items-center gap-3 flex-wrap">
                     {getActionBadge(log.action)}
                     {log.user_name && (
-                      <span className="text-sm text-zinc-500">
+                      <span className="text-sm text-zinc-300">
                         por <span className="text-zinc-300">{log.user_name}</span>
                       </span>
                     )}
@@ -240,7 +240,7 @@ export function Logs() {
                 
                 <div className="text-right flex-shrink-0 flex items-center gap-2">
                   <div>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-zinc-300">
                       {new Date(log.created_at).toLocaleDateString('pt-BR')}
                     </p>
                     <p className="text-xs text-zinc-600">
@@ -318,7 +318,7 @@ export function Logs() {
                       <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
                         {selectedLog.api_request.method}
                       </span>
-                      <span className="text-zinc-400 text-sm font-mono">
+                      <span className="text-zinc-300 text-sm font-mono">
                         {selectedLog.api_request.endpoint}
                       </span>
                     </div>
@@ -348,8 +348,8 @@ export function Logs() {
                   </div>
                   <div className={`p-3 rounded-sm border ${
                     selectedLog.api_response.success 
-                      ? 'bg-emerald-500/5 border-emerald-500/20' 
-                      : 'bg-red-500/5 border-red-500/20'
+                      ? 'bg-emerald-500/10 border-emerald-500/30' 
+                      : 'bg-red-500/10 border-red-500/30'
                   }`}>
                     <div className="grid grid-cols-2 gap-4 mb-3">
                       <div>
@@ -389,8 +389,8 @@ export function Logs() {
               {selectedLog.is_mock !== null && selectedLog.is_mock !== undefined && (
                 <div className={`p-3 rounded-sm ${
                   selectedLog.is_mock 
-                    ? 'bg-amber-500/10 border border-amber-500/20' 
-                    : 'bg-blue-500/10 border border-blue-500/20'
+                    ? 'bg-amber-500/10 border border-amber-500/30' 
+                    : 'bg-blue-500/10 border border-blue-500/30'
                 }`}>
                   <p className={`text-sm ${selectedLog.is_mock ? 'text-amber-400' : 'text-blue-400'}`}>
                     {selectedLog.is_mock 

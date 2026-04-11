@@ -40,7 +40,7 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-sm">
+      <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-sm">
         {error}
       </div>
     );
@@ -223,7 +223,7 @@ export function Dashboard() {
             ))}
           </div>
         ) : (
-          <p className="text-zinc-400 text-sm mt-4">Nenhuma atividade recente</p>
+          <p className="text-zinc-300 text-sm mt-4">Nenhuma atividade recente</p>
         )}
       </div>
     </div>

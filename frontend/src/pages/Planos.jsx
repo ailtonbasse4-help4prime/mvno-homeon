@@ -145,7 +145,7 @@ export function Planos() {
             <Package className="w-7 h-7 text-amber-500" />
             Planos Tecnicos
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">
+          <p className="text-zinc-300 text-sm -mt-4">
             Gerenciamento de planos tecnicos (sem valor comercial)
           </p>
         </div>
@@ -218,12 +218,12 @@ export function Planos() {
                   </div>
                   <div>
                     <p className="text-lg font-semibold text-white">{plano.franquia}</p>
-                    <p className="text-xs text-zinc-500">de franquia</p>
+                    <p className="text-xs text-zinc-300">de franquia</p>
                   </div>
                 </div>
                 {plano.plan_code && (
                   <div className="flex items-center gap-1.5">
-                    <Code className="w-3 h-3 text-zinc-500" />
+                    <Code className="w-3 h-3 text-zinc-400" />
                     <span className="text-xs font-mono text-zinc-500">{plano.plan_code}</span>
                   </div>
                 )}
@@ -235,7 +235,7 @@ export function Planos() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">
               {editingPlano ? 'Editar Plano' : 'Novo Plano Tecnico'}
@@ -295,7 +295,7 @@ export function Planos() {
                 placeholder="Ex: PLAN_10GB"
                 data-testid="plano-plancode-input"
               />
-              <p className="text-xs text-zinc-500">Codigo usado pela operadora para identificar o plano</p>
+              <p className="text-xs text-zinc-300">Codigo usado pela operadora para identificar o plano</p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="btn-secondary">Cancelar</Button>
@@ -307,7 +307,7 @@ export function Planos() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">Confirmar Exclusao</DialogTitle>
           </DialogHeader>

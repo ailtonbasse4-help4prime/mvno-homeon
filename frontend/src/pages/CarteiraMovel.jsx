@@ -22,10 +22,10 @@ import { useSecureAction } from '../hooks/useSecureAction';
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const STATUS_MAP = {
-  PENDING: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Clock },
-  CONFIRMED: { label: 'Confirmado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },
-  RECEIVED: { label: 'Recebido', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },
-  OVERDUE: { label: 'Vencido', class: 'bg-red-500/10 text-red-400 border-red-500/20', icon: AlertTriangle },
+  PENDING: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/30', icon: Clock },
+  CONFIRMED: { label: 'Confirmado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
+  RECEIVED: { label: 'Recebido', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
+  OVERDUE: { label: 'Vencido', class: 'bg-red-500/10 text-red-400 border-red-500/30', icon: AlertTriangle },
   REFUNDED: { label: 'Reembolsado', class: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', icon: Ban },
   CANCELLED: { label: 'Cancelado', class: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', icon: XCircle },
 };
@@ -143,7 +143,7 @@ export function CarteiraMovel() {
           <h1 className="page-title flex items-center gap-3">
             <Wallet className="w-7 h-7 text-emerald-500" />Carteira Movel
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gestao financeira exclusiva para planos moveis</p>
+          <p className="text-zinc-300 text-sm -mt-4">Gestao financeira exclusiva para planos moveis</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium border ${
@@ -174,7 +174,7 @@ export function CarteiraMovel() {
                 <TrendingUp className="w-5 h-5 text-emerald-500" />
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Receita Total</p>
+                <p className="text-xs text-zinc-300">Receita Total</p>
                 <p className="text-xl font-bold font-mono text-emerald-400">{formatCurrency(resumo.financeiro.receita_total)}</p>
               </div>
             </div>
@@ -185,7 +185,7 @@ export function CarteiraMovel() {
                 <Clock className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Pendente</p>
+                <p className="text-xs text-zinc-300">Pendente</p>
                 <p className="text-xl font-bold font-mono text-amber-400">{formatCurrency(resumo.financeiro.pendente_total)}</p>
                 <p className="text-xs text-zinc-600">{resumo.cobrancas.pendentes} cobrancas</p>
               </div>
@@ -197,7 +197,7 @@ export function CarteiraMovel() {
                 <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Vencido</p>
+                <p className="text-xs text-zinc-300">Vencido</p>
                 <p className="text-xl font-bold font-mono text-red-400">{formatCurrency(resumo.financeiro.vencido_total)}</p>
                 <p className="text-xs text-zinc-600">{resumo.cobrancas.vencidas} cobrancas</p>
               </div>
@@ -209,7 +209,7 @@ export function CarteiraMovel() {
                 <Receipt className="w-5 h-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Assinaturas Ativas</p>
+                <p className="text-xs text-zinc-300">Assinaturas Ativas</p>
                 <p className="text-xl font-bold font-mono text-blue-400">{resumo.assinaturas.ativas}</p>
                 <p className="text-xs text-zinc-600">{resumo.assinaturas.total} total</p>
               </div>
@@ -225,7 +225,7 @@ export function CarteiraMovel() {
           <SelectTrigger className="w-48 form-input" data-testid="cobranca-status-filter">
             <SelectValue placeholder="Todos" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
+          <SelectContent className="bg-zinc-900 border-zinc-600/50">
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="PENDING">Pendente</SelectItem>
             <SelectItem value="CONFIRMED">Confirmado</SelectItem>
@@ -265,20 +265,20 @@ export function CarteiraMovel() {
                 cobrancas.map((cob) => (
                   <tr key={cob.id} data-testid={`cobranca-row-${cob.id}`}>
                     <td className="text-white text-sm whitespace-nowrap">{cob.cliente_nome || '-'}</td>
-                    <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{cob.msisdn || '-'}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{cob.oferta_nome || '-'}</td>
+                    <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{cob.msisdn || '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{cob.oferta_nome || '-'}</td>
                     <td className="whitespace-nowrap">
                       <span className={`px-2 py-0.5 rounded-sm text-xs font-medium border ${
-                        cob.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : cob.billing_type === 'BOLETO' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        cob.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : cob.billing_type === 'BOLETO' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                       }`}>{cob.billing_type}</span>
                     </td>
                     <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(cob.valor)}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{cob.vencimento ? new Date(cob.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{cob.vencimento ? new Date(cob.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
                     <td className="whitespace-nowrap"><StatusBadge status={cob.status} /></td>
                     <td className="font-mono text-zinc-500 text-xs whitespace-nowrap">{cob.asaas_payment_id || '-'}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{cob.paid_at ? new Date(cob.paid_at).toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{cob.paid_at ? new Date(cob.paid_at).toLocaleDateString('pt-BR') : '-'}</td>
                     {isAdmin && (
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -310,7 +310,7 @@ export function CarteiraMovel() {
 
       {/* Create Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">Nova Cobranca</DialogTitle>
           </DialogHeader>
@@ -331,7 +331,7 @@ export function CarteiraMovel() {
                 <Label className="text-zinc-300">Linha (opcional)</Label>
                 <Select value={formData.linha_id} onValueChange={(v) => setFormData({ ...formData, linha_id: v })}>
                   <SelectTrigger className="form-input" data-testid="cobranca-linha-select"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
                     <SelectItem value="none">Nenhuma</SelectItem>
                     {clienteLinhas.map((l) => (
                       <SelectItem key={l.id} value={l.id}>{l.msisdn || l.numero} - {l.plano_nome || 'Plano'}</SelectItem>
@@ -345,7 +345,7 @@ export function CarteiraMovel() {
                 <Label className="text-zinc-300">Tipo de Pagamento</Label>
                 <Select value={formData.billing_type} onValueChange={(v) => setFormData({ ...formData, billing_type: v })}>
                   <SelectTrigger className="form-input" data-testid="cobranca-billing-select"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
                     <SelectItem value="PIX">PIX</SelectItem>
                     <SelectItem value="BOLETO">Boleto</SelectItem>
                     <SelectItem value="CREDIT_CARD">Cartao de Credito</SelectItem>
@@ -392,7 +392,7 @@ export function CarteiraMovel() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Remover a cobranca de <span className="text-white font-medium">{formatCurrency(cobrancaToDelete?.valor)}</span>?</p>
           <DialogFooter>

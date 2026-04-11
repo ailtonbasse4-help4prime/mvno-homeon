@@ -249,7 +249,7 @@ export function Revendedores() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(r => (
-            <Card key={r.id} className="bg-zinc-900 border-zinc-800" data-testid={`revendedor-card-${r.id}`}>
+            <Card key={r.id} className="bg-zinc-900 border-zinc-600/50" data-testid={`revendedor-card-${r.id}`}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -448,7 +448,7 @@ export function Revendedores() {
               </div>
 
               {/* Preview */}
-              <div className="border border-zinc-800 rounded-lg p-4 bg-white">
+              <div className="border border-zinc-600/50 rounded-lg p-4 bg-white">
                 <div id="qr-print-area">
                   <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                     {qrSelectedIccids.map(iccid => (

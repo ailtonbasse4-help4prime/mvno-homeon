@@ -127,7 +127,7 @@ export function Ofertas() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-3"><Tag className="w-7 h-7 text-blue-500" />Ofertas Comerciais</h1>
-          <p className="text-zinc-400 text-sm -mt-4">Gerenciamento de ofertas por categoria</p>
+          <p className="text-zinc-300 text-sm -mt-4">Gerenciamento de ofertas por categoria</p>
         </div>
         {isAdmin && (
           <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-oferta-button">
@@ -207,7 +207,7 @@ export function Ofertas() {
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium border ${
                     catInfo.color === 'violet'
                       ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                      : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                   }`}>
                     <CatIcon className="w-3 h-3" />{catInfo.label}
                   </span>
@@ -223,7 +223,7 @@ export function Ofertas() {
                     <p className={`text-3xl font-bold font-mono ${catInfo.color === 'violet' ? 'text-violet-400' : 'text-blue-400'}`}>
                       {formatCurrency(oferta.valor)}
                     </p>
-                    <p className="text-xs text-zinc-500">por mes</p>
+                    <p className="text-xs text-zinc-300">por mes</p>
                   </div>
 
                   <div className="pt-3 border-t border-zinc-800 space-y-2">
@@ -233,12 +233,12 @@ export function Ofertas() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-white">{oferta.plano_nome || '—'}</p>
-                        <p className="text-xs text-zinc-500">{oferta.franquia || '—'} de franquia</p>
+                        <p className="text-xs text-zinc-300">{oferta.franquia || '—'} de franquia</p>
                       </div>
                     </div>
                     {oferta.plan_code && (
                       <div className="flex items-center gap-1.5">
-                        <Code className="w-3 h-3 text-zinc-500" />
+                        <Code className="w-3 h-3 text-zinc-400" />
                         <span className="text-xs font-mono text-zinc-500">{oferta.plan_code}</span>
                       </div>
                     )}
@@ -252,7 +252,7 @@ export function Ofertas() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">{editingOferta ? 'Editar Oferta' : 'Nova Oferta Comercial'}</DialogTitle>
           </DialogHeader>
@@ -261,7 +261,7 @@ export function Ofertas() {
               <Label className="text-zinc-300">Categoria</Label>
               <Select value={formData.categoria} onValueChange={(v) => setFormData({ ...formData, categoria: v })}>
                 <SelectTrigger className="form-input" data-testid="oferta-categoria-select"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800">
+                <SelectContent className="bg-zinc-900 border-zinc-600/50">
                   <SelectItem value="movel">Movel</SelectItem>
                   <SelectItem value="m2m">M2M</SelectItem>
                 </SelectContent>
@@ -306,7 +306,7 @@ export function Ofertas() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Remover a oferta <span className="text-white font-medium">{ofertaToDelete?.nome}</span>?</p>
           <p className="text-xs text-amber-400 mt-1">Ofertas vinculadas a chips nao podem ser removidas.</p>

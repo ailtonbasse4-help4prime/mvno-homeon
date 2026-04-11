@@ -89,7 +89,7 @@ export function Login() {
           <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 shadow-2xl rounded-md p-8">
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-white mb-2">Entrar</h2>
-              <p className="text-zinc-400 text-sm">
+              <p className="text-zinc-300 text-sm">
                 Acesse sua conta para gerenciar o sistema
               </p>
             </div>
@@ -97,7 +97,7 @@ export function Login() {
             <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
                 <div 
-                  className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-sm text-sm"
+                  className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-sm text-sm"
                   data-testid="login-error"
                 >
                   {error}

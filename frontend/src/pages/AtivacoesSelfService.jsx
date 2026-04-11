@@ -16,11 +16,11 @@ import {
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const STATUS_MAP = {
-  aguardando_pagamento: { label: 'Aguardando Pagamento', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
-  pago: { label: 'Pago', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  ativando: { label: 'Ativando', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  ativo: { label: 'Ativo', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
-  erro: { label: 'Erro', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+  aguardando_pagamento: { label: 'Aguardando Pagamento', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+  pago: { label: 'Pago', color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  ativando: { label: 'Ativando', color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  ativo: { label: 'Ativo', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  erro: { label: 'Erro', color: 'text-red-400 bg-red-500/10 border-red-500/30' },
   cancelado: { label: 'Cancelado', color: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20' },
 };
 
@@ -93,7 +93,7 @@ export function AtivacoesSelfService() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title mb-0">Ativacoes Self-Service</h1>
-          <p className="text-zinc-400 text-sm">Gerenciar ativacoes feitas pelos clientes via QR Code</p>
+          <p className="text-zinc-300 text-sm">Gerenciar ativacoes feitas pelos clientes via QR Code</p>
         </div>
         <Button onClick={fetchData} variant="outline" className="btn-secondary" data-testid="refresh-btn">
           <RefreshCw className="w-4 h-4 mr-2" /> Atualizar
@@ -102,25 +102,25 @@ export function AtivacoesSelfService() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-zinc-900 border-zinc-600/50">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-white font-mono">{counts.total}</p>
             <p className="text-xs text-zinc-400">Total</p>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-zinc-900 border-zinc-600/50">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-amber-400 font-mono">{counts.aguardando}</p>
             <p className="text-xs text-zinc-400">Aguardando</p>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-zinc-900 border-zinc-600/50">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-emerald-400 font-mono">{counts.ativos}</p>
             <p className="text-xs text-zinc-400">Ativados</p>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-zinc-900 border-zinc-600/50">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-red-400 font-mono">{counts.erros}</p>
             <p className="text-xs text-zinc-400">Erros</p>
@@ -140,7 +140,7 @@ export function AtivacoesSelfService() {
           <SelectTrigger className="w-full sm:w-48 form-input" data-testid="filter-status">
             <SelectValue placeholder="Todos Status" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
+          <SelectContent className="bg-zinc-900 border-zinc-600/50">
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="aguardando_pagamento">Aguardando</SelectItem>
             <SelectItem value="pago">Pago</SelectItem>
@@ -195,7 +195,7 @@ export function AtivacoesSelfService() {
                     <td>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
                         a.billing_type === 'PIX' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
-                        'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        'bg-blue-500/10 text-blue-400 border border-blue-500/30'
                       }`}>
                         <CreditCard className="w-3 h-3" /> {a.billing_type}
                       </span>

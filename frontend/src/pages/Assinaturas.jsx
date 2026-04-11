@@ -20,8 +20,8 @@ import {
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const STATUS_MAP = {
-  ACTIVE: { label: 'Ativa', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },
-  EXPIRED: { label: 'Expirada', class: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Clock },
+  ACTIVE: { label: 'Ativa', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
+  EXPIRED: { label: 'Expirada', class: 'bg-amber-500/10 text-amber-400 border-amber-500/30', icon: Clock },
   CANCELLED: { label: 'Cancelada', class: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', icon: XCircle },
 };
 
@@ -136,7 +136,7 @@ export function Assinaturas() {
           <h1 className="page-title flex items-center gap-3">
             <RefreshCw className="w-7 h-7 text-blue-500" />Assinaturas
           </h1>
-          <p className="text-zinc-400 text-sm -mt-4">Cobrancas recorrentes para planos moveis ({ativas} ativas)</p>
+          <p className="text-zinc-300 text-sm -mt-4">Cobrancas recorrentes para planos moveis ({ativas} ativas)</p>
         </div>
         {isAdmin && (
           <Button onClick={() => {
@@ -155,7 +155,7 @@ export function Assinaturas() {
           <SelectTrigger className="w-48 form-input" data-testid="assinatura-status-filter">
             <SelectValue placeholder="Todos" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-800">
+          <SelectContent className="bg-zinc-900 border-zinc-600/50">
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="ACTIVE">Ativa</SelectItem>
             <SelectItem value="CANCELLED">Cancelada</SelectItem>
@@ -193,18 +193,18 @@ export function Assinaturas() {
                 assinaturas.map((ass) => (
                   <tr key={ass.id} data-testid={`assinatura-row-${ass.id}`}>
                     <td className="text-white text-sm whitespace-nowrap">{ass.cliente_nome || '-'}</td>
-                    <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{ass.msisdn || '-'}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{ass.oferta_nome || '-'}</td>
+                    <td className="font-mono text-zinc-300 text-sm whitespace-nowrap">{ass.msisdn || '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{ass.oferta_nome || '-'}</td>
                     <td>
                       <span className={`px-2 py-0.5 rounded-sm text-xs font-medium border ${
-                        ass.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                        : ass.billing_type === 'BOLETO' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        ass.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : ass.billing_type === 'BOLETO' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                       }`}>{ass.billing_type}</span>
                     </td>
                     <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(ass.valor)}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{CICLO_MAP[ass.ciclo] || ass.ciclo}</td>
-                    <td className="text-zinc-400 text-sm whitespace-nowrap">{ass.proximo_vencimento ? new Date(ass.proximo_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{CICLO_MAP[ass.ciclo] || ass.ciclo}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{ass.proximo_vencimento ? new Date(ass.proximo_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
                     <td className="whitespace-nowrap"><StatusBadge status={ass.status} /></td>
                     <td className="font-mono text-zinc-500 text-xs whitespace-nowrap">{ass.asaas_subscription_id || '-'}</td>
                     {isAdmin && (
@@ -229,7 +229,7 @@ export function Assinaturas() {
 
       {/* Create Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader>
             <DialogTitle className="text-white">Nova Assinatura Recorrente</DialogTitle>
           </DialogHeader>
@@ -254,7 +254,7 @@ export function Assinaturas() {
                 <Label className="text-zinc-300">Linha (opcional)</Label>
                 <Select value={formData.linha_id} onValueChange={(v) => setFormData({ ...formData, linha_id: v })}>
                   <SelectTrigger className="form-input" data-testid="assinatura-linha-select"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
                     <SelectItem value="none">Nenhuma</SelectItem>
                     {clienteLinhas.map((l) => (
                       <SelectItem key={l.id} value={l.id}>{l.msisdn || l.numero} - {l.plano_nome || 'Plano'}</SelectItem>
@@ -268,7 +268,7 @@ export function Assinaturas() {
                 <Label className="text-zinc-300">Tipo de Pagamento</Label>
                 <Select value={formData.billing_type} onValueChange={(v) => setFormData({ ...formData, billing_type: v })}>
                   <SelectTrigger className="form-input" data-testid="assinatura-billing-select"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
                     <SelectItem value="PIX">PIX</SelectItem>
                     <SelectItem value="BOLETO">Boleto</SelectItem>
                     <SelectItem value="CREDIT_CARD">Cartao de Credito</SelectItem>
@@ -288,7 +288,7 @@ export function Assinaturas() {
                 <Label className="text-zinc-300">Ciclo</Label>
                 <Select value={formData.ciclo} onValueChange={(v) => setFormData({ ...formData, ciclo: v })}>
                   <SelectTrigger className="form-input" data-testid="assinatura-ciclo-select"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
                     <SelectItem value="MONTHLY">Mensal</SelectItem>
                     <SelectItem value="BIMONTHLY">Bimestral</SelectItem>
                     <SelectItem value="QUARTERLY">Trimestral</SelectItem>
@@ -324,7 +324,7 @@ export function Assinaturas() {
 
       {/* Cancel Dialog */}
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800">
+        <DialogContent className="bg-zinc-900 border-zinc-600/50">
           <DialogHeader><DialogTitle className="text-white">Cancelar Assinatura</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Deseja cancelar a assinatura de <span className="text-white font-medium">{formatCurrency(assinaturaToCancel?.valor)}/mes</span> para <span className="text-white">{assinaturaToCancel?.cliente_nome}</span>?</p>
           <p className="text-xs text-amber-400 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Esta acao nao pode ser desfeita.</p>
