@@ -2244,6 +2244,158 @@ async def get_repair_status(request: Request):
     return status
 
 
+@api_router.post("/operadora/completar-planos")
+async def complete_client_plans(request: Request):
+    """
+    Percorre todas as linhas que nao tem plano vinculado,
+    consulta a Ta Telecom pelo ICCID e vincula o plano correto.
+    Roda em background.
+    """
+    user = await require_admin(request)
+
+    existing = await db.system_config.find_one({"key": "repair_status"})
+    if existing and existing.get("status") == "running":
+        return {"success": False, "message": "Ja existe um reparo em andamento."}
+
+    await db.system_config.update_one(
+        {"key": "repair_status"},
+        {"$set": {"key": "repair_status", "status": "running", "started_at": datetime.now(timezone.utc).isoformat(), "message": "Completando planos...", "repaired": 0, "errors": []}},
+        upsert=True,
+    )
+    asyncio.create_task(_run_complete_plans_background(user))
+    return {"success": True, "message": "Atualizacao de planos iniciada em background."}
+
+
+async def _run_complete_plans_background(user: dict):
+    try:
+        # 1. Pre-load all plans into a dict for fast lookup
+        all_planos = await db.planos.find({}).to_list(200)
+        plan_name_map = {}
+        for p in all_planos:
+            nome = (p.get("nome") or "").strip().lower()
+            plan_name_map[nome] = str(p["_id"])
+            # Also map without accent variations
+            nome_simple = nome.replace("á", "a").replace("ã", "a").replace("é", "e").replace("ç", "c")
+            plan_name_map[nome_simple] = str(p["_id"])
+
+        # 2. Find all lines missing plano or with invalid plano
+        all_lines = await db.linhas.find({}).to_list(5000)
+        lines_to_fix = []
+        for l in all_lines:
+            plano_id = l.get("plano_id")
+            has_valid_plan = False
+            if plano_id and ObjectId.is_valid(plano_id):
+                plano = await db.planos.find_one({"_id": ObjectId(plano_id)})
+                if plano and plano.get("plan_code") and not str(plano["plan_code"]).startswith("PLAN_"):
+                    has_valid_plan = True
+            if not has_valid_plan:
+                chip_id = l.get("chip_id")
+                if chip_id and ObjectId.is_valid(chip_id):
+                    chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+                    if chip and chip.get("iccid"):
+                        lines_to_fix.append({"line": l, "iccid": chip["iccid"]})
+
+        if not lines_to_fix:
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"status": "done", "message": "Todos os planos ja estao corretos.", "repaired": 0}},
+            )
+            return
+
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"message": f"{len(lines_to_fix)} linhas sem plano. Consultando Ta Telecom..."}},
+        )
+
+        # Wait after previous API calls
+        await asyncio.sleep(5)
+
+        updated = 0
+        errors = []
+
+        for idx, item in enumerate(lines_to_fix):
+            iccid = item["iccid"]
+            line = item["line"]
+
+            await asyncio.sleep(1.0)
+
+            d = None
+            for attempt in range(5):
+                try:
+                    detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+                    if detail_resp.success and detail_resp.data:
+                        d = detail_resp.data
+                        break
+                    is_rate_limit = (
+                        getattr(detail_resp, 'http_status_code', 0) == 429 or
+                        (hasattr(detail_resp, 'error_code') and str(detail_resp.error_code) == 'ERR_RATE_LIMIT')
+                    )
+                    if is_rate_limit:
+                        wait_time = 5.0 * (2 ** attempt)
+                        logger.warning(f"429 para ICCID {iccid}, aguardando {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+                except Exception as e:
+                    if attempt == 4:
+                        errors.append(f"Erro {iccid}: {str(e)}")
+                await asyncio.sleep(2.0 * (attempt + 1))
+
+            if not d:
+                continue
+
+            plano_nome = (d.get("plano") or "").strip()
+            if not plano_nome:
+                continue
+
+            # Match plan by name
+            plano_id = plan_name_map.get(plano_nome.lower())
+            if not plano_id:
+                # Try partial match
+                for key, pid in plan_name_map.items():
+                    if plano_nome.lower() in key or key in plano_nome.lower():
+                        plano_id = pid
+                        break
+
+            if not plano_id:
+                errors.append(f"Plano '{plano_nome}' nao encontrado para ICCID {iccid}")
+                continue
+
+            # Also grab msisdn if line doesn't have it
+            update_fields = {"plano_id": plano_id}
+            msisdn = str(d.get("numero") or d.get("msisdn") or "")
+            if msisdn and (not line.get("numero") or line.get("numero") == "Pendente"):
+                update_fields["numero"] = msisdn
+                update_fields["msisdn"] = msisdn
+                # Also update chip
+                if line.get("chip_id") and ObjectId.is_valid(line["chip_id"]):
+                    await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"msisdn": msisdn}})
+
+            await db.linhas.update_one({"_id": line["_id"]}, {"$set": update_fields})
+            updated += 1
+            logger.info(f"Plano atualizado: ICCID {iccid} -> {plano_nome} (plano_id: {plano_id})")
+
+            if (idx + 1) % 5 == 0:
+                await db.system_config.update_one(
+                    {"key": "repair_status"},
+                    {"$set": {"message": f"Progresso: {idx+1}/{len(lines_to_fix)} consultados, {updated} atualizados", "repaired": updated}},
+                )
+
+        msg = f"Planos atualizados: {updated}/{len(lines_to_fix)}."
+        if errors:
+            msg += f" Erros: {len(errors)}"
+        await create_log("sincronizacao", f"Completar planos: {msg}", user["id"], user["name"])
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "done", "message": msg, "repaired": updated, "errors": errors[:10]}},
+        )
+    except Exception as e:
+        logger.error(f"Erro ao completar planos: {e}")
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "error", "message": f"Erro: {str(e)}"}},
+        )
+
+
 @api_router.get("/operadora/config")
 async def get_operadora_config(request: Request):
     await require_admin(request)

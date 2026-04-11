@@ -145,42 +145,49 @@ export function Clientes() {
   const handleRepairClients = async () => {
     setRepairing(true);
     try {
-      const response = await axios.post(`${API_URL}/api/operadora/reparar-clientes`, {}, { withCredentials: true });
-      const d = response.data;
-      if (!d.success) {
-        toast.warning(d.message);
-        setRepairing(false);
-        return;
+      // Etapa 1: Reparar clientes sem linha
+      const res1 = await axios.post(`${API_URL}/api/operadora/reparar-clientes`, {}, { withCredentials: true });
+      if (!res1.data.success) {
+        // If repair already running, just poll
+        toast.info(res1.data.message);
+      } else {
+        toast.info('Etapa 1: Reparando clientes sem dados...');
       }
-      toast.info('Reparo iniciado em background...');
-      // Poll for status
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await axios.get(`${API_URL}/api/operadora/reparar-status`, { withCredentials: true });
-          const s = statusRes.data;
-          if (s.status === 'done') {
-            clearInterval(pollInterval);
-            setRepairing(false);
-            if (s.repaired > 0) {
-              toast.success(`${s.repaired} clientes reparados!`);
-            } else {
-              toast.info(s.message);
+
+      // Poll until step 1 is done
+      const waitForDone = () => new Promise((resolve) => {
+        const poll = setInterval(async () => {
+          try {
+            const s = await axios.get(`${API_URL}/api/operadora/reparar-status`, { withCredentials: true });
+            if (s.data.status === 'done' || s.data.status === 'error' || s.data.status === 'idle') {
+              clearInterval(poll);
+              resolve(s.data);
             }
-            fetchClientes();
-          } else if (s.status === 'error') {
-            clearInterval(pollInterval);
-            setRepairing(false);
-            toast.error(s.message);
-          }
-          // else still running, keep polling
-        } catch {
-          clearInterval(pollInterval);
-          setRepairing(false);
-        }
-      }, 5000);
+          } catch { clearInterval(poll); resolve({ status: 'error' }); }
+        }, 5000);
+      });
+
+      const result1 = await waitForDone();
+      if (result1.repaired > 0) toast.success(`${result1.repaired} clientes reparados!`);
+
+      // Etapa 2: Completar planos de todas as linhas
+      toast.info('Etapa 2: Atualizando planos de todos os clientes...');
+      await axios.post(`${API_URL}/api/operadora/completar-planos`, {}, { withCredentials: true });
+
+      // Poll until step 2 is done
+      const result2 = await waitForDone();
+      if (result2.repaired > 0) {
+        toast.success(`${result2.repaired} planos atualizados!`);
+      } else {
+        toast.info(result2.message || 'Planos ja estavam corretos.');
+      }
+      if (result2.errors?.length > 0) toast.warning(`${result2.errors.length} erros`);
+
+      fetchClientes();
     } catch (error) {
       const msg = error.response?.data?.detail || 'Erro ao iniciar reparo';
       toast.error(typeof msg === 'string' ? msg : 'Erro ao reparar');
+    } finally {
       setRepairing(false);
     }
   };
