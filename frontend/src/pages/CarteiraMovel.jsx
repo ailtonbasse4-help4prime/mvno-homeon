@@ -236,19 +236,19 @@ export function CarteiraMovel() {
       {/* Cobrancas Table */}
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-340px)]">
-          <table className="data-table w-full min-w-[900px]" data-testid="cobrancas-table">
+          <table className="data-table w-full min-w-[1400px]" data-testid="cobrancas-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300 w-[14%]">Cliente</th>
-                <th className="text-blue-300 w-[10%]">Linha</th>
-                <th className="text-blue-300 w-[12%]">Oferta</th>
-                <th className="text-blue-300 w-[8%]">Tipo</th>
-                <th className="text-blue-300 w-[8%]">Valor</th>
-                <th className="text-blue-300 w-[10%]">Vencimento</th>
-                <th className="text-blue-300 w-[9%]">Status</th>
-                <th className="text-blue-300 w-[14%]">Asaas ID</th>
-                <th className="text-blue-300 w-[10%]">Pago em</th>
-                {isAdmin && <th className="text-blue-300 text-right w-[8%]">Acoes</th>}
+                <th className="text-blue-300 whitespace-nowrap min-w-[180px]">Cliente</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[140px]">Linha</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[140px]">Oferta</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[80px]">Tipo</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[100px]">Valor</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[120px]">Vencimento</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[90px]">Status</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[180px]">Asaas ID</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[110px]">Pago em</th>
+                {isAdmin && <th className="text-blue-300 text-right whitespace-nowrap min-w-[80px]">Acoes</th>}
               </tr>
             </thead>
             <tbody>
@@ -261,21 +261,21 @@ export function CarteiraMovel() {
               ) : (
                 cobrancas.map((cob) => (
                   <tr key={cob.id} data-testid={`cobranca-row-${cob.id}`}>
-                    <td className="text-white text-sm">{cob.cliente_nome || '-'}</td>
-                    <td className="font-mono text-zinc-400 text-sm">{cob.msisdn || '-'}</td>
-                    <td className="text-zinc-400 text-sm">{cob.oferta_nome || '-'}</td>
-                    <td>
+                    <td className="text-white text-sm whitespace-nowrap">{cob.cliente_nome || '-'}</td>
+                    <td className="font-mono text-zinc-400 text-sm whitespace-nowrap">{cob.msisdn || '-'}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{cob.oferta_nome || '-'}</td>
+                    <td className="whitespace-nowrap">
                       <span className={`px-2 py-0.5 rounded-sm text-xs font-medium border ${
                         cob.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                         : cob.billing_type === 'BOLETO' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                         : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                       }`}>{cob.billing_type}</span>
                     </td>
-                    <td className="text-emerald-400 font-mono text-sm font-medium">{formatCurrency(cob.valor)}</td>
-                    <td className="text-zinc-400 text-sm">{cob.vencimento ? new Date(cob.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
-                    <td><StatusBadge status={cob.status} /></td>
-                    <td className="font-mono text-zinc-500 text-xs">{cob.asaas_payment_id || '-'}</td>
-                    <td className="text-zinc-400 text-sm">{cob.paid_at ? new Date(cob.paid_at).toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(cob.valor)}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{cob.vencimento ? new Date(cob.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="whitespace-nowrap"><StatusBadge status={cob.status} /></td>
+                    <td className="font-mono text-zinc-500 text-xs whitespace-nowrap">{cob.asaas_payment_id || '-'}</td>
+                    <td className="text-zinc-400 text-sm whitespace-nowrap">{cob.paid_at ? new Date(cob.paid_at).toLocaleDateString('pt-BR') : '-'}</td>
                     {isAdmin && (
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">

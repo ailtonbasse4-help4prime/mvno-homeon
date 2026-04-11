@@ -561,15 +561,15 @@ export function GestaoCobrancas() {
 
       {/* Tabela */}
       <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-340px)]">
-        <table className="w-full text-sm min-w-[900px]" data-testid="cobrancas-table">
+        <table className="w-full text-sm min-w-[1200px]" data-testid="cobrancas-table">
           <thead className="sticky top-0 z-10">
             <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50 text-left">
-              <th className="p-3 text-blue-300 w-[22%]">Cliente</th>
-              <th className="p-3 text-blue-300 hidden sm:table-cell w-[10%]">Tipo</th>
-              <th className="p-3 text-blue-300 w-[12%]">Valor</th>
-              <th className="p-3 text-blue-300 hidden md:table-cell w-[14%]">Vencimento</th>
-              <th className="p-3 text-blue-300 w-[12%]">Status</th>
-              <th className="p-3 text-blue-300 w-[30%]">Acoes</th>
+              <th className="p-3 text-blue-300 whitespace-nowrap min-w-[200px]">Cliente</th>
+              <th className="p-3 text-blue-300 whitespace-nowrap min-w-[80px]">Tipo</th>
+              <th className="p-3 text-blue-300 whitespace-nowrap min-w-[100px]">Valor</th>
+              <th className="p-3 text-blue-300 whitespace-nowrap min-w-[120px]">Vencimento</th>
+              <th className="p-3 text-blue-300 whitespace-nowrap min-w-[100px]">Status</th>
+              <th className="p-3 text-blue-300 whitespace-nowrap min-w-[200px]">Acoes</th>
             </tr>
           </thead>
           <tbody>
@@ -579,20 +579,20 @@ export function GestaoCobrancas() {
               <tr><td colSpan={6} className="p-8 text-center text-zinc-500">Nenhuma cobranca encontrada</td></tr>
             ) : filtered.map(c => (
               <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50 cursor-pointer" onClick={() => handleViewDetail(c)}>
-                <td className="p-3">
+                <td className="p-3 whitespace-nowrap">
                   <div className="font-medium">{c.cliente_nome || '—'}</div>
                   <div className="text-xs text-zinc-500">
                     {c.parcela_num ? `${c.parcela_num}/${c.parcela_total} - ` : ''}{c.msisdn || c.descricao || ''}
                   </div>
                 </td>
-                <td className="p-3 hidden sm:table-cell">
+                <td className="p-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.billing_type === 'PIX' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-blue-900/40 text-blue-400'}`}>
                     {c.billing_type}
                   </span>
                 </td>
-                <td className="p-3 font-medium">R$ {c.valor.toFixed(2)}</td>
-                <td className="p-3 text-zinc-400 hidden md:table-cell">{c.vencimento}</td>
-                <td className="p-3">
+                <td className="p-3 font-medium whitespace-nowrap">R$ {c.valor.toFixed(2)}</td>
+                <td className="p-3 text-zinc-400 whitespace-nowrap">{c.vencimento}</td>
+                <td className="p-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBg(c.status)}`}>
                     {statusLabel(c.status)}
                   </span>
