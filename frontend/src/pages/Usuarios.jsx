@@ -12,6 +12,8 @@ import {
 } from '../components/ui/select';
 import { toast } from 'sonner';
 import { Plus, UserCog, Edit, Trash2, Shield, ShieldCheck } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -24,6 +26,7 @@ export function Usuarios() {
   const [userToDelete, setUserToDelete] = useState(null);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'atendente' });
   const [submitting, setSubmitting] = useState(false);
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
 
   const fetchUsuarios = useCallback(async () => {
     try {
@@ -70,10 +73,10 @@ export function Usuarios() {
 
   const handleDelete = async () => {
     if (!userToDelete) return;
+    setDeleteDialogOpen(false);
     try {
-      await axios.delete(`${API_URL}/api/usuarios/${userToDelete.id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/usuarios/${userToDelete.id}`, `Remover usuario: ${userToDelete.name || userToDelete.email}`);
       toast.success('Usuario removido');
-      setDeleteDialogOpen(false);
       setUserToDelete(null);
       fetchUsuarios();
     } catch (error) {
@@ -237,6 +240,7 @@ export function Usuarios() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+          <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
     </div>
   );
 }

@@ -16,6 +16,8 @@ import {
   Wallet, Plus, Trash2, Search, DollarSign, Clock, AlertTriangle,
   CheckCircle, XCircle, Receipt, TrendingUp, Ban,
 } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -45,6 +47,7 @@ function StatusBadge({ status }) {
 
 export function CarteiraMovel() {
   const { isAdmin } = useAuth();
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
   const [resumo, setResumo] = useState(null);
   const [cobrancas, setCobrancas] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -106,10 +109,10 @@ export function CarteiraMovel() {
 
   const handleDelete = async () => {
     if (!cobrancaToDelete) return;
+    setDeleteDialogOpen(false);
     try {
-      await axios.delete(`${API_URL}/api/carteira/cobrancas/${cobrancaToDelete.id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/carteira/cobrancas/${cobrancaToDelete.id}`, `Remover cobranca do cliente`);
       toast.success('Cobranca removida');
-      setDeleteDialogOpen(false);
       setCobrancaToDelete(null);
       fetchData();
     } catch (error) {
@@ -398,6 +401,7 @@ export function CarteiraMovel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
     </div>
   );
 }

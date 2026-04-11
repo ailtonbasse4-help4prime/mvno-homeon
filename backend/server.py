@@ -2,8 +2,9 @@ from dotenv import load_dotenv
 load_dotenv(interpolate=False)
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import os
@@ -19,6 +20,9 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from enum import Enum
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP
 from services.asaas_service import asaas_service, AsaasNotConfiguredError, AsaasApiError
@@ -46,6 +50,32 @@ def _append_portal_link(desc: str) -> str:
 
 app = FastAPI(title="MVNO Management System - Ta Telecom")
 api_router = APIRouter(prefix="/api")
+
+# ==================== RATE LIMITER ====================
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Muitas requisicoes. Aguarde alguns minutos."},
+    )
+
+# ==================== SECURITY HEADERS MIDDLEWARE ====================
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if COOKIE_SECURE:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ==================== ENUMS ====================
 class UserRole(str, Enum):
@@ -518,22 +548,39 @@ async def register(data: UserCreate, response: Response):
     return UserResponse(id=user_id, email=email, name=data.name, role=data.role.value, created_at=user_doc["created_at"])
 
 @api_router.post("/auth/login", response_model=UserResponse)
+@limiter.limit("10/minute")
 async def login(data: UserLogin, response: Response, request: Request):
     email = data.email.lower()
     ip = request.client.host if request.client else "unknown"
     identifier = f"{ip}:{email}"
     attempts = await db.login_attempts.find_one({"identifier": identifier})
-    if attempts and attempts.get("count", 0) >= 5:
+    fail_count = attempts.get("count", 0) if attempts else 0
+    # Progressive lockout: 5 fails = 15min, 10 fails = 1h, 15+ fails = 24h
+    if attempts and fail_count >= 5:
+        if fail_count >= 15:
+            lockout_mins = 1440
+        elif fail_count >= 10:
+            lockout_mins = 60
+        else:
+            lockout_mins = 15
         lockout_until = attempts.get("lockout_until")
         if lockout_until and datetime.now(timezone.utc) < lockout_until:
-            raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em 15 minutos.")
+            raise HTTPException(status_code=429, detail=f"Conta bloqueada por {lockout_mins} minutos. Muitas tentativas falhas.")
     user = await db.usuarios.find_one({"email": email})
     if not user or not verify_password(data.password, user["password_hash"]):
+        new_count = fail_count + 1
+        if new_count >= 15:
+            lock_duration = timedelta(hours=24)
+        elif new_count >= 10:
+            lock_duration = timedelta(hours=1)
+        else:
+            lock_duration = timedelta(minutes=15)
         await db.login_attempts.update_one(
             {"identifier": identifier},
-            {"$inc": {"count": 1}, "$set": {"lockout_until": datetime.now(timezone.utc) + timedelta(minutes=15)}},
+            {"$set": {"count": new_count, "lockout_until": datetime.now(timezone.utc) + lock_duration, "last_attempt": datetime.now(timezone.utc)}},
             upsert=True
         )
+        await create_log("seguranca", f"Tentativa de login falha #{new_count}: {email} de IP {ip}", "system", "system")
         raise HTTPException(status_code=401, detail="Credenciais invalidas")
     await db.login_attempts.delete_one({"identifier": identifier})
     user_id = str(user["_id"])
@@ -603,6 +650,43 @@ async def change_password(data: PasswordChangeRequest, request: Request):
     await create_log("cadastro", f"Senha alterada: {user['email']}", user["id"], user["name"])
     return {"message": "Senha alterada com sucesso"}
 
+# ==================== SECURITY: CONFIRM PASSWORD FOR DESTRUCTIVE ACTIONS ====================
+class ConfirmPasswordRequest(BaseModel):
+    password: str
+
+@api_router.post("/auth/confirm-password")
+async def confirm_password(data: ConfirmPasswordRequest, request: Request):
+    """Verifica a senha do usuario logado. Retorna um token temporario de confirmacao (10min)."""
+    user = await get_current_user(request)
+    db_user = await db.usuarios.find_one({"_id": ObjectId(user["id"])})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    if not verify_password(data.password, db_user["password_hash"]):
+        await create_log("seguranca", f"Confirmacao de senha falhou: {user['email']}", user["id"], user["name"])
+        raise HTTPException(status_code=401, detail="Senha incorreta")
+    # Generate a short-lived confirmation token
+    confirm_token = jwt.encode(
+        {"sub": user["id"], "type": "confirm", "exp": datetime.now(timezone.utc) + timedelta(minutes=10)},
+        get_jwt_secret(), algorithm=JWT_ALGORITHM,
+    )
+    await create_log("seguranca", f"Senha confirmada para acao critica: {user['email']}", user["id"], user["name"])
+    return {"confirmed": True, "confirm_token": confirm_token}
+
+
+async def verify_confirm_token(request: Request) -> bool:
+    """Verifica se o request tem um confirm_token valido no header X-Confirm-Token."""
+    token = request.headers.get("X-Confirm-Token")
+    if not token:
+        return False
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "confirm":
+            return False
+        user = await get_current_user(request)
+        return payload.get("sub") == user["id"]
+    except jwt.InvalidTokenError:
+        return False
+
 # ==================== USER MANAGEMENT (Admin Only) ====================
 class UserManageCreate(BaseModel):
     email: EmailStr
@@ -666,13 +750,15 @@ async def update_user(user_id: str, data: UserManageUpdate, request: Request):
 @api_router.delete("/usuarios/{user_id}")
 async def delete_user(user_id: str, request: Request):
     admin = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     if admin["id"] == user_id:
         raise HTTPException(status_code=400, detail="Nao e possivel remover seu proprio usuario")
     u = await db.usuarios.find_one({"_id": ObjectId(user_id)})
     if not u:
         raise HTTPException(status_code=404, detail="Usuario nao encontrado")
     await db.usuarios.delete_one({"_id": ObjectId(user_id)})
-    await create_log("cadastro", f"Usuario removido: {u['email']}", admin["id"], admin["name"])
+    await create_log("seguranca", f"Usuario removido: {u['email']} (confirmacao de senha verificada)", admin["id"], admin["name"])
     return {"message": "Usuario removido com sucesso"}
 
 # ==================== CLIENTS ROUTES ====================
@@ -813,11 +899,13 @@ async def update_client(client_id: str, data: ClientCreate, request: Request):
 @api_router.delete("/clientes/{client_id}")
 async def delete_client(client_id: str, request: Request):
     user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     c = await db.clientes.find_one({"_id": ObjectId(client_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Cliente nao encontrado")
     await db.clientes.delete_one({"_id": ObjectId(client_id)})
-    await create_log("cadastro", f"Cliente removido: {c['nome']}", user["id"], user["name"])
+    await create_log("seguranca", f"Cliente removido: {c['nome']} (confirmacao verificada)", user["id"], user["name"])
     return {"message": "Cliente removido com sucesso"}
 
 # ==================== PLANS ROUTES ====================
@@ -866,6 +954,8 @@ async def update_plan(plan_id: str, data: PlanCreate, request: Request):
 @api_router.delete("/planos/{plan_id}")
 async def delete_plan(plan_id: str, request: Request):
     user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
     if not plan:
         raise HTTPException(status_code=404, detail="Plano nao encontrado")
@@ -873,7 +963,7 @@ async def delete_plan(plan_id: str, request: Request):
     if offer_using:
         raise HTTPException(status_code=400, detail="Plano esta vinculado a ofertas e nao pode ser removido")
     await db.planos.delete_one({"_id": ObjectId(plan_id)})
-    await create_log("cadastro", f"Plano removido: {plan['nome']}", user["id"], user["name"])
+    await create_log("seguranca", f"Plano removido: {plan['nome']} (confirmacao verificada)", user["id"], user["name"])
     return {"message": "Plano removido com sucesso"}
 
 # ==================== OFFERS ROUTES ====================
@@ -972,6 +1062,8 @@ async def update_offer(offer_id: str, data: OfferCreate, request: Request):
 @api_router.delete("/ofertas/{offer_id}")
 async def delete_offer(offer_id: str, request: Request):
     user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
     if not offer:
         raise HTTPException(status_code=404, detail="Oferta nao encontrada")
@@ -979,7 +1071,7 @@ async def delete_offer(offer_id: str, request: Request):
     if chip_using:
         raise HTTPException(status_code=400, detail="Oferta esta vinculada a chips e nao pode ser removida")
     await db.ofertas.delete_one({"_id": ObjectId(offer_id)})
-    await create_log("cadastro", f"Oferta removida: {offer['nome']}", user["id"], user["name"])
+    await create_log("seguranca", f"Oferta removida: {offer['nome']} (confirmacao verificada)", user["id"], user["name"])
     return {"message": "Oferta removida com sucesso"}
 
 # ==================== CHIPS ROUTES ====================
@@ -1095,13 +1187,15 @@ async def create_chip(data: ChipCreate, request: Request):
 @api_router.delete("/chips/{chip_id}")
 async def delete_chip(chip_id: str, request: Request):
     user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
     if not chip:
         raise HTTPException(status_code=404, detail="Chip nao encontrado")
     if chip["status"] == ChipStatus.ativado.value:
         raise HTTPException(status_code=400, detail="Nao e possivel remover um chip ativado")
     await db.chips.delete_one({"_id": ObjectId(chip_id)})
-    await create_log("cadastro", f"Chip removido: {chip['iccid']}", user["id"], user["name"])
+    await create_log("seguranca", f"Chip removido: {chip['iccid']} (confirmacao verificada)", user["id"], user["name"])
     return {"message": "Chip removido com sucesso"}
 
 @api_router.put("/chips/{chip_id}", response_model=ChipResponse)
@@ -2547,6 +2641,8 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
 @api_router.delete("/carteira/cobrancas/{cobranca_id}")
 async def delete_cobranca(cobranca_id: str, request: Request):
     user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
@@ -3039,12 +3135,14 @@ async def update_revendedor(rev_id: str, data: RevendedorCreate, request: Reques
 @api_router.delete("/revendedores/{rev_id}")
 async def delete_revendedor(rev_id: str, request: Request):
     user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
     doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
     await db.chips.update_many({"revendedor_id": rev_id}, {"$unset": {"revendedor_id": ""}})
     await db.revendedores.delete_one({"_id": ObjectId(rev_id)})
-    await create_log("revendedor", f"Revendedor removido: {doc['nome']}", user["id"], user["name"])
+    await create_log("seguranca", f"Revendedor removido: {doc['nome']} (confirmacao verificada)", user["id"], user["name"])
     return {"message": "Revendedor removido"}
 
 class VincularChipsRequest(BaseModel):
@@ -3095,7 +3193,8 @@ class PortalLoginRequest(BaseModel):
     telefone: str
 
 @api_router.post("/portal/login")
-async def portal_login(data: PortalLoginRequest):
+@limiter.limit("10/minute")
+async def portal_login(data: PortalLoginRequest, request: Request):
     """Login do cliente por CPF + telefone."""
     try:
         doc_clean = clean_document(data.documento)

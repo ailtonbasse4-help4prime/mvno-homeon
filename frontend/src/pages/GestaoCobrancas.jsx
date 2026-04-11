@@ -12,13 +12,15 @@ import {
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
   Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download,
 } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 import { SearchableSelect } from '../components/SearchableSelect';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function GestaoCobrancas() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();  const isAdmin = user?.role === 'admin';
   const [cobrancas, setCobrancas] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [linhas, setLinhas] = useState([]);
@@ -122,7 +124,7 @@ export function GestaoCobrancas() {
   const handleDelete = async (id) => {
     if (!window.confirm('Remover esta cobranca?')) return;
     try {
-      await axios.delete(`${API_URL}/api/carteira/cobrancas/${id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/carteira/cobrancas/${id}`, `Remover cobranca`);
       toast.success('Cobranca removida');
       fetchAll();
     } catch (e) { toast.error(e.response?.data?.detail || 'Erro ao remover'); }
@@ -1009,6 +1011,7 @@ export function GestaoCobrancas() {
           </div>
         </DialogContent>
       </Dialog>
+      <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
     </div>
   );
 }

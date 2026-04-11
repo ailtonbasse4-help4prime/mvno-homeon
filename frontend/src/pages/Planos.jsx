@@ -14,11 +14,14 @@ import {
 } from '../components/ui/dialog';
 import { toast } from 'sonner';
 import { Plus, Package, Edit, Trash2, RefreshCw, Code } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 export function Planos() {
   const { isAdmin } = useAuth();
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -114,13 +117,10 @@ export function Planos() {
 
   const handleDelete = async () => {
     if (!planoToDelete) return;
-
+    setDeleteDialogOpen(false);
     try {
-      await axios.delete(`${API_URL}/api/planos/${planoToDelete.id}`, {
-        withCredentials: true,
-      });
+      await executeSecureDelete(`/api/planos/${planoToDelete.id}`, `Remover plano: ${planoToDelete.nome}`);
       toast.success('Plano removido com sucesso');
-      setDeleteDialogOpen(false);
       setPlanoToDelete(null);
       fetchPlanos();
     } catch (error) {

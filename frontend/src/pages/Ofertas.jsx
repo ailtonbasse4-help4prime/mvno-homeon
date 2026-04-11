@@ -13,6 +13,8 @@ import {
 } from '../components/ui/select';
 import { toast } from 'sonner';
 import { Plus, Tag, Edit, Trash2, Package, CheckCircle, XCircle, Code, Smartphone, Radio } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -23,6 +25,7 @@ const CATEGORIAS = [
 
 export function Ofertas() {
   const { isAdmin } = useAuth();
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
   const [ofertas, setOfertas] = useState([]);
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -92,10 +95,10 @@ export function Ofertas() {
 
   const handleDelete = async () => {
     if (!ofertaToDelete) return;
+    setDeleteDialogOpen(false);
     try {
-      await axios.delete(`${API_URL}/api/ofertas/${ofertaToDelete.id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/ofertas/${ofertaToDelete.id}`, `Remover oferta: ${ofertaToDelete.nome}`);
       toast.success('Oferta removida');
-      setDeleteDialogOpen(false);
       setOfertaToDelete(null);
       fetchData();
     } catch (error) {

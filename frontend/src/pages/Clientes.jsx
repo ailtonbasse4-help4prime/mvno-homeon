@@ -13,6 +13,8 @@ import {
 } from '../components/ui/select';
 import { toast } from 'sonner';
 import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone, Wrench } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -49,6 +51,7 @@ export function Clientes() {
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
 
   const fetchClientes = useCallback(async () => {
     try {
@@ -109,10 +112,10 @@ export function Clientes() {
 
   const handleDelete = async () => {
     if (!clienteToDelete) return;
+    setDeleteDialogOpen(false);
     try {
-      await axios.delete(`${API_URL}/api/clientes/${clienteToDelete.id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/clientes/${clienteToDelete.id}`, `Remover cliente: ${clienteToDelete.nome}`);
       toast.success('Cliente removido com sucesso');
-      setDeleteDialogOpen(false);
       setClienteToDelete(null);
       fetchClientes();
     } catch (error) {
@@ -465,6 +468,14 @@ export function Clientes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Password Confirmation Dialog */}
+      <ConfirmPasswordDialog
+        open={confirmState.open}
+        onClose={closeConfirm}
+        onConfirmed={confirmState.onConfirmed}
+        actionDescription={confirmState.description}
+      />
     </div>
   );
 }

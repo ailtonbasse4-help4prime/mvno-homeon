@@ -13,6 +13,8 @@ import {
 } from '../components/ui/select';
 import { toast } from 'sonner';
 import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio, ArrowRightLeft, RotateCcw } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -74,6 +76,7 @@ function OfertaGroupedSelect({ value, onValueChange, ofertas, testId }) {
 
 export function Chips() {
   const { isAdmin } = useAuth();
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
   const [chips, setChips] = useState([]);
   const [ofertas, setOfertas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -155,10 +158,10 @@ export function Chips() {
 
   const handleDelete = async () => {
     if (!chipToDelete) return;
+    setDeleteDialogOpen(false);
     try {
-      await axios.delete(`${API_URL}/api/chips/${chipToDelete.id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/chips/${chipToDelete.id}`, `Remover chip: ${chipToDelete.iccid}`);
       toast.success('Chip removido com sucesso');
-      setDeleteDialogOpen(false);
       setChipToDelete(null);
       fetchData();
     } catch (error) {
@@ -513,6 +516,7 @@ export function Chips() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
     </div>
   );
 }

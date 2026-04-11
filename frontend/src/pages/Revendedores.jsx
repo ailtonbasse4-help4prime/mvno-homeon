@@ -12,6 +12,8 @@ import {
   Plus, Edit, Trash2, Search, Store, Package, CheckCircle, Link,
   QrCode, Printer,
 } from 'lucide-react';
+import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const SITE_URL = process.env.REACT_APP_SITE_URL || '';
@@ -38,6 +40,7 @@ export function Revendedores() {
   const [search, setSearch] = useState('');
   const [chipSearch, setChipSearch] = useState('');
   const [selectedIccids, setSelectedIccids] = useState([]);
+  const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
 
   // QR Code state
   const [revChips, setRevChips] = useState([]);
@@ -100,7 +103,7 @@ export function Revendedores() {
   const handleDelete = async (id, nome) => {
     if (!window.confirm(`Remover revendedor ${nome}? Os chips serao desvinculados.`)) return;
     try {
-      await axios.delete(`${API_URL}/api/revendedores/${id}`, { withCredentials: true });
+      await executeSecureDelete(`/api/revendedores/${id}`, `Remover revendedor: ${nome}`);
       toast.success('Revendedor removido');
       fetchAll();
     } catch (e) { toast.error(e.response?.data?.detail || 'Erro ao remover'); }
@@ -481,6 +484,7 @@ export function Revendedores() {
           )}
         </DialogContent>
       </Dialog>
+          <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
     </div>
   );
 }

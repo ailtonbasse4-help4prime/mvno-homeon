@@ -35,12 +35,12 @@ fi
 
 echo "[2/5] Backup do backend (server.py + services/)..."
 mkdir -p "$BACKUP_PATH/backend"
-cp /app/server.py "$BACKUP_PATH/backend/" 2>/dev/null || cp /app/backend/server.py "$BACKUP_PATH/backend/" 2>/dev/null || true
-cp -r /app/services "$BACKUP_PATH/backend/services" 2>/dev/null || cp -r /app/backend/services "$BACKUP_PATH/backend/services" 2>/dev/null || true
+cp /opt/mvno-homeon/backend/server.py "$BACKUP_PATH/backend/" 2>/dev/null || cp /app/backend/server.py "$BACKUP_PATH/backend/" 2>/dev/null || true
+cp -r /opt/mvno-homeon/backend/services "$BACKUP_PATH/backend/services" 2>/dev/null || cp -r /app/backend/services "$BACKUP_PATH/backend/services" 2>/dev/null || true
 
 echo "[3/5] Backup das configuracoes (.env)..."
 mkdir -p "$BACKUP_PATH/config"
-cp /app/.env "$BACKUP_PATH/config/backend.env" 2>/dev/null || cp /app/backend/.env "$BACKUP_PATH/config/backend.env" 2>/dev/null || true
+cp /opt/mvno-homeon/backend/.env "$BACKUP_PATH/config/backend.env" 2>/dev/null || cp /app/backend/.env "$BACKUP_PATH/config/backend.env" 2>/dev/null || true
 cp /etc/nginx/sites-enabled/app-ativacao "$BACKUP_PATH/config/nginx-config" 2>/dev/null || true
 
 echo "[4/5] Backup do frontend (build)..."
@@ -69,4 +69,4 @@ echo "Tamanho: $BACKUP_SIZE"
 echo "Backups existentes: $(ls -1d "$BACKUP_DIR"/20* 2>/dev/null | wc -l)"
 echo ""
 echo "Para restaurar o banco:"
-echo "  docker exec -i $MONGO_CONTAINER mongorestore --db $MONGO_DB --drop $BACKUP_PATH/mongodb/"
+echo "  bash /opt/mvno-homeon/deploy/restaurar-backup.sh $TIMESTAMP"
