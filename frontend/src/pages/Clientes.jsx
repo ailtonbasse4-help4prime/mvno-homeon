@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone, Wrench } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -48,6 +48,7 @@ export function Clientes() {
   const [formData, setFormData] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [repairing, setRepairing] = useState(false);
 
   const fetchClientes = useCallback(async () => {
     try {
@@ -138,6 +139,49 @@ export function Clientes() {
     }
   };
 
+  const handleRepairClients = async () => {
+    setRepairing(true);
+    try {
+      const response = await axios.post(`${API_URL}/api/operadora/reparar-clientes`, {}, { withCredentials: true });
+      const d = response.data;
+      if (!d.success) {
+        toast.warning(d.message);
+        setRepairing(false);
+        return;
+      }
+      toast.info('Reparo iniciado em background...');
+      // Poll for status
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await axios.get(`${API_URL}/api/operadora/reparar-status`, { withCredentials: true });
+          const s = statusRes.data;
+          if (s.status === 'done') {
+            clearInterval(pollInterval);
+            setRepairing(false);
+            if (s.repaired > 0) {
+              toast.success(`${s.repaired} clientes reparados!`);
+            } else {
+              toast.info(s.message);
+            }
+            fetchClientes();
+          } else if (s.status === 'error') {
+            clearInterval(pollInterval);
+            setRepairing(false);
+            toast.error(s.message);
+          }
+          // else still running, keep polling
+        } catch {
+          clearInterval(pollInterval);
+          setRepairing(false);
+        }
+      }, 5000);
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Erro ao iniciar reparo';
+      toast.error(typeof msg === 'string' ? msg : 'Erro ao reparar');
+      setRepairing(false);
+    }
+  };
+
   const formatDoc = (val, tipo) => {
     const n = val.replace(/\D/g, '');
     if (tipo === 'pj') {
@@ -194,10 +238,16 @@ export function Clientes() {
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           {isAdmin && (
-            <Button onClick={handleSyncClients} disabled={syncing} variant="outline" className="flex items-center gap-2 w-full sm:w-auto border-zinc-700 hover:bg-zinc-800" data-testid="sync-clientes-button">
-              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Sincronizando...' : 'Sincronizar Clientes'}
-            </Button>
+            <>
+              <Button onClick={handleRepairClients} disabled={repairing || syncing} variant="outline" className="flex items-center gap-2 w-full sm:w-auto border-amber-700 text-amber-400 hover:bg-amber-950" data-testid="repair-clientes-button">
+                <Wrench className={`w-4 h-4 ${repairing ? 'animate-spin' : ''}`} />
+                {repairing ? 'Reparando...' : 'Reparar Dados'}
+              </Button>
+              <Button onClick={handleSyncClients} disabled={syncing || repairing} variant="outline" className="flex items-center gap-2 w-full sm:w-auto border-zinc-700 hover:bg-zinc-800" data-testid="sync-clientes-button">
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Sincronizando...' : 'Sincronizar Clientes'}
+              </Button>
+            </>
           )}
           <Button onClick={() => handleOpenDialog()} className="btn-primary flex items-center gap-2 w-full sm:w-auto" data-testid="add-cliente-button">
             <Plus className="w-4 h-4" />Novo Cliente

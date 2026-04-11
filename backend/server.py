@@ -1753,22 +1753,32 @@ async def sync_clients_from_operator(request: Request):
         if not iccid:
             continue
         iccid = str(iccid)
-        # Rate limit: delay between chips
+        # Rate limit: delay between chips (increased to avoid 429)
         if idx > 0:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.6)
         # 2. Query subscriber details from Tá Telecom (with retry for rate limit)
         d = None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
                 if detail_resp.success and detail_resp.data:
                     d = detail_resp.data
                     break
+                # Detect 429 rate limit specifically
+                is_rate_limit = (
+                    getattr(detail_resp, 'http_status_code', 0) == 429 or
+                    (hasattr(detail_resp, 'error_code') and str(detail_resp.error_code) == 'ERR_RATE_LIMIT')
+                )
+                if is_rate_limit:
+                    wait_time = 3.0 * (2 ** attempt)  # 3s, 6s, 12s, 24s, 48s
+                    logger.warning(f"429 Rate Limit para ICCID {iccid}, aguardando {wait_time}s (tentativa {attempt+1}/5)")
+                    await asyncio.sleep(wait_time)
+                    continue
             except Exception as e:
-                if attempt == 2:
+                if attempt == 4:
                     errors.append(f"Erro ao consultar {iccid}: {str(e)}")
             # Exponential backoff between retries
-            await asyncio.sleep(1.0 * (attempt + 1))
+            await asyncio.sleep(1.5 * (attempt + 1))
         if not d:
             errors.append(f"Sem dados para ICCID {iccid}")
             continue
@@ -1882,6 +1892,249 @@ async def sync_clients_from_operator(request: Request):
         "lines_created": lines_created, "chips_linked": chips_linked,
         "total_with_contract": len(contract_chips), "errors": errors[:10],
     }
+
+@api_router.post("/operadora/reparar-clientes")
+async def repair_clients_missing_data(request: Request):
+    """
+    Encontra clientes com dados incompletos (sem linha, sem ICCID, sem numero)
+    e tenta recuperar via consulta ao estoque da Ta Telecom.
+    Roda em background e retorna o status via GET /operadora/reparar-status.
+    """
+    user = await require_admin(request)
+
+    # Check if already running
+    existing = await db.system_config.find_one({"key": "repair_status"})
+    if existing and existing.get("status") == "running":
+        return {"success": False, "message": "Reparo ja esta em andamento. Acompanhe pelo status."}
+
+    # Mark as running
+    await db.system_config.update_one(
+        {"key": "repair_status"},
+        {"$set": {"key": "repair_status", "status": "running", "started_at": datetime.now(timezone.utc).isoformat(), "message": "Iniciando...", "repaired": 0, "errors": []}},
+        upsert=True,
+    )
+
+    # Launch background task
+    asyncio.create_task(_run_repair_background(user))
+    return {"success": True, "message": "Reparo iniciado em background. Acompanhe pelo botao de status."}
+
+
+async def _run_repair_background(user: dict):
+    try:
+        # 1. Find clients with missing data
+        all_clients = await db.clientes.find({}, {"_id": 1, "nome": 1, "documento": 1, "telefone": 1}).to_list(2000)
+        cpf_to_client = {}
+        clients_to_repair = []
+        for c in all_clients:
+            cid = str(c["_id"])
+            lines = await db.linhas.find({"cliente_id": cid}).to_list(100)
+            needs_repair = False
+            if not lines:
+                needs_repair = True
+            else:
+                for l in lines:
+                    chip_id = l.get("chip_id")
+                    has_numero = bool(l.get("numero") or l.get("msisdn"))
+                    has_chip = False
+                    if chip_id and ObjectId.is_valid(chip_id):
+                        chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+                        has_chip = bool(chip and chip.get("iccid"))
+                    if not has_numero or not has_chip:
+                        needs_repair = True
+                        break
+            if needs_repair:
+                cpf_clean = re.sub(r'\D', '', c.get("documento", ""))
+                if cpf_clean:
+                    cpf_to_client[cpf_clean] = c
+                    clients_to_repair.append(c)
+
+        if not clients_to_repair:
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"status": "done", "message": "Nenhum cliente com dados faltando.", "repaired": 0}},
+            )
+            return
+
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"message": f"Encontrados {len(clients_to_repair)} clientes incompletos. Buscando estoque..."}},
+        )
+
+        # 2. Fetch stock
+        result = await operadora_service.listar_estoque_completo(db=db, user_id=user["id"], user_name=user["name"])
+        if not result.success:
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"status": "error", "message": f"Erro ao buscar estoque: {result.message}"}},
+            )
+            return
+
+        items = result.data.get("results", result.data.get("items", []))
+        if isinstance(items, dict):
+            items = items.get("results", items.get("items", []))
+
+        # 3. Filter unlinked ICCIDs
+        sync_statuses = {"EM USO", "ATIVADO", "ATIVA", "ATIVO", "BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA"}
+        all_chips = await db.chips.find({}, {"iccid": 1, "cliente_id": 1}).to_list(5000)
+        linked_iccids = set()
+        for ch in all_chips:
+            iccid_val = ch.get("iccid")
+            if iccid_val and ch.get("cliente_id"):
+                cid = ch["cliente_id"]
+                line = await db.linhas.find_one({"cliente_id": cid, "chip_id": str(ch["_id"])})
+                if line and (line.get("numero") or line.get("msisdn")):
+                    linked_iccids.add(iccid_val)
+
+        unlinked_items = []
+        for item in items:
+            iccid = item.get("sim_card") or item.get("iccid")
+            if not iccid:
+                continue
+            iccid = str(iccid)
+            stock_status = (item.get("status") or "").upper().strip()
+            if stock_status not in sync_statuses:
+                continue
+            if iccid not in linked_iccids:
+                unlinked_items.append({"iccid": iccid, "stock_status": stock_status})
+
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"message": f"{len(unlinked_items)} ICCIDs nao vinculados. Aguardando rate limit..."}},
+        )
+
+        # Wait for rate limit to reset after heavy stock listing
+        await asyncio.sleep(10)
+
+        repaired = 0
+        errors = []
+
+        for idx, ui in enumerate(unlinked_items):
+            if not cpf_to_client:
+                break
+            iccid = ui["iccid"]
+            stock_status = ui["stock_status"]
+
+            await asyncio.sleep(1.0)
+
+            d = None
+            for attempt in range(5):
+                try:
+                    detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+                    if detail_resp.success and detail_resp.data:
+                        d = detail_resp.data
+                        break
+                    is_rate_limit = (
+                        getattr(detail_resp, 'http_status_code', 0) == 429 or
+                        (hasattr(detail_resp, 'error_code') and str(detail_resp.error_code) == 'ERR_RATE_LIMIT')
+                    )
+                    if is_rate_limit:
+                        wait_time = 5.0 * (2 ** attempt)
+                        logger.warning(f"429 para ICCID {iccid}, aguardando {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+                except Exception as e:
+                    if attempt == 4:
+                        errors.append(f"Erro {iccid}: {str(e)}")
+                await asyncio.sleep(2.0 * (attempt + 1))
+
+            if not d:
+                continue
+
+            item_cpf = re.sub(r'\D', '', d.get("cpf") or d.get("document_number") or "")
+            if not item_cpf or item_cpf not in cpf_to_client:
+                continue
+
+            c = cpf_to_client[item_cpf]
+            cid = str(c["_id"])
+            msisdn = str(d.get("numero") or "")
+            status_ta = (d.get("status") or "").lower().strip()
+            blocked_statuses = {"bloqueado", "bloqueada", "suspenso", "suspensa"}
+            if stock_status in ("BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA") or status_ta in blocked_statuses:
+                local_status = "bloqueado"
+            else:
+                local_status = "ativo"
+            chip_status = "ativado" if local_status == "ativo" else "bloqueado"
+
+            existing_chip = await db.chips.find_one({"iccid": iccid})
+            if existing_chip:
+                chip_update = {"status": chip_status, "cliente_id": cid}
+                if msisdn:
+                    chip_update["msisdn"] = msisdn
+                await db.chips.update_one({"_id": existing_chip["_id"]}, {"$set": chip_update})
+                chip_id = str(existing_chip["_id"])
+            else:
+                chip_doc = {
+                    "iccid": iccid, "status": chip_status,
+                    "oferta_id": None, "cliente_id": cid,
+                    "msisdn": msisdn or None,
+                    "created_at": datetime.now(timezone.utc),
+                }
+                insert_result = await db.chips.insert_one(chip_doc)
+                chip_id = str(insert_result.inserted_id)
+
+            existing_line = await db.linhas.find_one({"cliente_id": cid})
+            plano_nome = d.get("plano") or ""
+            plano_id = None
+            if plano_nome:
+                plano = await db.planos.find_one({"nome": {"$regex": re.escape(plano_nome), "$options": "i"}})
+                if plano:
+                    plano_id = str(plano["_id"])
+
+            if existing_line:
+                update_fields = {"chip_id": chip_id, "status": local_status}
+                if msisdn and not existing_line.get("numero"):
+                    update_fields["numero"] = msisdn
+                if msisdn and not existing_line.get("msisdn"):
+                    update_fields["msisdn"] = msisdn
+                if plano_id and not existing_line.get("plano_id"):
+                    update_fields["plano_id"] = plano_id
+                await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": update_fields})
+            elif msisdn:
+                line_doc = {
+                    "numero": msisdn, "status": local_status,
+                    "cliente_id": cid, "chip_id": chip_id,
+                    "plano_id": plano_id,
+                    "oferta_id": existing_chip.get("oferta_id") if existing_chip else None,
+                    "msisdn": msisdn,
+                    "created_at": datetime.now(timezone.utc),
+                }
+                await db.linhas.insert_one(line_doc)
+
+            await db.clientes.update_one({"_id": c["_id"]}, {"$set": {"status": local_status}})
+            repaired += 1
+            del cpf_to_client[item_cpf]
+            logger.info(f"Reparado: {c.get('nome')} ({item_cpf}) -> ICCID {iccid}, MSISDN {msisdn}")
+
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"message": f"Progresso: {idx+1}/{len(unlinked_items)} consultados, {repaired} reparados", "repaired": repaired}},
+            )
+
+        skipped = len(clients_to_repair) - repaired
+        msg = f"Reparados: {repaired}. Sem correspondencia: {skipped}. Total analisados: {len(clients_to_repair)}."
+        if errors:
+            msg += f" Erros: {len(errors)}"
+        await create_log("sincronizacao", f"Reparo de dados: {msg}", user["id"], user["name"])
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "done", "message": msg, "repaired": repaired, "errors": errors[:10]}},
+        )
+    except Exception as e:
+        logger.error(f"Erro no reparo em background: {e}")
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "error", "message": f"Erro inesperado: {str(e)}"}},
+        )
+
+
+@api_router.get("/operadora/reparar-status")
+async def get_repair_status(request: Request):
+    await require_admin(request)
+    status = await db.system_config.find_one({"key": "repair_status"}, {"_id": 0})
+    if not status:
+        return {"status": "idle", "message": "Nenhum reparo executado."}
+    return status
+
 
 @api_router.get("/operadora/config")
 async def get_operadora_config(request: Request):

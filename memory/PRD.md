@@ -59,8 +59,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Linhas em ordem alfabetica e sem quebra de linha (min-w-[1400px])
 - [x] Service Worker v2 com auto-limpeza de cache
 
+### Reparo de Dados e Rate Limit (11/04/2026)
+- [x] Deteccao especifica de HTTP 429 (Rate Limit) no adaptador Ta Telecom
+- [x] Sync melhorado: 5 retries, delay 0.6s, backoff exponencial para 429
+- [x] Endpoint POST /api/operadora/reparar-clientes (background task)
+- [x] Endpoint GET /api/operadora/reparar-status (polling de progresso)
+- [x] Botao "Reparar Dados" na pagina de Clientes com feedback visual
+
 ## Bugs Conhecidos
-- [ ] Bug de navegacao no menu: ao clicar rapidamente em varios itens, pode travar na tela anterior (parcialmente corrigido com ErrorBoundary reset, investigar race conditions nas chamadas de API)
+- [ ] Bug de navegacao no menu: ao clicar rapidamente em varios itens, pode travar na tela anterior (parcialmente corrigido com ErrorBoundary reset)
 
 ## Backlog
 

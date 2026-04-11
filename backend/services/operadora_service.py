@@ -45,6 +45,7 @@ class ErrorCode(str, Enum):
     CONNECTION = "ERR_CONNECTION"
     AUTHENTICATION = "ERR_AUTH"
     NOT_FOUND = "ERR_NOT_FOUND"
+    RATE_LIMIT = "ERR_RATE_LIMIT"
     VALIDATION = "ERR_VALIDATION"
     SERVER_ERROR = "ERR_SERVER"
     UNKNOWN = "ERR_UNKNOWN"
@@ -375,6 +376,16 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
                     return req, OperadoraResponse(
                         success=False, status=OperadoraStatus.ERRO, message=str(msg),
                         error_code=ErrorCode.NOT_FOUND, raw_response=r.text, response_time_ms=elapsed, http_status_code=r.status_code,
+                    )
+                elif r.status_code == 429:
+                    err_data = data if isinstance(data, dict) else {"raw": data}
+                    msg = err_data.get("message", "Rate limit excedido (429)")
+                    if isinstance(msg, list):
+                        msg = "; ".join(str(m) for m in msg)
+                    return req, OperadoraResponse(
+                        success=False, status=OperadoraStatus.ERRO,
+                        message=str(msg),
+                        data=err_data, error_code=ErrorCode.RATE_LIMIT, raw_response=r.text, response_time_ms=elapsed, http_status_code=429,
                     )
                 elif 400 <= r.status_code < 500:
                     err_data = data if isinstance(data, dict) else {"raw": data}
