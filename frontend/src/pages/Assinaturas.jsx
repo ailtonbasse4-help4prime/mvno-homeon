@@ -167,19 +167,19 @@ export function Assinaturas() {
       {/* Table */}
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
-          <table className="data-table w-full min-w-[1200px]" data-testid="assinaturas-table">
+          <table className="data-table w-full min-w-[1400px]" data-testid="assinaturas-table">
             <thead className="sticky top-0 z-10">
               <tr className="bg-blue-950/80 backdrop-blur-sm border-b border-blue-800/50">
-                <th className="text-blue-300 whitespace-nowrap min-w-[180px]">Cliente</th>
-                <th className="text-blue-300 whitespace-nowrap min-w-[140px]">Linha</th>
-                <th className="text-blue-300 whitespace-nowrap min-w-[140px]">Oferta</th>
-                <th className="text-blue-300 whitespace-nowrap">Tipo</th>
-                <th className="text-blue-300 whitespace-nowrap">Valor</th>
-                <th className="text-blue-300 whitespace-nowrap">Ciclo</th>
-                <th className="text-blue-300 whitespace-nowrap min-w-[120px]">Proximo Venc.</th>
-                <th className="text-blue-300 whitespace-nowrap">Status</th>
-                <th className="text-blue-300 whitespace-nowrap min-w-[160px]">Asaas ID</th>
-                {isAdmin && <th className="text-blue-300 text-right whitespace-nowrap">Acoes</th>}
+                <th className="text-blue-300 whitespace-nowrap min-w-[200px]">Cliente</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[150px]">Linha</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[150px]">Oferta</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[80px]">Tipo</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[100px]">Valor</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[80px]">Ciclo</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[130px]">Proximo Venc.</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[80px]">Status</th>
+                <th className="text-blue-300 whitespace-nowrap min-w-[180px]">Asaas ID</th>
+                {isAdmin && <th className="text-blue-300 text-right whitespace-nowrap min-w-[80px]">Acoes</th>}
               </tr>
             </thead>
             <tbody>
