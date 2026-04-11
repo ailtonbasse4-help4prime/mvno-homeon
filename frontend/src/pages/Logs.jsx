@@ -154,7 +154,7 @@ export function Logs() {
           <SelectTrigger className="w-44 sm:w-48 form-input" data-testid="log-action-filter">
             <SelectValue placeholder="Todas as ações" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-600/50">
+          <SelectContent className="bg-zinc-900 border-zinc-500/60">
             <SelectItem value="all">Todas as ações</SelectItem>
             <SelectItem value="ativacao">Ativação</SelectItem>
             <SelectItem value="bloqueio">Bloqueio</SelectItem>
@@ -169,17 +169,17 @@ export function Logs() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-900/80 border border-zinc-600/50 rounded-sm p-4">
+        <div className="bg-zinc-900/80 border border-zinc-500/60 rounded-sm p-4">
           <p className="text-2xl font-bold text-white font-mono">{logs.length}</p>
           <p className="text-xs text-zinc-300">Total de Logs</p>
         </div>
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-sm p-4">
+        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-sm p-4">
           <p className="text-2xl font-bold text-emerald-400 font-mono">
             {logs.filter(l => l.action === 'ativacao').length}
           </p>
           <p className="text-xs text-zinc-300">Ativações</p>
         </div>
-        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-4">
+        <div className="bg-red-500/15 border border-red-500/40 rounded-sm p-4">
           <p className="text-2xl font-bold text-red-400 font-mono">
             {logs.filter(l => l.action === 'erro').length}
           </p>
@@ -224,7 +224,7 @@ export function Logs() {
                       </span>
                     )}
                     {log.is_mock !== null && log.is_mock !== undefined && (
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${log.is_mock ? 'bg-amber-500/10 text-amber-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${log.is_mock ? 'bg-amber-500/15 text-amber-400' : 'bg-blue-500/15 text-blue-400'}`}>
                         {log.is_mock ? 'MOCK' : 'REAL'}
                       </span>
                     )}
@@ -348,8 +348,8 @@ export function Logs() {
                   </div>
                   <div className={`p-3 rounded-sm border ${
                     selectedLog.api_response.success 
-                      ? 'bg-emerald-500/10 border-emerald-500/30' 
-                      : 'bg-red-500/10 border-red-500/30'
+                      ? 'bg-emerald-500/15 border-emerald-500/40' 
+                      : 'bg-red-500/15 border-red-500/40'
                   }`}>
                     <div className="grid grid-cols-2 gap-4 mb-3">
                       <div>
@@ -389,8 +389,8 @@ export function Logs() {
               {selectedLog.is_mock !== null && selectedLog.is_mock !== undefined && (
                 <div className={`p-3 rounded-sm ${
                   selectedLog.is_mock 
-                    ? 'bg-amber-500/10 border border-amber-500/30' 
-                    : 'bg-blue-500/10 border border-blue-500/30'
+                    ? 'bg-amber-500/15 border border-amber-500/40' 
+                    : 'bg-blue-500/15 border border-blue-500/40'
                 }`}>
                   <p className={`text-sm ${selectedLog.is_mock ? 'text-amber-400' : 'text-blue-400'}`}>
                     {selectedLog.is_mock 

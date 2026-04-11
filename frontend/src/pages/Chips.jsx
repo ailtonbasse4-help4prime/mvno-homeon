@@ -214,7 +214,7 @@ export function Chips() {
       case 'cancelado':
         return <span className="badge-inactive">Cancelado</span>;
       case 'reservado':
-        return <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30">Reservado</span>;
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-sm text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/40">Reservado</span>;
       default:
         return <span className="badge-inactive">{status}</span>;
     }
@@ -225,7 +225,7 @@ export function Chips() {
       return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-violet-500/10 text-violet-400 border border-violet-500/20"><Radio className="w-3 h-3" />M2M</span>;
     }
     if (categoria === 'movel') {
-      return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-blue-500/10 text-blue-400 border border-blue-500/30"><Smartphone className="w-3 h-3" />Movel</span>;
+      return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-blue-500/15 text-blue-400 border border-blue-500/40"><Smartphone className="w-3 h-3" />Movel</span>;
     }
     return null;
   };
@@ -285,7 +285,7 @@ export function Chips() {
             <SelectTrigger className="w-40 form-input" data-testid="chip-status-filter">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-zinc-600/50">
+            <SelectContent className="bg-zinc-900 border-zinc-500/60">
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="disponivel">Disponivel</SelectItem>
               <SelectItem value="ativado">Ativado</SelectItem>
@@ -413,7 +413,7 @@ export function Chips() {
 
       {/* Add Chip Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">Novo Chip</DialogTitle>
           </DialogHeader>
@@ -456,7 +456,7 @@ export function Chips() {
 
       {/* Edit Chip Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">Vincular Oferta ao Chip</DialogTitle>
           </DialogHeader>
@@ -503,7 +503,7 @@ export function Chips() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">Confirmar Exclusao</DialogTitle>
           </DialogHeader>

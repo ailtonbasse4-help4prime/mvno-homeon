@@ -358,14 +358,14 @@ export function Clientes() {
           </DialogHeader>
           <form onSubmit={handleSubmit} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }} className="space-y-4">
             {/* Dados Pessoais */}
-            <div className="border border-zinc-600/50 rounded-sm p-4 space-y-3">
+            <div className="border border-zinc-500/60 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Dados Pessoais</h3>
               <div className={`grid gap-3 ${editingCliente ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div className="space-y-1">
                   <Label className="text-zinc-300 text-xs">Tipo de Pessoa</Label>
                   <Select value={formData.tipo_pessoa} onValueChange={(v) => f('tipo_pessoa', v)}>
                     <SelectTrigger className="form-input" data-testid="cliente-tipo-pessoa"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-600/50">
+                    <SelectContent className="bg-zinc-900 border-zinc-500/60">
                       <SelectItem value="pf">Pessoa Fisica (PF)</SelectItem>
                       <SelectItem value="pj">Pessoa Juridica (PJ)</SelectItem>
                     </SelectContent>
@@ -376,7 +376,7 @@ export function Clientes() {
                     <Label className="text-zinc-300 text-xs">Status</Label>
                     <Select value={formData.status} onValueChange={(v) => f('status', v)}>
                       <SelectTrigger className="form-input" data-testid="cliente-status-select"><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-zinc-900 border-zinc-600/50">
+                      <SelectContent className="bg-zinc-900 border-zinc-500/60">
                         <SelectItem value="ativo">Ativo</SelectItem>
                         <SelectItem value="inativo">Inativo</SelectItem>
                       </SelectContent>
@@ -409,7 +409,7 @@ export function Clientes() {
             </div>
 
             {/* Endereco */}
-            <div className="border border-zinc-600/50 rounded-sm p-4 space-y-3">
+            <div className="border border-zinc-500/60 rounded-sm p-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">Endereco</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
@@ -466,7 +466,7 @@ export function Clientes() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Tem certeza que deseja remover o cliente <span className="text-white font-medium">{clienteToDelete?.nome}</span>?</p>
           <DialogFooter>

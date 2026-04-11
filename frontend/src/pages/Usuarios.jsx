@@ -103,7 +103,7 @@ export function Usuarios() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-zinc-900/80 border border-zinc-600/50 rounded-sm p-4">
+        <div className="bg-zinc-900/80 border border-zinc-500/60 rounded-sm p-4">
           <p className="text-2xl font-bold text-white font-mono">{usuarios.length}</p>
           <p className="text-xs text-zinc-300">Total</p>
         </div>
@@ -111,7 +111,7 @@ export function Usuarios() {
           <p className="text-2xl font-bold text-violet-400 font-mono">{usuarios.filter(u => u.role === 'admin').length}</p>
           <p className="text-xs text-zinc-300">Administradores</p>
         </div>
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-sm p-4">
+        <div className="bg-blue-500/15 border border-blue-500/40 rounded-sm p-4">
           <p className="text-2xl font-bold text-blue-400 font-mono">{usuarios.filter(u => u.role === 'atendente').length}</p>
           <p className="text-xs text-zinc-300">Atendentes</p>
         </div>
@@ -141,7 +141,7 @@ export function Usuarios() {
                         <ShieldCheck className="w-3 h-3" />Admin
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/40">
                         <Shield className="w-3 h-3" />Atendente
                       </span>
                     )}
@@ -192,7 +192,7 @@ export function Usuarios() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">{editingUser ? 'Editar Usuario' : 'Novo Usuario'}</DialogTitle>
           </DialogHeader>
@@ -215,7 +215,7 @@ export function Usuarios() {
               <Label className="text-zinc-300">Perfil de Acesso</Label>
               <Select value={formData.role} onValueChange={(v) => setFormData({ ...formData, role: v })}>
                 <SelectTrigger className="form-input" data-testid="user-role-select"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-600/50">
+                <SelectContent className="bg-zinc-900 border-zinc-500/60">
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="atendente">Atendente</SelectItem>
                 </SelectContent>
@@ -231,7 +231,7 @@ export function Usuarios() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Remover o usuario <span className="text-white font-medium">{userToDelete?.name}</span> ({userToDelete?.email})?</p>
           <DialogFooter>

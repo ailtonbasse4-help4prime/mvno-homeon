@@ -40,7 +40,7 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-sm">
+      <div className="bg-red-500/15 border border-red-500/40 text-red-400 p-4 rounded-sm">
         {error}
       </div>
     );
@@ -75,8 +75,8 @@ export function Dashboard() {
           <div
             className={`flex items-center gap-2 px-4 py-2 rounded-sm border text-sm font-medium ${
               stats.operadora.mode === 'real'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                : 'bg-amber-500/15 border-amber-500/40 text-amber-400'
             }`}
             data-testid="operadora-mode-indicator"
           >

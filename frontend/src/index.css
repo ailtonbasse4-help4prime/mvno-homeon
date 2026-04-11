@@ -183,11 +183,11 @@
     }
 
     .stat-card {
-        @apply bg-zinc-900 border border-zinc-600/50 rounded-lg p-5 flex flex-col relative overflow-hidden transition-all duration-300 ease-out cursor-pointer;
+        @apply bg-zinc-900 border border-zinc-500/60 rounded-lg p-5 flex flex-col relative overflow-hidden transition-all duration-300 ease-out cursor-pointer;
     }
 
     .stat-card:hover {
-        @apply border-zinc-500 bg-zinc-800/50 -translate-y-0.5;
+        @apply border-zinc-400 bg-zinc-800/70 -translate-y-0.5;
     }
 
     .stat-card:active {
@@ -220,7 +220,7 @@
     }
 
     .form-input {
-        @apply w-full px-3 py-2 bg-zinc-950 border border-zinc-600/50 rounded-md text-white placeholder-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all duration-200;
+        @apply w-full px-3 py-2 bg-zinc-950 border border-zinc-500/60 rounded-md text-white placeholder-zinc-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all duration-200;
         @apply min-h-[44px] text-base;
     }
 

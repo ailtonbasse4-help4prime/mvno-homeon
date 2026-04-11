@@ -213,7 +213,7 @@ export function Planos() {
 
               <div className="pt-3 border-t border-zinc-800 space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-sm bg-emerald-500/10 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-sm bg-emerald-500/15 flex items-center justify-center">
                     <span className="text-emerald-500 text-sm font-bold">GB</span>
                   </div>
                   <div>
@@ -235,7 +235,7 @@ export function Planos() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">
               {editingPlano ? 'Editar Plano' : 'Novo Plano Tecnico'}
@@ -307,7 +307,7 @@ export function Planos() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">Confirmar Exclusao</DialogTitle>
           </DialogHeader>

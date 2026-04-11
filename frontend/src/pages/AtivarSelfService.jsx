@@ -245,7 +245,7 @@ export default function AtivarSelfService() {
       {/* Content */}
       <div className="flex-1 p-4 max-w-lg mx-auto w-full">
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-start gap-2" data-testid="error-message">
+          <div className="mb-4 p-3 bg-red-500/15 border border-red-500/40 rounded-lg text-red-400 text-sm flex items-start gap-2" data-testid="error-message">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>{error}</span>
             <button onClick={() => setError('')} className="ml-auto"><XCircle className="w-4 h-4" /></button>
@@ -328,7 +328,7 @@ export default function AtivarSelfService() {
         {step === 1 && chipInfo && (
           <div className="space-y-4 animate-fade-in">
             {/* Chip Info Card */}
-            <Card className="bg-zinc-900 border-zinc-600/50">
+            <Card className="bg-zinc-900 border-zinc-500/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-emerald-600/10 rounded-lg flex items-center justify-center">
@@ -349,7 +349,7 @@ export default function AtivarSelfService() {
                     </p>
                   </div>
                   {chipInfo.desconto > 0 && (
-                    <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/30">
+                    <span className="bg-emerald-500/15 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/40">
                       -{' '}R$ {chipInfo.desconto.toFixed(2)} desconto
                     </span>
                   )}
@@ -461,7 +461,7 @@ export default function AtivarSelfService() {
               </div>
 
               {form.portability && (
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-3">
+                <div className="p-3 bg-blue-500/15 border border-blue-500/40 rounded-lg space-y-3">
                   <p className="text-xs text-zinc-400">
                     Informe o numero que deseja portar de outra operadora.
                   </p>
@@ -504,7 +504,7 @@ export default function AtivarSelfService() {
                 onClick={() => updateForm('billing_type', 'PIX')}
                 className={`p-3 rounded-lg border text-center transition-all ${
                   form.billing_type === 'PIX'
-                    ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                    ? 'border-blue-500 bg-blue-500/15 text-blue-400'
                     : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700'
                 }`}
                 data-testid="billing-pix"
@@ -516,7 +516,7 @@ export default function AtivarSelfService() {
                 onClick={() => updateForm('billing_type', 'BOLETO')}
                 className={`p-3 rounded-lg border text-center transition-all ${
                   form.billing_type === 'BOLETO'
-                    ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                    ? 'border-blue-500 bg-blue-500/15 text-blue-400'
                     : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700'
                 }`}
                 data-testid="billing-boleto"
@@ -547,7 +547,7 @@ export default function AtivarSelfService() {
             <div className="text-center mb-4">
               {activation.status === 'aguardando_pagamento' && (
                 <>
-                  <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-16 h-16 bg-amber-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Clock className="w-8 h-8 text-amber-400" />
                   </div>
                   <h2 className="text-xl font-bold text-white">Aguardando Pagamento</h2>
@@ -556,7 +556,7 @@ export default function AtivarSelfService() {
               )}
               {activation.status === 'pago' && (
                 <>
-                  <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-16 h-16 bg-blue-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                   </div>
                   <h2 className="text-xl font-bold text-white">Pagamento Confirmado!</h2>
@@ -565,7 +565,7 @@ export default function AtivarSelfService() {
               )}
               {activation.status === 'ativando' && (
                 <>
-                  <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-16 h-16 bg-blue-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Wifi className="w-8 h-8 text-blue-400 animate-pulse" />
                   </div>
                   <h2 className="text-xl font-bold text-white">Ativando...</h2>
@@ -574,7 +574,7 @@ export default function AtivarSelfService() {
               )}
               {activation.status === 'portabilidade_em_andamento' && (
                 <>
-                  <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-16 h-16 bg-amber-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Smartphone className="w-8 h-8 text-amber-400 animate-pulse" />
                   </div>
                   <h2 className="text-xl font-bold text-amber-400">Portabilidade Solicitada!</h2>
@@ -583,7 +583,7 @@ export default function AtivarSelfService() {
               )}
               {activation.status === 'ativo' && (
                 <>
-                  <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-16 h-16 bg-emerald-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
                     <CheckCircle className="w-8 h-8 text-emerald-400" />
                   </div>
                   <h2 className="text-xl font-bold text-emerald-400">Chip Ativado!</h2>
@@ -595,7 +595,7 @@ export default function AtivarSelfService() {
               )}
               {activation.status === 'erro' && (
                 <>
-                  <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-16 h-16 bg-red-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
                     <AlertCircle className="w-8 h-8 text-red-400" />
                   </div>
                   <h2 className="text-xl font-bold text-red-400">Erro na Ativacao</h2>
@@ -645,7 +645,7 @@ export default function AtivarSelfService() {
 
             {/* Payment Info */}
             {activation.status === 'aguardando_pagamento' && (
-              <Card className="bg-zinc-900 border-zinc-600/50">
+              <Card className="bg-zinc-900 border-zinc-500/60">
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-300 text-sm">Valor</span>
@@ -715,7 +715,7 @@ export default function AtivarSelfService() {
 
                   {/* No payment info (mock) */}
                   {!activation.asaas_pix_code && !activation.barcode && !activation.asaas_invoice_url && (
-                    <div className="text-center p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <div className="text-center p-4 bg-amber-500/15 border border-amber-500/40 rounded-lg">
                       <p className="text-amber-400 text-sm">Pagamento registrado no sistema.</p>
                       <p className="text-zinc-300 text-xs mt-1">O administrador ira confirmar o pagamento e ativar seu chip.</p>
                     </div>
@@ -732,7 +732,7 @@ export default function AtivarSelfService() {
             )}
 
             {/* Plan Summary */}
-            <Card className="bg-zinc-900 border-zinc-600/50">
+            <Card className="bg-zinc-900 border-zinc-500/60">
               <CardContent className="p-4">
                 <h4 className="text-zinc-300 text-xs uppercase tracking-wider mb-2">Resumo</h4>
                 <div className="space-y-1.5 text-sm">

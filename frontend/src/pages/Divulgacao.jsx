@@ -158,7 +158,7 @@ export default function Divulgacao() {
             <p className="text-xs text-zinc-500 mb-4">Compartilhe com seus clientes via WhatsApp, email ou redes sociais</p>
 
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-zinc-950 border border-zinc-600/50 rounded-lg px-4 py-3 font-mono text-sm text-blue-400 truncate" data-testid="divulgacao-portal-url">
+              <div className="flex-1 bg-zinc-950 border border-zinc-500/60 rounded-lg px-4 py-3 font-mono text-sm text-blue-400 truncate" data-testid="divulgacao-portal-url">
                 {portalUrl}
               </div>
               <Button
@@ -205,7 +205,7 @@ export default function Divulgacao() {
               <QrCode className="w-4 h-4 text-green-400" />
               Texto para WhatsApp
             </h3>
-            <div className="bg-zinc-950 border border-zinc-600/50 rounded-lg p-4 text-sm text-zinc-300 whitespace-pre-line">
+            <div className="bg-zinc-950 border border-zinc-500/60 rounded-lg p-4 text-sm text-zinc-300 whitespace-pre-line">
               {`Ola! Acesse o *Portal do Cliente HomeOn* para consultar seu saldo de dados, minutos, SMS e faturas.\n\nAcesse: ${portalUrl}\n\nUse seu CPF e numero de telefone para entrar.`}
             </div>
             <Button

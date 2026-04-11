@@ -152,7 +152,7 @@ export function Ofertas() {
           onClick={() => setCategoriaFilter('movel')}
           className={`px-4 py-2 rounded-sm text-sm font-medium transition-colors border flex items-center gap-2 ${
             categoriaFilter === 'movel'
-              ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+              ? 'bg-blue-500/15 text-blue-400 border-blue-500/40'
               : 'bg-transparent text-zinc-500 border-zinc-800 hover:text-zinc-300'
           }`}
           data-testid="filter-movel"
@@ -207,7 +207,7 @@ export function Ofertas() {
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium border ${
                     catInfo.color === 'violet'
                       ? 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                      : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                      : 'bg-blue-500/15 text-blue-400 border-blue-500/40'
                   }`}>
                     <CatIcon className="w-3 h-3" />{catInfo.label}
                   </span>
@@ -228,7 +228,7 @@ export function Ofertas() {
 
                   <div className="pt-3 border-t border-zinc-800 space-y-2">
                     <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-sm flex items-center justify-center ${catInfo.color === 'violet' ? 'bg-violet-500/10' : 'bg-amber-500/10'}`}>
+                      <div className={`w-8 h-8 rounded-sm flex items-center justify-center ${catInfo.color === 'violet' ? 'bg-violet-500/10' : 'bg-amber-500/15'}`}>
                         <Package className={`w-4 h-4 ${catInfo.color === 'violet' ? 'text-violet-500' : 'text-amber-500'}`} />
                       </div>
                       <div>
@@ -252,7 +252,7 @@ export function Ofertas() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">{editingOferta ? 'Editar Oferta' : 'Nova Oferta Comercial'}</DialogTitle>
           </DialogHeader>
@@ -261,7 +261,7 @@ export function Ofertas() {
               <Label className="text-zinc-300">Categoria</Label>
               <Select value={formData.categoria} onValueChange={(v) => setFormData({ ...formData, categoria: v })}>
                 <SelectTrigger className="form-input" data-testid="oferta-categoria-select"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-600/50">
+                <SelectContent className="bg-zinc-900 border-zinc-500/60">
                   <SelectItem value="movel">Movel</SelectItem>
                   <SelectItem value="m2m">M2M</SelectItem>
                 </SelectContent>
@@ -306,7 +306,7 @@ export function Ofertas() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Remover a oferta <span className="text-white font-medium">{ofertaToDelete?.nome}</span>?</p>
           <p className="text-xs text-amber-400 mt-1">Ofertas vinculadas a chips nao podem ser removidas.</p>

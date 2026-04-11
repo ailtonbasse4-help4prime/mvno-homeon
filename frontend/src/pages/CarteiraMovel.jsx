@@ -22,10 +22,10 @@ import { useSecureAction } from '../hooks/useSecureAction';
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const STATUS_MAP = {
-  PENDING: { label: 'Pendente', class: 'bg-amber-500/10 text-amber-400 border-amber-500/30', icon: Clock },
-  CONFIRMED: { label: 'Confirmado', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
-  RECEIVED: { label: 'Recebido', class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
-  OVERDUE: { label: 'Vencido', class: 'bg-red-500/10 text-red-400 border-red-500/30', icon: AlertTriangle },
+  PENDING: { label: 'Pendente', class: 'bg-amber-500/15 text-amber-400 border-amber-500/40', icon: Clock },
+  CONFIRMED: { label: 'Confirmado', class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40', icon: CheckCircle },
+  RECEIVED: { label: 'Recebido', class: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40', icon: CheckCircle },
+  OVERDUE: { label: 'Vencido', class: 'bg-red-500/15 text-red-400 border-red-500/40', icon: AlertTriangle },
   REFUNDED: { label: 'Reembolsado', class: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', icon: Ban },
   CANCELLED: { label: 'Cancelado', class: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', icon: XCircle },
 };
@@ -148,8 +148,8 @@ export function CarteiraMovel() {
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium border ${
             asaasConfigured
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-              : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
+              : 'bg-amber-500/15 text-amber-400 border-amber-500/40'
           }`} data-testid="asaas-status-badge">
             {asaasConfigured ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
             {asaasConfigured ? 'Asaas Conectado' : 'Asaas Pendente'}
@@ -170,7 +170,7 @@ export function CarteiraMovel() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" data-testid="carteira-resumo">
           <div className="dashboard-card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-emerald-500/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-sm bg-emerald-500/15 flex items-center justify-center">
                 <TrendingUp className="w-5 h-5 text-emerald-500" />
               </div>
               <div>
@@ -181,7 +181,7 @@ export function CarteiraMovel() {
           </div>
           <div className="dashboard-card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-amber-500/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-sm bg-amber-500/15 flex items-center justify-center">
                 <Clock className="w-5 h-5 text-amber-500" />
               </div>
               <div>
@@ -193,7 +193,7 @@ export function CarteiraMovel() {
           </div>
           <div className="dashboard-card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-red-500/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-sm bg-red-500/15 flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
               </div>
               <div>
@@ -205,7 +205,7 @@ export function CarteiraMovel() {
           </div>
           <div className="dashboard-card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-blue-500/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-sm bg-blue-500/15 flex items-center justify-center">
                 <Receipt className="w-5 h-5 text-blue-500" />
               </div>
               <div>
@@ -225,7 +225,7 @@ export function CarteiraMovel() {
           <SelectTrigger className="w-48 form-input" data-testid="cobranca-status-filter">
             <SelectValue placeholder="Todos" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-600/50">
+          <SelectContent className="bg-zinc-900 border-zinc-500/60">
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="PENDING">Pendente</SelectItem>
             <SelectItem value="CONFIRMED">Confirmado</SelectItem>
@@ -269,9 +269,9 @@ export function CarteiraMovel() {
                     <td className="text-zinc-300 text-sm whitespace-nowrap">{cob.oferta_nome || '-'}</td>
                     <td className="whitespace-nowrap">
                       <span className={`px-2 py-0.5 rounded-sm text-xs font-medium border ${
-                        cob.billing_type === 'PIX' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                        : cob.billing_type === 'BOLETO' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                        : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                        cob.billing_type === 'PIX' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
+                        : cob.billing_type === 'BOLETO' ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+                        : 'bg-blue-500/15 text-blue-400 border-blue-500/40'
                       }`}>{cob.billing_type}</span>
                     </td>
                     <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(cob.valor)}</td>
@@ -310,7 +310,7 @@ export function CarteiraMovel() {
 
       {/* Create Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader>
             <DialogTitle className="text-white">Nova Cobranca</DialogTitle>
           </DialogHeader>
@@ -331,7 +331,7 @@ export function CarteiraMovel() {
                 <Label className="text-zinc-300">Linha (opcional)</Label>
                 <Select value={formData.linha_id} onValueChange={(v) => setFormData({ ...formData, linha_id: v })}>
                   <SelectTrigger className="form-input" data-testid="cobranca-linha-select"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
+                  <SelectContent className="bg-zinc-900 border-zinc-500/60">
                     <SelectItem value="none">Nenhuma</SelectItem>
                     {clienteLinhas.map((l) => (
                       <SelectItem key={l.id} value={l.id}>{l.msisdn || l.numero} - {l.plano_nome || 'Plano'}</SelectItem>
@@ -345,7 +345,7 @@ export function CarteiraMovel() {
                 <Label className="text-zinc-300">Tipo de Pagamento</Label>
                 <Select value={formData.billing_type} onValueChange={(v) => setFormData({ ...formData, billing_type: v })}>
                   <SelectTrigger className="form-input" data-testid="cobranca-billing-select"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-600/50">
+                  <SelectContent className="bg-zinc-900 border-zinc-500/60">
                     <SelectItem value="PIX">PIX</SelectItem>
                     <SelectItem value="BOLETO">Boleto</SelectItem>
                     <SelectItem value="CREDIT_CARD">Cartao de Credito</SelectItem>
@@ -392,7 +392,7 @@ export function CarteiraMovel() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-600/50">
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
           <DialogHeader><DialogTitle className="text-white">Confirmar Exclusao</DialogTitle></DialogHeader>
           <p className="text-zinc-400">Remover a cobranca de <span className="text-white font-medium">{formatCurrency(cobrancaToDelete?.valor)}</span>?</p>
           <DialogFooter>

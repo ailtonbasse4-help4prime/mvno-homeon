@@ -512,22 +512,22 @@ export function GestaoCobrancas() {
 
       {/* Cards Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="bg-zinc-900 border-zinc-600/50"><CardContent className="p-4 text-center">
+        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
           <DollarSign className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
           <div className="text-lg font-bold text-emerald-400">R$ {(fin.receita_total || 0).toFixed(2)}</div>
           <div className="text-xs text-zinc-400">Receita</div>
         </CardContent></Card>
-        <Card className="bg-zinc-900 border-zinc-600/50"><CardContent className="p-4 text-center">
+        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
           <Clock className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
           <div className="text-lg font-bold text-yellow-400">R$ {(fin.pendente_total || 0).toFixed(2)}</div>
           <div className="text-xs text-zinc-400">Pendente</div>
         </CardContent></Card>
-        <Card className="bg-zinc-900 border-zinc-600/50"><CardContent className="p-4 text-center">
+        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
           <AlertCircle className="w-5 h-5 text-red-400 mx-auto mb-1" />
           <div className="text-lg font-bold text-red-400">R$ {(fin.vencido_total || 0).toFixed(2)}</div>
           <div className="text-xs text-zinc-400">Vencido</div>
         </CardContent></Card>
-        <Card className="bg-zinc-900 border-zinc-600/50"><CardContent className="p-4 text-center">
+        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
           <FileText className="w-5 h-5 text-blue-400 mx-auto mb-1" />
           <div className="text-lg font-bold">{cobs.total || 0}</div>
           <div className="text-xs text-zinc-400">{cobs.pagas || 0} pagas | {cobs.pendentes || 0} pendentes</div>
@@ -580,7 +580,7 @@ export function GestaoCobrancas() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={6} className="p-8 text-center text-zinc-500">Nenhuma cobranca encontrada</td></tr>
             ) : filtered.map(c => (
-              <tr key={c.id} className="border-b border-zinc-600/40 hover:bg-zinc-900/50 cursor-pointer" onClick={() => handleViewDetail(c)}>
+              <tr key={c.id} className="border-b border-zinc-500/50 hover:bg-zinc-900/50 cursor-pointer" onClick={() => handleViewDetail(c)}>
                 <td className="p-3 whitespace-nowrap">
                   <div className="font-medium">{c.cliente_nome || '—'}</div>
                   <div className="text-xs text-zinc-300">
@@ -970,7 +970,7 @@ export function GestaoCobrancas() {
               </Button>
             </div>
             {diagResult && (
-              <div className={`p-3 rounded-lg text-sm space-y-1 ${diagResult.api_test === 'OK' ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-red-500/10 border border-red-500/30'}`}
+              <div className={`p-3 rounded-lg text-sm space-y-1 ${diagResult.api_test === 'OK' ? 'bg-emerald-500/15 border border-emerald-500/40' : 'bg-red-500/15 border border-red-500/40'}`}
                 data-testid="diagnostico-result">
                 <p className={diagResult.api_test === 'OK' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
                   API: {diagResult.api_test}
