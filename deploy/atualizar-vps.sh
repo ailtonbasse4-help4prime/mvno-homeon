@@ -27,6 +27,10 @@ sudo cp -r /tmp/mvno-homeon/frontend/build/* /var/www/mvno/frontend/
 echo "[4/6] Atualizando backend MVNO..."
 sudo cp /tmp/mvno-homeon/backend/server.py /opt/mvno-homeon/backend/server.py
 sudo cp -r /tmp/mvno-homeon/backend/services/* /opt/mvno-homeon/backend/services/
+sudo cp /tmp/mvno-homeon/backend/requirements.txt /opt/mvno-homeon/backend/requirements.txt
+sudo cp -r /tmp/mvno-homeon/deploy/* /opt/mvno-homeon/deploy/ 2>/dev/null || true
+echo "  Instalando dependencias Python..."
+cd /opt/mvno-homeon/backend && source /app/venv/bin/activate && pip install -q -r requirements.txt 2>/dev/null || echo "AVISO: Algumas dependencias podem ter falhado"
 
 echo "[5/6] Atualizando Nginx (proxy /api -> porta 3002)..."
 sudo cp /tmp/mvno-homeon/deploy/vps-backend/nginx-mvno.conf /etc/nginx/sites-enabled/app-ativacao || echo "AVISO: Nginx config nao copiada"
