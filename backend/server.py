@@ -1350,6 +1350,20 @@ async def activate_line(data: ActivationRequest, request: Request):
             chip_status = ChipStatus.reservado.value
         msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
 
+        # Se nao veio o numero na resposta de ativacao, consultar o chip na Ta Telecom
+        if not msisdn:
+            try:
+                await asyncio.sleep(2)  # Aguardar processamento na operadora
+                detail_resp = await operadora_service.consultar_linha(
+                    chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+                )
+                if detail_resp.success and detail_resp.data:
+                    msisdn = str(detail_resp.data.get("numero") or detail_resp.data.get("msisdn") or "")
+                    if msisdn:
+                        logger.info(f"Numero obtido via consulta pos-ativacao: {msisdn} para ICCID {chip['iccid']}")
+            except Exception as e:
+                logger.warning(f"Nao foi possivel consultar numero pos-ativacao: {e}")
+
         await db.chips.update_one({"_id": ObjectId(data.chip_id)}, {"$set": {
             "status": chip_status, "cliente_id": data.cliente_id, "msisdn": msisdn,
         }})
@@ -1373,7 +1387,7 @@ async def activate_line(data: ActivationRequest, request: Request):
             success=result.success,
             status=status_str,
             message=msg,
-            numero=result.numero or (result.data.get("msisdn") if result.data else None),
+            numero=msisdn if result.success else None,
             oferta_nome=str(oferta["nome"]),
             plano_nome=str(plano["nome"]),
             franquia=str(plano["franquia"]),
