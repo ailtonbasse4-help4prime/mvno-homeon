@@ -5,7 +5,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ## Arquitetura
 - **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + html5-qrcode + qrcode.react
-- **Backend**: FastAPI (Python)
+- **Backend**: FastAPI (Python) + slowapi (rate limiting)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=lax)
 - **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - producao)
@@ -46,35 +46,37 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Pagina publica /ativar com leitor QR Code e ativacao automatica
 
 ### Correcoes Producao (10/04/2026)
-- [x] DNS corrigido: CNAME preview -> Registro A VPS
-- [x] Deploy script corrigido: URLs relativas, proxy Nginx /api -> porta 3002
-- [x] Nginx: headers no-cache para HTML, CDN-Cache-Control no-store
-- [x] CORS: allow_credentials com origins especificas
-- [x] Cookie: SameSite=lax para mesmo dominio
-- [x] Modelos Pydantic defensivos: todos campos Optional com defaults
-- [x] ObjectId.is_valid() em todas queries com IDs de referencia
-- [x] Dados Adriana corrigidos na VPS (chip_id invalido, numero/msisdn)
-- [x] Asaas reconfigurado na VPS (chave producao reinserida no MongoDB)
-- [x] ErrorBoundary reseta ao navegar entre paginas
-- [x] Linhas em ordem alfabetica e sem quebra de linha (min-w-[1400px])
-- [x] Service Worker v2 com auto-limpeza de cache
+- [x] DNS, Deploy script, Nginx, CORS, Cookies, Modelos Pydantic defensivos
+- [x] ObjectId.is_valid() em todas queries, ErrorBoundary, Service Worker v2
 
 ### Reparo de Dados e Rate Limit (11/04/2026)
-- [x] Deteccao especifica de HTTP 429 (Rate Limit) no adaptador Ta Telecom
+- [x] Deteccao HTTP 429 no adaptador Ta Telecom
 - [x] Sync melhorado: 5 retries, delay 0.6s, backoff exponencial para 429
 - [x] Endpoint POST /api/operadora/reparar-clientes (background task)
-- [x] Endpoint GET /api/operadora/reparar-status (polling de progresso)
-- [x] Botao "Reparar Dados" na pagina de Clientes com feedback visual
+- [x] Botao "Reparar Dados" na pagina de Clientes
 
-## Bugs Conhecidos
-- [ ] Bug de navegacao no menu: ao clicar rapidamente em varios itens, pode travar na tela anterior (parcialmente corrigido com ErrorBoundary reset)
+### Seguranca e Backup (11/04/2026)
+- [x] **Rate Limiting** (slowapi): 10 req/min nos endpoints de login (admin e portal)
+- [x] **Bloqueio Progressivo de Login**: 5 falhas=15min, 10=1h, 15+=24h com log de seguranca
+- [x] **Security Headers**: X-Frame-Options DENY, X-Content-Type-Options nosniff, X-XSS-Protection, Referrer-Policy, Permissions-Policy, HSTS
+- [x] **Confirmacao de Senha p/ Acoes Destrutivas**: Todas as rotas DELETE exigem X-Confirm-Token (token JWT de 10min obtido via POST /api/auth/confirm-password)
+- [x] **ConfirmPasswordDialog**: Modal reutilizavel integrado em 8 paginas (Clientes, Chips, Planos, Ofertas, Usuarios, GestaoCobrancas, CarteiraMovel, Revendedores)
+- [x] **Backup Pre-Deploy**: Script atualizar-vps.sh faz backup automatico do MongoDB antes de aplicar atualizacoes
+- [x] **Backup Diario**: Script backup-mvno.sh para cron (3:00 AM), retencao de 10 backups
+- [x] **Restauracao Rapida**: Script restaurar-backup.sh para restaurar banco + backend a partir de qualquer backup
+- [x] **Setup Cron**: Script setup-backup-cron.sh para configurar backup automatico na VPS
+
+## Scripts de Deploy/Backup
+- `/deploy/atualizar-vps.sh` - Deploy com backup pre-deploy automatico
+- `/deploy/backup-mvno.sh` - Backup manual ou via cron
+- `/deploy/restaurar-backup.sh` - Restauracao de backup
+- `/deploy/setup-backup-cron.sh` - Configurar cron para backup diario
 
 ## Backlog
 
 ### P1 - Alta Prioridade
 - [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
-- [ ] Desmembrar server.py (3800+ linhas) em roteadores separados
-- [ ] Investigar/corrigir bug de navegacao do menu definitivamente
+- [ ] Desmembrar server.py (4200+ linhas) em roteadores separados
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
