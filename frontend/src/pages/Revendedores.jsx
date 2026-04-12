@@ -226,9 +226,9 @@ export function Revendedores() {
         .steps { list-style: none; padding: 0; margin: 0; }
         .steps li { font-size: 6pt; color: #333; padding: 0.3mm 0; display: flex; align-items: flex-start; gap: 1mm; line-height: 1.3; }
         .step-num { background: #1e3a5f; color: white; border-radius: 50%; width: 9px; height: 9px; min-width: 9px; display: flex; align-items: center; justify-content: center; font-size: 4.5pt; font-weight: bold; margin-top: 0.3px; }
-        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1mm; padding-top: 1mm; border-top: 0.5px dashed #ccc; }
-        .card-footer .help { font-size: 5pt; color: #1e3a5f; font-weight: bold; }
-        .card-footer .portal { font-size: 4pt; color: #999; }
+        .card-footer { text-align: center; margin-top: 1mm; padding-top: 1mm; border-top: 0.5px dashed #ccc; }
+        .card-footer .help { font-size: 5.5pt; color: #1e3a5f; font-weight: bold; }
+        .card-footer .portal { font-size: 5pt; color: #1e3a5f; font-weight: bold; }
         .sale-info { font-size: 5pt; color: #555; margin-top: 0.5mm; line-height: 1.3; }
         .sale-info .shopee { color: #e8590c; font-weight: 600; }
         .sale-info .revendedor { color: #1e3a5f; font-weight: 600; }
@@ -561,15 +561,15 @@ export function Revendedores() {
                             )}
                           </div>
                           <div style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             marginTop: '0.5mm', paddingTop: '0.5mm', borderTop: '0.5px dashed #ccc',
+                            textAlign: 'center',
                           }}>
-                            <span style={{ fontSize: '5pt', color: '#1e3a5f', fontWeight: 'bold' }}>
+                            <div style={{ fontSize: '5.5pt', color: '#1e3a5f', fontWeight: 'bold' }}>
                               Contato: (19) 92005-1397
-                            </span>
-                            <span style={{ fontSize: '4pt', color: '#999' }}>
+                            </div>
+                            <div style={{ fontSize: '5pt', color: '#1e3a5f', fontWeight: 'bold' }}>
                               {getSiteUrl()}/portal
-                            </span>
+                            </div>
                           </div>
                         </div>
                       </div>
