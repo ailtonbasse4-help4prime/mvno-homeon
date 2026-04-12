@@ -184,6 +184,8 @@ export function Revendedores() {
     if (!qrDialogOpen) setQrDialogOpen(true);
   };
 
+  const getSelectedRevendedor = () => revendedores.find(r => r.id === selectedRevId);
+
   const executePrint = () => {
     const printContent = document.getElementById('qr-print-area');
     if (!printContent) return;
@@ -222,11 +224,14 @@ export function Revendedores() {
         }
         .card-right .title { font-size: 7pt; font-weight: bold; color: #1e3a5f; margin-bottom: 1mm; text-transform: uppercase; letter-spacing: 0.2px; }
         .steps { list-style: none; padding: 0; margin: 0; }
-        .steps li { font-size: 5pt; color: #333; padding: 0.2mm 0; display: flex; align-items: flex-start; gap: 1mm; line-height: 1.3; }
-        .step-num { background: #1e3a5f; color: white; border-radius: 50%; width: 8px; height: 8px; min-width: 8px; display: flex; align-items: center; justify-content: center; font-size: 4pt; font-weight: bold; margin-top: 0.3px; }
+        .steps li { font-size: 6pt; color: #333; padding: 0.3mm 0; display: flex; align-items: flex-start; gap: 1mm; line-height: 1.3; }
+        .step-num { background: #1e3a5f; color: white; border-radius: 50%; width: 9px; height: 9px; min-width: 9px; display: flex; align-items: center; justify-content: center; font-size: 4.5pt; font-weight: bold; margin-top: 0.3px; }
         .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1mm; padding-top: 1mm; border-top: 0.5px dashed #ccc; }
-        .card-footer .help { font-size: 4.5pt; color: #666; }
+        .card-footer .help { font-size: 5pt; color: #1e3a5f; font-weight: bold; }
         .card-footer .portal { font-size: 4pt; color: #999; }
+        .sale-info { font-size: 5pt; color: #555; margin-top: 0.5mm; line-height: 1.3; }
+        .sale-info .shopee { color: #e8590c; font-weight: 600; }
+        .sale-info .revendedor { color: #1e3a5f; font-weight: 600; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
@@ -480,7 +485,11 @@ export function Revendedores() {
               <div className="border border-zinc-500/60 rounded-lg p-4 bg-white overflow-auto max-h-[500px]">
                 <div id="qr-print-area">
                   <div className="cards-container" style={{ display: 'flex', flexDirection: 'column', gap: '6mm' }}>
-                    {qrSelectedIccids.map(iccid => (
+                    {qrSelectedIccids.map(iccid => {
+                      const rev = getSelectedRevendedor();
+                      const isRevendedor = !!rev;
+                      const desconto = rev?.desconto_valor || 0;
+                      return (
                       <div key={iccid} className="activation-card" style={{
                         width: '80mm', height: '50mm', border: '1.5px solid #1e3a5f',
                         borderRadius: '3mm', display: 'flex', flexDirection: 'row',
@@ -510,10 +519,10 @@ export function Revendedores() {
 
                         {/* Right side - Steps */}
                         <div style={{
-                          flex: 1, padding: '2mm 3mm',
+                          flex: 1, padding: '1.5mm 3mm',
                           display: 'flex', flexDirection: 'column', justifyContent: 'center',
                         }}>
-                          <div style={{ fontSize: '7pt', fontWeight: 'bold', color: '#1e3a5f', marginBottom: '1mm', textTransform: 'uppercase', letterSpacing: '0.2px' }}>
+                          <div style={{ fontSize: '7pt', fontWeight: 'bold', color: '#1e3a5f', marginBottom: '0.8mm', textTransform: 'uppercase', letterSpacing: '0.2px' }}>
                             Ativacao do Chip
                           </div>
                           <ol style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -521,30 +530,42 @@ export function Revendedores() {
                               'Escaneie o QR Code ao lado',
                               'Preencha seus dados',
                               'Verifique se seus dados estao corretos',
-                              'Clique em Ativar',
+                              'Clique em Pagar e Ativar',
                               'Insira o chip no celular',
                               'Pronto! Seu chip esta ativado',
                             ].map((step, i) => (
                               <li key={i} style={{
-                                fontSize: '5pt', color: '#333', padding: '0.2mm 0',
+                                fontSize: '6pt', color: '#333', padding: '0.3mm 0',
                                 display: 'flex', alignItems: 'flex-start', gap: '1mm', lineHeight: '1.3',
                               }}>
                                 <span style={{
                                   background: '#1e3a5f', color: 'white', borderRadius: '50%',
-                                  width: '8px', height: '8px', minWidth: '8px',
+                                  width: '9px', height: '9px', minWidth: '9px',
                                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '4pt', fontWeight: 'bold', marginTop: '0.3px',
+                                  fontSize: '4.5pt', fontWeight: 'bold', marginTop: '0.3px',
                                 }}>{i + 1}</span>
                                 {step}
                               </li>
                             ))}
                           </ol>
+                          {/* Sale info */}
+                          <div className="sale-info" style={{ fontSize: '5pt', color: '#555', marginTop: '0.5mm', lineHeight: '1.3' }}>
+                            {isRevendedor ? (
+                              <span style={{ color: '#1e3a5f', fontWeight: 600 }}>
+                                Revendedor R$ {desconto.toFixed(2)} desconto
+                              </span>
+                            ) : (
+                              <span style={{ color: '#e8590c', fontWeight: 600 }}>
+                                Compra Shopee - Ativacao inclusa
+                              </span>
+                            )}
+                          </div>
                           <div style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            marginTop: '1mm', paddingTop: '1mm', borderTop: '0.5px dashed #ccc',
+                            marginTop: '0.5mm', paddingTop: '0.5mm', borderTop: '0.5px dashed #ccc',
                           }}>
-                            <span style={{ fontSize: '4.5pt', color: '#666' }}>
-                              Ajuda: (19) 92005-1397
+                            <span style={{ fontSize: '5pt', color: '#1e3a5f', fontWeight: 'bold' }}>
+                              Contato: (19) 92005-1397
                             </span>
                             <span style={{ fontSize: '4pt', color: '#999' }}>
                               {getSiteUrl()}/portal
@@ -552,7 +573,8 @@ export function Revendedores() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
