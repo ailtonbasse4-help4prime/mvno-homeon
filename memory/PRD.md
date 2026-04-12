@@ -81,6 +81,17 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Impressao individual ou em lote
 - [x] Cabem 10 cartoes por folha A4
 
+### Retry Automatico de Ativacoes (12/04/2026)
+- [x] Deteccao inteligente de erros retentaveis (timeout, 429, server error, connection)
+- [x] Backoff progressivo: 2min, 5min, 15min, 30min, 1h (max 5 tentativas)
+- [x] Background worker asyncio verificando fila a cada 2 minutos
+- [x] Endpoint GET /api/retry-queue com stats e config
+- [x] Endpoint POST /api/ativacoes-selfservice/{id}/retry para retry manual
+- [x] Status "retry_pendente" com proximo horario de retry
+- [x] Historico de erros por tentativa (retry_errors array)
+- [x] UI atualizada: card Retry Pendente, botao Retentar, info expandivel
+- [x] Filtro por retry_pendente no dropdown de status
+
 ## Scripts de Deploy/Backup
 - /deploy/atualizar-vps.sh - Deploy com backup pre-deploy + pip install
 - /deploy/backup-mvno.sh - Backup manual ou via cron
@@ -90,8 +101,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ## Backlog
 
 ### P1 - Alta Prioridade
-- [ ] Retry automatico ativacoes pendentes/falhas na Ta Telecom
-- [ ] Desmembrar server.py (4300+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (4600+ linhas) em roteadores separados
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
