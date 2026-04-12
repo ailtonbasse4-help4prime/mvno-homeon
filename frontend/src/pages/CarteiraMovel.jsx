@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import {
   Wallet, Plus, Trash2, Search, DollarSign, Clock, AlertTriangle,
-  CheckCircle, XCircle, Receipt, TrendingUp, Ban,
+  CheckCircle, XCircle, Receipt, TrendingUp, Ban, Mail, Send,
 } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
@@ -61,26 +61,45 @@ export function CarteiraMovel() {
   const [formData, setFormData] = useState({
     cliente_id: '', linha_id: '', billing_type: 'PIX', valor: '', vencimento: '', descricao: '',
   });
+  const [emailConfig, setEmailConfig] = useState(null);
+  const [testEmail, setTestEmail] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
       const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
-      const [resumoRes, cobrancasRes, clientesRes, linhasRes] = await Promise.all([
+      const [resumoRes, cobrancasRes, clientesRes, linhasRes, emailRes] = await Promise.all([
         axios.get(`${API_URL}/api/carteira/resumo`, { withCredentials: true }),
         axios.get(`${API_URL}/api/carteira/cobrancas`, { params, withCredentials: true }),
         axios.get(`${API_URL}/api/clientes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/linhas`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/email/config`, { withCredentials: true }).catch(() => ({ data: null })),
       ]);
       setResumo(safeObject(resumoRes.data));
       setCobrancas(safeArray(cobrancasRes.data));
       setClientes(safeArray(clientesRes.data));
       setLinhas(safeArray(linhasRes.data));
+      if (emailRes.data) setEmailConfig(emailRes.data);
     } catch (error) {
       toast.error('Erro ao carregar dados da carteira');
     } finally { setLoading(false); }
   }, [statusFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleSendTestEmail = async () => {
+    if (!testEmail) { toast.error('Informe o email de destino'); return; }
+    setSendingTest(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/email/test`, { to_email: testEmail }, { withCredentials: true });
+      if (res.data.success) {
+        toast.success(`Email de teste enviado para ${testEmail}`);
+      } else {
+        toast.error(res.data.error || 'Falha ao enviar');
+      }
+    } catch (e) { toast.error(e.response?.data?.detail || 'Erro ao enviar email de teste'); }
+    setSendingTest(false);
+  };
 
   const clienteLinhas = formData.cliente_id
     ? linhas.filter(l => l.cliente_id === formData.cliente_id)
@@ -154,6 +173,14 @@ export function CarteiraMovel() {
             {asaasConfigured ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
             {asaasConfigured ? 'Asaas Conectado' : 'Asaas Pendente'}
           </span>
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium border ${
+            emailConfig?.configured
+              ? 'bg-blue-500/15 text-blue-400 border-blue-500/40'
+              : 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+          }`} data-testid="email-status-badge">
+            <Mail className="w-3 h-3" />
+            {emailConfig?.configured ? 'Email Ativo' : 'Email Pendente'}
+          </span>
           {isAdmin && (
             <Button onClick={() => {
               setFormData({ cliente_id: '', linha_id: '', billing_type: 'PIX', valor: '', vencimento: '', descricao: '' });
@@ -215,6 +242,53 @@ export function CarteiraMovel() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Email Config Card */}
+      {isAdmin && emailConfig && (
+        <div className="dashboard-card" data-testid="email-config-card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-blue-400" />
+              <h3 className="text-sm font-semibold text-zinc-200">Notificacoes por Email</h3>
+            </div>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${
+              emailConfig.configured
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40'
+                : 'bg-red-500/15 text-red-400 border-red-500/40'
+            }`}>
+              {emailConfig.configured ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+              {emailConfig.configured ? 'Configurado' : 'Nao configurado'}
+            </span>
+          </div>
+          {emailConfig.configured && (
+            <>
+              <p className="text-xs text-zinc-400 mb-3">
+                Emails enviados automaticamente via <strong className="text-zinc-300">{emailConfig.email}</strong> ao criar cobrancas e ativar chips.
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="email"
+                  value={testEmail}
+                  onChange={e => setTestEmail(e.target.value)}
+                  placeholder="Email para teste..."
+                  className="form-input flex-1 h-9 text-sm"
+                  data-testid="test-email-input"
+                />
+                <Button
+                  onClick={handleSendTestEmail}
+                  disabled={sendingTest || !testEmail}
+                  size="sm"
+                  className="h-9 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                  data-testid="send-test-email-btn"
+                >
+                  {sendingTest ? <Mail className="w-3.5 h-3.5 animate-pulse" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+                  {sendingTest ? 'Enviando...' : 'Testar'}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

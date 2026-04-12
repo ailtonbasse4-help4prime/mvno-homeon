@@ -8,7 +8,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - **Backend**: FastAPI (Python) + slowapi (rate limiting)
 - **Banco de Dados**: MongoDB
 - **Autenticacao**: JWT com httpOnly cookies (COOKIE_SECURE=true, COOKIE_SAMESITE=lax)
-- **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - producao)
+- **Integracoes**: Ta Telecom (telefonia), Asaas (pagamentos - producao), Gmail SMTP (emails)
 
 ## Ambiente de Producao (VPS Hostinger)
 - Docker: CRM Atendimento (homeon-crm) nas portas 3001/8001 - NAO MEXER
@@ -25,6 +25,7 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - **Admin (producao)**: ailtonhomeon@gmail.com / gi157258
 - **Admin (producao)**: elizpestilho@gmail.com / eliz22
 - **Portal Adriana**: CPF 23211311874 / Tel 19920090179
+- **Gmail SMTP**: homeontelecom@gmail.com (App Password configurada)
 
 ## Implementado
 
@@ -78,8 +79,10 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Cartao de Ativacao 8x5cm (12/04/2026)
 - [x] Layout compacto: QR Code + 6 passos de ativacao
 - [x] Logo HomeOn Internet, ICCID, telefone de ajuda
-- [x] Impressao individual ou em lote
-- [x] Cabem 10 cartoes por folha A4
+- [x] Impressao individual ou em lote, 10 cartoes por folha A4
+- [x] Passo 4 atualizado: "Clique em Pagar e Ativar"
+- [x] Info de venda automatica: Revendedor (desconto) ou Shopee (inclusa)
+- [x] Contato e URL em negrito/azul, empilhados centralizado
 
 ### Retry Automatico de Ativacoes (12/04/2026)
 - [x] Deteccao inteligente de erros retentaveis (timeout, 429, server error, connection)
@@ -87,10 +90,16 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Background worker asyncio verificando fila a cada 2 minutos
 - [x] Endpoint GET /api/retry-queue com stats e config
 - [x] Endpoint POST /api/ativacoes-selfservice/{id}/retry para retry manual
-- [x] Status "retry_pendente" com proximo horario de retry
-- [x] Historico de erros por tentativa (retry_errors array)
 - [x] UI atualizada: card Retry Pendente, botao Retentar, info expandivel
-- [x] Filtro por retry_pendente no dropdown de status
+
+### Email via Gmail SMTP (12/04/2026)
+- [x] Servico de email: /backend/services/email_service.py
+- [x] Templates HTML personalizados com marca HomeOn (cobranca, ativacao, lembrete)
+- [x] Envio automatico ao criar cobranca (boleto/PIX com link de pagamento)
+- [x] Envio automatico ao ativar chip (admin e self-service)
+- [x] Endpoint GET /api/email/config e POST /api/email/test
+- [x] Card de configuracao na Carteira Movel com teste de email
+- [x] Badge "Email Ativo" no header
 
 ## Scripts de Deploy/Backup
 - /deploy/atualizar-vps.sh - Deploy com backup pre-deploy + pip install

@@ -26,6 +26,7 @@ from slowapi.errors import RateLimitExceeded
 
 from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP, ErrorCode
 from services.asaas_service import asaas_service, AsaasNotConfiguredError, AsaasApiError
+from services.email_service import email_service
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -1410,6 +1411,21 @@ async def activate_line(data: ActivationRequest, request: Request):
         }
         await db.linhas.insert_one(line_doc)
 
+        # Enviar email de ativacao ao cliente
+        if status_str == "ativo" and email_service.is_configured:
+            cliente_email = cliente.get("email")
+            if cliente_email:
+                try:
+                    await email_service.send_ativacao_sucesso(
+                        to_email=cliente_email,
+                        cliente_nome=cliente["nome"],
+                        numero=msisdn,
+                        plano_nome=plano.get("nome"),
+                        iccid=chip["iccid"],
+                    )
+                except Exception as e:
+                    logger.warning(f"Erro ao enviar email de ativacao admin: {e}")
+
     try:
         return ActivationResponse(
             success=result.success,
@@ -2659,6 +2675,25 @@ async def diagnostico_asaas(request: Request):
         result["db_error"] = str(e)
     return result
 
+# ==================== EMAIL CONFIG ====================
+class EmailTestRequest(BaseModel):
+    to_email: str
+
+@api_router.get("/email/config")
+async def get_email_config(request: Request):
+    """Retorna status da configuracao de email."""
+    await require_admin(request)
+    return email_service.get_status()
+
+@api_router.post("/email/test")
+async def send_test_email(data: EmailTestRequest, request: Request):
+    """Envia email de teste."""
+    await require_admin(request)
+    result = await email_service.send_test(data.to_email)
+    if result["success"]:
+        await create_log("email", f"Email de teste enviado para {data.to_email}", None, "admin")
+    return result
+
 @api_router.get("/carteira/resumo")
 async def get_carteira_resumo(request: Request):
     await get_current_user(request)
@@ -2827,6 +2862,25 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
         inserted = await db.cobrancas.insert_one(doc)
         doc["_id"] = inserted.inserted_id
         results.append(await _build_cobranca_response(doc))
+
+        # Enviar email de cobranca ao cliente
+        cliente_email = cliente.get("email")
+        if cliente_email and email_service.is_configured:
+            try:
+                venc_fmt = venc_date.strftime("%d/%m/%Y")
+                await email_service.send_cobranca(
+                    to_email=cliente_email,
+                    cliente_nome=cliente.get("nome", "Cliente"),
+                    valor=data.valor,
+                    vencimento=venc_fmt,
+                    descricao=desc,
+                    billing_type=data.billing_type.value,
+                    invoice_url=doc.get("asaas_invoice_url"),
+                    pix_code=doc.get("asaas_pix_code"),
+                    barcode=doc.get("barcode"),
+                )
+            except Exception as e:
+                logger.warning(f"Erro ao enviar email de cobranca: {e}")
 
     label = "Cobranca" if parcelas == 1 else f"{parcelas} parcelas"
     await create_log("financeiro", f"{label} criada: R$ {data.valor:.2f} x{parcelas} para {cliente.get('nome', 'Cliente')}", user["id"], user["name"])
@@ -4142,6 +4196,22 @@ async def _trigger_selfservice_activation(doc: dict):
 
             await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": update_fields})
             await create_log("ativacao", f"Self-service {'portabilidade enviada' if is_portability else 'ativacao concluida'}: {cliente['nome']} - chip {chip['iccid']} - {msisdn or 'pendente'}", None, "self-service")
+
+            # Enviar email de ativacao ao cliente
+            if new_status == "ativo" and email_service.is_configured:
+                cliente_email = cliente.get("email")
+                if cliente_email:
+                    try:
+                        plano_nome = plano.get("nome") if plano else None
+                        await email_service.send_ativacao_sucesso(
+                            to_email=cliente_email,
+                            cliente_nome=cliente["nome"],
+                            numero=msisdn,
+                            plano_nome=plano_nome,
+                            iccid=chip["iccid"],
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro ao enviar email de ativacao: {e}")
         else:
             err_msg = result.message
             if isinstance(err_msg, list):
