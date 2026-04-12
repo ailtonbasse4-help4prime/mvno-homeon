@@ -189,18 +189,47 @@ export function Revendedores() {
     if (!printContent) return;
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
-      <html><head><title>QR Codes - ${selectedRevName}</title>
+      <html><head><title>Cartoes de Ativacao - ${selectedRevName}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px; }
-        .card { border: 1px solid #ccc; border-radius: 6px; padding: 10px; text-align: center; page-break-inside: avoid; }
-        .card svg { margin: 0 auto 6px; }
-        .iccid { font-family: monospace; font-size: 9px; color: #333; word-break: break-all; margin-top: 4px; }
-        .oferta { font-size: 11px; font-weight: bold; color: #000; }
-        .valor { font-size: 12px; color: #16a34a; font-weight: bold; margin-top: 2px; }
-        .rev { font-size: 8px; color: #666; margin-top: 2px; }
-        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } }
+        body { font-family: 'Segoe UI', Arial, sans-serif; }
+        @page { margin: 8mm; }
+        .cards-container { display: flex; flex-direction: column; gap: 6mm; }
+        .activation-card {
+          width: 150mm; height: 50mm;
+          border: 1.5px solid #1e3a5f;
+          border-radius: 4mm;
+          display: flex; flex-direction: row;
+          overflow: hidden;
+          page-break-inside: avoid;
+          background: #fff;
+        }
+        .card-left {
+          width: 48mm; min-width: 48mm;
+          background: linear-gradient(135deg, #0f2942 0%, #1e3a5f 100%);
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          padding: 3mm;
+          color: white;
+        }
+        .card-left svg { background: white; padding: 3px; border-radius: 2mm; }
+        .card-left .iccid-label { font-size: 5.5pt; font-family: monospace; margin-top: 2mm; word-break: break-all; text-align: center; line-height: 1.3; color: #a0c4e8; }
+        .card-left .logo-text { font-size: 8pt; font-weight: bold; margin-bottom: 2mm; letter-spacing: 0.5px; }
+        .card-right {
+          flex: 1; padding: 3mm 4mm;
+          display: flex; flex-direction: column;
+          justify-content: center;
+        }
+        .card-right .title { font-size: 9pt; font-weight: bold; color: #1e3a5f; margin-bottom: 1.5mm; text-transform: uppercase; letter-spacing: 0.3px; }
+        .steps { list-style: none; padding: 0; margin: 0; }
+        .steps li { font-size: 6.5pt; color: #333; padding: 0.4mm 0; display: flex; align-items: flex-start; gap: 1.5mm; line-height: 1.4; }
+        .step-num { background: #1e3a5f; color: white; border-radius: 50%; width: 10px; height: 10px; min-width: 10px; display: flex; align-items: center; justify-content: center; font-size: 5pt; font-weight: bold; margin-top: 0.5px; }
+        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5mm; padding-top: 1.5mm; border-top: 0.5px dashed #ccc; }
+        .card-footer .help { font-size: 5.5pt; color: #666; }
+        .card-footer .portal { font-size: 5pt; color: #999; }
+        @media print {
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
       </style></head><body>
       ${printContent.innerHTML}
       </body></html>
@@ -443,33 +472,84 @@ export function Revendedores() {
                   Voltar
                 </Button>
                 <Button onClick={executePrint} className="btn-primary flex items-center gap-2" data-testid="print-qr-btn">
-                  <Printer className="w-4 h-4" /> Imprimir {qrSelectedIccids.length} Etiqueta{qrSelectedIccids.length !== 1 ? 's' : ''}
+                  <Printer className="w-4 h-4" /> Imprimir {qrSelectedIccids.length} Cartao{qrSelectedIccids.length !== 1 ? 'es' : ''}
                 </Button>
               </div>
 
               {/* Preview */}
-              <div className="border border-zinc-500/60 rounded-lg p-4 bg-white">
+              <div className="border border-zinc-500/60 rounded-lg p-4 bg-white overflow-auto max-h-[500px]">
                 <div id="qr-print-area">
-                  <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  <div className="cards-container" style={{ display: 'flex', flexDirection: 'column', gap: '6mm' }}>
                     {qrSelectedIccids.map(iccid => (
-                      <div key={iccid} className="card" style={{ border: '1px solid #ccc', borderRadius: '6px', padding: '10px', textAlign: 'center', pageBreakInside: 'avoid' }}>
-                        <QRCodeSVG
-                          value={getChipUrl(iccid)}
-                          size={120}
-                          level="M"
-                          style={{ margin: '0 auto 6px' }}
-                        />
-                        <div className="oferta" style={{ fontSize: '11px', fontWeight: 'bold', color: '#000' }}>
-                          MVNO - Ativar Chip
+                      <div key={iccid} className="activation-card" style={{
+                        width: '150mm', height: '50mm', border: '1.5px solid #1e3a5f',
+                        borderRadius: '4mm', display: 'flex', flexDirection: 'row',
+                        overflow: 'hidden', pageBreakInside: 'avoid', background: '#fff',
+                      }}>
+                        {/* Left side - QR + Logo */}
+                        <div style={{
+                          width: '48mm', minWidth: '48mm',
+                          background: 'linear-gradient(135deg, #0f2942 0%, #1e3a5f 100%)',
+                          display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center',
+                          padding: '3mm', color: 'white',
+                        }}>
+                          <div style={{ fontSize: '8pt', fontWeight: 'bold', marginBottom: '2mm', letterSpacing: '0.5px' }}>
+                            HomeOn Internet
+                          </div>
+                          <div style={{ background: 'white', padding: '3px', borderRadius: '2mm' }}>
+                            <QRCodeSVG value={getChipUrl(iccid)} size={90} level="M" />
+                          </div>
+                          <div style={{
+                            fontFamily: 'monospace', fontSize: '5.5pt', marginTop: '2mm',
+                            wordBreak: 'break-all', textAlign: 'center', lineHeight: '1.3', color: '#a0c4e8',
+                          }}>
+                            {iccid}
+                          </div>
                         </div>
-                        <div className="iccid" style={{ fontFamily: 'monospace', fontSize: '9px', color: '#333', wordBreak: 'break-all', marginTop: '4px' }}>
-                          {iccid}
-                        </div>
-                        <div className="rev" style={{ fontSize: '8px', color: '#666', marginTop: '2px' }}>
-                          Rev: {selectedRevName}
-                        </div>
-                        <div style={{ fontSize: '7px', color: '#888', marginTop: '3px', borderTop: '1px dashed #ccc', paddingTop: '3px' }}>
-                          Meu plano: {getSiteUrl()}/portal
+
+                        {/* Right side - Steps */}
+                        <div style={{
+                          flex: 1, padding: '3mm 4mm',
+                          display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                        }}>
+                          <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#1e3a5f', marginBottom: '1.5mm', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                            Ativacao do Chip
+                          </div>
+                          <ol style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                            {[
+                              'Escaneie o QR Code ao lado',
+                              'Preencha seus dados',
+                              'Verifique se seus dados estao corretos',
+                              'Clique em Ativar',
+                              'Insira o chip no celular',
+                              'Pronto! Seu chip esta ativado',
+                            ].map((step, i) => (
+                              <li key={i} style={{
+                                fontSize: '6.5pt', color: '#333', padding: '0.4mm 0',
+                                display: 'flex', alignItems: 'flex-start', gap: '1.5mm', lineHeight: '1.4',
+                              }}>
+                                <span style={{
+                                  background: '#1e3a5f', color: 'white', borderRadius: '50%',
+                                  width: '10px', height: '10px', minWidth: '10px',
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '5pt', fontWeight: 'bold', marginTop: '0.5px',
+                                }}>{i + 1}</span>
+                                {step}
+                              </li>
+                            ))}
+                          </ol>
+                          <div style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            marginTop: '1.5mm', paddingTop: '1.5mm', borderTop: '0.5px dashed #ccc',
+                          }}>
+                            <span style={{ fontSize: '5.5pt', color: '#666' }}>
+                              Ajuda: (19) 92005-1397
+                            </span>
+                            <span style={{ fontSize: '5pt', color: '#999' }}>
+                              Meu plano: {getSiteUrl()}/portal
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -477,8 +557,8 @@ export function Revendedores() {
                 </div>
               </div>
 
-              <p className="text-xs text-zinc-500 text-center">
-                Dica: Use papel adesivo A4 para imprimir as etiquetas. Recorte e cole nos chips.
+              <p className="text-xs text-zinc-400 text-center">
+                Cada cartao mede 15x5cm. Cabem 5 por folha A4. Use papel adesivo ou cartolina.
               </p>
             </div>
           )}
