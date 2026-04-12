@@ -196,37 +196,37 @@ export function Revendedores() {
         @page { margin: 8mm; }
         .cards-container { display: flex; flex-direction: column; gap: 6mm; }
         .activation-card {
-          width: 150mm; height: 50mm;
+          width: 80mm; height: 50mm;
           border: 1.5px solid #1e3a5f;
-          border-radius: 4mm;
+          border-radius: 3mm;
           display: flex; flex-direction: row;
           overflow: hidden;
           page-break-inside: avoid;
           background: #fff;
         }
         .card-left {
-          width: 48mm; min-width: 48mm;
+          width: 28mm; min-width: 28mm;
           background: linear-gradient(135deg, #0f2942 0%, #1e3a5f 100%);
           display: flex; flex-direction: column;
           align-items: center; justify-content: center;
           padding: 3mm;
           color: white;
         }
-        .card-left svg { background: white; padding: 3px; border-radius: 2mm; }
-        .card-left .iccid-label { font-size: 5.5pt; font-family: monospace; margin-top: 2mm; word-break: break-all; text-align: center; line-height: 1.3; color: #a0c4e8; }
-        .card-left .logo-text { font-size: 8pt; font-weight: bold; margin-bottom: 2mm; letter-spacing: 0.5px; }
+        .card-left svg { background: white; padding: 2px; border-radius: 1.5mm; }
+        .card-left .iccid-label { font-size: 4pt; font-family: monospace; margin-top: 1mm; word-break: break-all; text-align: center; line-height: 1.2; color: #a0c4e8; }
+        .card-left .logo-text { font-size: 5.5pt; font-weight: bold; margin-bottom: 1.5mm; letter-spacing: 0.3px; }
         .card-right {
-          flex: 1; padding: 3mm 4mm;
+          flex: 1; padding: 2mm 3mm;
           display: flex; flex-direction: column;
           justify-content: center;
         }
-        .card-right .title { font-size: 9pt; font-weight: bold; color: #1e3a5f; margin-bottom: 1.5mm; text-transform: uppercase; letter-spacing: 0.3px; }
+        .card-right .title { font-size: 7pt; font-weight: bold; color: #1e3a5f; margin-bottom: 1mm; text-transform: uppercase; letter-spacing: 0.2px; }
         .steps { list-style: none; padding: 0; margin: 0; }
-        .steps li { font-size: 6.5pt; color: #333; padding: 0.4mm 0; display: flex; align-items: flex-start; gap: 1.5mm; line-height: 1.4; }
-        .step-num { background: #1e3a5f; color: white; border-radius: 50%; width: 10px; height: 10px; min-width: 10px; display: flex; align-items: center; justify-content: center; font-size: 5pt; font-weight: bold; margin-top: 0.5px; }
-        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5mm; padding-top: 1.5mm; border-top: 0.5px dashed #ccc; }
-        .card-footer .help { font-size: 5.5pt; color: #666; }
-        .card-footer .portal { font-size: 5pt; color: #999; }
+        .steps li { font-size: 5pt; color: #333; padding: 0.2mm 0; display: flex; align-items: flex-start; gap: 1mm; line-height: 1.3; }
+        .step-num { background: #1e3a5f; color: white; border-radius: 50%; width: 8px; height: 8px; min-width: 8px; display: flex; align-items: center; justify-content: center; font-size: 4pt; font-weight: bold; margin-top: 0.3px; }
+        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1mm; padding-top: 1mm; border-top: 0.5px dashed #ccc; }
+        .card-footer .help { font-size: 4.5pt; color: #666; }
+        .card-footer .portal { font-size: 4pt; color: #999; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
@@ -482,27 +482,27 @@ export function Revendedores() {
                   <div className="cards-container" style={{ display: 'flex', flexDirection: 'column', gap: '6mm' }}>
                     {qrSelectedIccids.map(iccid => (
                       <div key={iccid} className="activation-card" style={{
-                        width: '150mm', height: '50mm', border: '1.5px solid #1e3a5f',
-                        borderRadius: '4mm', display: 'flex', flexDirection: 'row',
+                        width: '80mm', height: '50mm', border: '1.5px solid #1e3a5f',
+                        borderRadius: '3mm', display: 'flex', flexDirection: 'row',
                         overflow: 'hidden', pageBreakInside: 'avoid', background: '#fff',
                       }}>
                         {/* Left side - QR + Logo */}
                         <div style={{
-                          width: '48mm', minWidth: '48mm',
+                          width: '28mm', minWidth: '28mm',
                           background: 'linear-gradient(135deg, #0f2942 0%, #1e3a5f 100%)',
                           display: 'flex', flexDirection: 'column',
                           alignItems: 'center', justifyContent: 'center',
-                          padding: '3mm', color: 'white',
+                          padding: '2mm', color: 'white',
                         }}>
-                          <div style={{ fontSize: '8pt', fontWeight: 'bold', marginBottom: '2mm', letterSpacing: '0.5px' }}>
+                          <div style={{ fontSize: '5.5pt', fontWeight: 'bold', marginBottom: '1.5mm', letterSpacing: '0.3px' }}>
                             HomeOn Internet
                           </div>
-                          <div style={{ background: 'white', padding: '3px', borderRadius: '2mm' }}>
-                            <QRCodeSVG value={getChipUrl(iccid)} size={90} level="M" />
+                          <div style={{ background: 'white', padding: '2px', borderRadius: '1.5mm' }}>
+                            <QRCodeSVG value={getChipUrl(iccid)} size={62} level="M" />
                           </div>
                           <div style={{
-                            fontFamily: 'monospace', fontSize: '5.5pt', marginTop: '2mm',
-                            wordBreak: 'break-all', textAlign: 'center', lineHeight: '1.3', color: '#a0c4e8',
+                            fontFamily: 'monospace', fontSize: '4pt', marginTop: '1mm',
+                            wordBreak: 'break-all', textAlign: 'center', lineHeight: '1.2', color: '#a0c4e8',
                           }}>
                             {iccid}
                           </div>
@@ -510,10 +510,10 @@ export function Revendedores() {
 
                         {/* Right side - Steps */}
                         <div style={{
-                          flex: 1, padding: '3mm 4mm',
+                          flex: 1, padding: '2mm 3mm',
                           display: 'flex', flexDirection: 'column', justifyContent: 'center',
                         }}>
-                          <div style={{ fontSize: '9pt', fontWeight: 'bold', color: '#1e3a5f', marginBottom: '1.5mm', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                          <div style={{ fontSize: '7pt', fontWeight: 'bold', color: '#1e3a5f', marginBottom: '1mm', textTransform: 'uppercase', letterSpacing: '0.2px' }}>
                             Ativacao do Chip
                           </div>
                           <ol style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -526,14 +526,14 @@ export function Revendedores() {
                               'Pronto! Seu chip esta ativado',
                             ].map((step, i) => (
                               <li key={i} style={{
-                                fontSize: '6.5pt', color: '#333', padding: '0.4mm 0',
-                                display: 'flex', alignItems: 'flex-start', gap: '1.5mm', lineHeight: '1.4',
+                                fontSize: '5pt', color: '#333', padding: '0.2mm 0',
+                                display: 'flex', alignItems: 'flex-start', gap: '1mm', lineHeight: '1.3',
                               }}>
                                 <span style={{
                                   background: '#1e3a5f', color: 'white', borderRadius: '50%',
-                                  width: '10px', height: '10px', minWidth: '10px',
+                                  width: '8px', height: '8px', minWidth: '8px',
                                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '5pt', fontWeight: 'bold', marginTop: '0.5px',
+                                  fontSize: '4pt', fontWeight: 'bold', marginTop: '0.3px',
                                 }}>{i + 1}</span>
                                 {step}
                               </li>
@@ -541,13 +541,13 @@ export function Revendedores() {
                           </ol>
                           <div style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            marginTop: '1.5mm', paddingTop: '1.5mm', borderTop: '0.5px dashed #ccc',
+                            marginTop: '1mm', paddingTop: '1mm', borderTop: '0.5px dashed #ccc',
                           }}>
-                            <span style={{ fontSize: '5.5pt', color: '#666' }}>
+                            <span style={{ fontSize: '4.5pt', color: '#666' }}>
                               Ajuda: (19) 92005-1397
                             </span>
-                            <span style={{ fontSize: '5pt', color: '#999' }}>
-                              Meu plano: {getSiteUrl()}/portal
+                            <span style={{ fontSize: '4pt', color: '#999' }}>
+                              {getSiteUrl()}/portal
                             </span>
                           </div>
                         </div>
@@ -558,7 +558,7 @@ export function Revendedores() {
               </div>
 
               <p className="text-xs text-zinc-400 text-center">
-                Cada cartao mede 15x5cm. Cabem 5 por folha A4. Use papel adesivo ou cartolina.
+                Cada cartao mede 8x5cm (tamanho chip). Cabem ate 10 por folha A4.
               </p>
             </div>
           )}
