@@ -24,7 +24,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP
+from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP, ErrorCode
 from services.asaas_service import asaas_service, AsaasNotConfiguredError, AsaasApiError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -41,6 +41,34 @@ JWT_ALGORITHM = "HS256"
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
 COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
 SITE_URL = os.environ.get("SITE_URL", "")
+
+# ==================== RETRY CONFIG ====================
+RETRY_MAX_ATTEMPTS = 5
+RETRY_BACKOFF_MINUTES = [2, 5, 15, 30, 60]  # Backoff progressivo por tentativa
+RETRY_CHECK_INTERVAL_SECONDS = 120  # Verificar fila a cada 2 minutos
+RETRYABLE_ERROR_CODES = {
+    ErrorCode.TIMEOUT.value,
+    ErrorCode.RATE_LIMIT.value,
+    ErrorCode.SERVER_ERROR.value,
+    ErrorCode.CONNECTION.value,
+    ErrorCode.UNKNOWN.value,
+}
+
+def _is_retryable_error(erro_msg: str, error_code: str = None) -> bool:
+    """Verifica se o erro eh retentavel (timeout, rate limit, server error, connection)."""
+    if error_code and error_code in RETRYABLE_ERROR_CODES:
+        return True
+    if not erro_msg:
+        return False
+    msg_lower = erro_msg.lower()
+    retryable_keywords = ["timeout", "429", "rate limit", "conexao", "connection", "server error", "502", "503", "504"]
+    return any(kw in msg_lower for kw in retryable_keywords)
+
+def _get_next_retry_delay(retry_count: int) -> int:
+    """Retorna delay em minutos para a proxima tentativa baseado no backoff."""
+    if retry_count < len(RETRY_BACKOFF_MINUTES):
+        return RETRY_BACKOFF_MINUTES[retry_count]
+    return RETRY_BACKOFF_MINUTES[-1]
 
 def _append_portal_link(desc: str) -> str:
     """Adiciona link do Portal do Cliente na descricao da cobranca Asaas."""
@@ -3978,6 +4006,7 @@ async def public_check_activation_status(activation_id: str):
         "ativando": "Ativacao em andamento na operadora...",
         "portabilidade_em_andamento": "Portabilidade solicitada! Voce recebera um SMS da sua operadora anterior para confirmar. Apos a confirmacao, a portabilidade sera agendada.",
         "ativo": "Chip ativado com sucesso!",
+        "retry_pendente": "Houve uma falha temporaria. A ativacao sera retentada automaticamente em breve.",
         "erro": "Erro na ativacao. Contate o suporte.",
     }
 
@@ -4117,15 +4146,60 @@ async def _trigger_selfservice_activation(doc: dict):
             err_msg = result.message
             if isinstance(err_msg, list):
                 err_msg = "; ".join(str(m) for m in err_msg)
-            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
-                "status": "erro", "erro_msg": str(err_msg),
-            }})
-            await create_log("erro", f"Self-service ativacao falhou: {err_msg}", None, "self-service")
+            error_code = result.error_code if hasattr(result, 'error_code') else None
+            retry_count = doc.get("retry_count", 0)
+            is_retryable = _is_retryable_error(str(err_msg), str(error_code) if error_code else None)
+            retry_errors = doc.get("retry_errors", [])
+            retry_errors.append({"msg": str(err_msg), "code": str(error_code) if error_code else None, "at": datetime.now(timezone.utc).isoformat()})
+
+            if is_retryable and retry_count < RETRY_MAX_ATTEMPTS:
+                delay_min = _get_next_retry_delay(retry_count)
+                next_retry = datetime.now(timezone.utc) + timedelta(minutes=delay_min)
+                await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                    "status": "retry_pendente",
+                    "erro_msg": str(err_msg),
+                    "error_code": str(error_code) if error_code else None,
+                    "retry_count": retry_count + 1,
+                    "next_retry_at": next_retry,
+                    "last_retry_at": datetime.now(timezone.utc),
+                    "retry_errors": retry_errors,
+                }})
+                await create_log("retry", f"Self-service retry agendado ({retry_count + 1}/{RETRY_MAX_ATTEMPTS}) em {delay_min}min: {err_msg}", None, "self-service")
+                logger.info(f"Retry agendado para ativacao {doc['_id']} em {delay_min} minutos (tentativa {retry_count + 1})")
+            else:
+                await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                    "status": "erro", "erro_msg": str(err_msg),
+                    "error_code": str(error_code) if error_code else None,
+                    "retry_count": retry_count,
+                    "retry_errors": retry_errors,
+                }})
+                reason = "nao retentavel" if not is_retryable else f"max retries ({RETRY_MAX_ATTEMPTS}) atingido"
+                await create_log("erro", f"Self-service ativacao falhou ({reason}): {err_msg}", None, "self-service")
     except Exception as e:
         logger.error(f"Erro na ativacao self-service: {e}")
-        await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
-            "status": "erro", "erro_msg": str(e),
-        }})
+        error_str = str(e)
+        retry_count = doc.get("retry_count", 0)
+        is_retryable = _is_retryable_error(error_str)
+        retry_errors = doc.get("retry_errors", [])
+        retry_errors.append({"msg": error_str, "code": None, "at": datetime.now(timezone.utc).isoformat()})
+
+        if is_retryable and retry_count < RETRY_MAX_ATTEMPTS:
+            delay_min = _get_next_retry_delay(retry_count)
+            next_retry = datetime.now(timezone.utc) + timedelta(minutes=delay_min)
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": "retry_pendente", "erro_msg": error_str,
+                "retry_count": retry_count + 1,
+                "next_retry_at": next_retry,
+                "last_retry_at": datetime.now(timezone.utc),
+                "retry_errors": retry_errors,
+            }})
+            logger.info(f"Retry agendado (exception) para ativacao {doc['_id']} em {delay_min}min")
+        else:
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": "erro", "erro_msg": error_str,
+                "retry_count": retry_count,
+                "retry_errors": retry_errors,
+            }})
 
 @api_router.post("/public/ativacao/{activation_id}/confirmar-pagamento")
 async def public_confirm_payment_manual(activation_id: str):
@@ -4183,6 +4257,11 @@ async def admin_list_selfservice_activations(request: Request, status: Optional[
             "status": d.get("status"),
             "msisdn": d.get("msisdn"),
             "erro_msg": d.get("erro_msg"),
+            "error_code": d.get("error_code"),
+            "retry_count": d.get("retry_count", 0),
+            "next_retry_at": d.get("next_retry_at").isoformat() if d.get("next_retry_at") else None,
+            "last_retry_at": d.get("last_retry_at").isoformat() if d.get("last_retry_at") else None,
+            "retry_errors": d.get("retry_errors", []),
             "revendedor_id": d.get("revendedor_id"),
             "created_at": d.get("created_at", datetime.now(timezone.utc)).isoformat(),
         })
@@ -4223,6 +4302,139 @@ async def admin_cancel_selfservice(activation_id: str, request: Request):
     await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "cancelado"}})
     await create_log("ativacao", f"Admin cancelou ativacao self-service: {doc.get('iccid')}", user["id"], user["name"])
     return {"success": True, "message": "Ativacao cancelada e chip liberado."}
+
+
+# ==================== RETRY AUTOMATICO ====================
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/retry")
+async def admin_retry_selfservice(activation_id: str, request: Request):
+    """Admin dispara retry manual de uma ativacao com erro ou retry_pendente."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("erro", "retry_pendente"):
+        raise HTTPException(status_code=400, detail=f"Apenas ativacoes com status 'erro' ou 'retry_pendente' podem ser retentadas. Status atual: {doc['status']}")
+
+    # Reset para ativando e disparar
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+        "status": "ativando", "next_retry_at": None,
+    }})
+    doc["status"] = "ativando"
+    await _trigger_selfservice_activation(doc)
+    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+    await create_log("retry", f"Admin disparou retry manual: {doc.get('iccid')} (tentativa {doc.get('retry_count', 0) + 1})", user["id"], user["name"])
+    return {
+        "success": True,
+        "status": updated["status"],
+        "retry_count": updated.get("retry_count", 0),
+        "message": f"Retry disparado. Status: {updated['status']}",
+    }
+
+@api_router.get("/retry-queue")
+async def get_retry_queue(request: Request):
+    """Lista ativacoes na fila de retry automatico."""
+    await require_admin(request)
+    now = datetime.now(timezone.utc)
+
+    # Pendentes de retry
+    pending = await db.ativacoes_selfservice.find(
+        {"status": "retry_pendente"}
+    ).sort("next_retry_at", 1).to_list(100)
+
+    # Erros recentes (ultimas 24h) que nao sao retentaveis
+    errors = await db.ativacoes_selfservice.find({
+        "status": "erro",
+        "created_at": {"$gte": now - timedelta(hours=24)},
+    }).sort("created_at", -1).to_list(50)
+
+    queue_items = []
+    for d in pending + errors:
+        cliente_nome = None
+        if d.get("cliente_id"):
+            cl = await db.clientes.find_one({"_id": ObjectId(d["cliente_id"])})
+            if cl:
+                cliente_nome = cl["nome"]
+        next_retry = d.get("next_retry_at")
+        queue_items.append({
+            "id": str(d["_id"]),
+            "iccid": d.get("iccid"),
+            "cliente_nome": cliente_nome,
+            "status": d["status"],
+            "erro_msg": d.get("erro_msg"),
+            "error_code": d.get("error_code"),
+            "retry_count": d.get("retry_count", 0),
+            "max_retries": RETRY_MAX_ATTEMPTS,
+            "next_retry_at": next_retry.isoformat() if isinstance(next_retry, datetime) else next_retry,
+            "last_retry_at": d.get("last_retry_at").isoformat() if isinstance(d.get("last_retry_at"), datetime) else d.get("last_retry_at"),
+            "retry_errors": d.get("retry_errors", []),
+            "created_at": d.get("created_at", now).isoformat(),
+        })
+
+    stats = {
+        "retry_pendente": await db.ativacoes_selfservice.count_documents({"status": "retry_pendente"}),
+        "erro": await db.ativacoes_selfservice.count_documents({"status": "erro"}),
+        "ativando": await db.ativacoes_selfservice.count_documents({"status": "ativando"}),
+        "config": {
+            "max_retries": RETRY_MAX_ATTEMPTS,
+            "backoff_minutes": RETRY_BACKOFF_MINUTES,
+            "check_interval_seconds": RETRY_CHECK_INTERVAL_SECONDS,
+        },
+    }
+    return {"queue": queue_items, "stats": stats}
+
+
+async def _process_retry_queue():
+    """Background task: processa fila de retry automatico."""
+    while True:
+        try:
+            await asyncio.sleep(RETRY_CHECK_INTERVAL_SECONDS)
+            now = datetime.now(timezone.utc)
+
+            # Buscar ativacoes pendentes de retry cujo horario ja passou
+            pending = await db.ativacoes_selfservice.find({
+                "status": "retry_pendente",
+                "next_retry_at": {"$lte": now},
+            }).sort("next_retry_at", 1).to_list(10)
+
+            if not pending:
+                continue
+
+            logger.info(f"Retry worker: {len(pending)} ativacoes para processar")
+
+            for doc in pending:
+                try:
+                    iccid = doc.get("iccid", "?")
+                    retry_count = doc.get("retry_count", 0)
+                    logger.info(f"Retry worker: processando {iccid} (tentativa {retry_count}/{RETRY_MAX_ATTEMPTS})")
+
+                    # Setar como ativando
+                    await db.ativacoes_selfservice.update_one(
+                        {"_id": doc["_id"]},
+                        {"$set": {"status": "ativando"}}
+                    )
+                    doc["status"] = "ativando"
+
+                    # Disparar ativacao
+                    await _trigger_selfservice_activation(doc)
+
+                    # Verificar resultado
+                    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+                    new_status = updated["status"] if updated else "erro"
+                    logger.info(f"Retry worker: {iccid} -> status {new_status}")
+
+                    # Pequeno delay entre retries para nao sobrecarregar a operadora
+                    await asyncio.sleep(5)
+                except Exception as e:
+                    logger.error(f"Retry worker erro ao processar {doc.get('iccid', '?')}: {e}")
+                    await asyncio.sleep(2)
+
+        except asyncio.CancelledError:
+            logger.info("Retry worker cancelado")
+            break
+        except Exception as e:
+            logger.error(f"Retry worker erro geral: {e}")
+            await asyncio.sleep(30)
 
 
 # ==================== DASHBOARD STATS ====================
@@ -4342,6 +4554,7 @@ async def startup_event():
     await db.assinaturas.create_index([("status", 1)])
     await db.ativacoes_selfservice.create_index([("status", 1)])
     await db.ativacoes_selfservice.create_index([("iccid", 1)])
+    await db.ativacoes_selfservice.create_index([("status", 1), ("next_retry_at", 1)])
     await seed_admin()
     await seed_sample_data()
     # Load configs from DB (survives restarts/redeploys)
@@ -4364,7 +4577,9 @@ async def startup_event():
                 logger.info(f"Startup cleanup: {fix_pending.modified_count} linhas 'pendente' corrigidas para 'ativo' (cliente ativo)")
     except Exception as e:
         logger.warning(f"Startup cleanup error (non-fatal): {e}")
-    logger.info("Application started successfully")
+    # Iniciar worker de retry automatico em background
+    asyncio.create_task(_process_retry_queue())
+    logger.info("Application started successfully (retry worker ativo)")
 
 app.include_router(api_router)
 
