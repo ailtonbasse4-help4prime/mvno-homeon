@@ -2696,7 +2696,7 @@ async def send_test_email(data: EmailTestRequest, request: Request):
 
 @api_router.post("/carteira/cobrancas/{cobranca_id}/enviar-email")
 async def send_cobranca_email(cobranca_id: str, request: Request):
-    """Envia email da cobranca para o cliente."""
+    """Envia email da cobranca para o cliente. Atualiza dados do Asaas antes de enviar."""
     user = await require_admin(request)
     doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
     if not doc:
@@ -2712,6 +2712,49 @@ async def send_cobranca_email(cobranca_id: str, request: Request):
 
     if not email_service.is_configured:
         raise HTTPException(status_code=400, detail="Servico de email nao configurado. Adicione GMAIL_USER e GMAIL_APP_PASSWORD no .env")
+
+    # Se tem payment_id real mas falta dados, buscar do Asaas antes de enviar
+    payment_id = doc.get("asaas_payment_id")
+    if payment_id and not payment_id.startswith("mock_"):
+        needs_refresh = not doc.get("asaas_invoice_url")
+        if doc.get("billing_type") == "BOLETO" and not doc.get("barcode"):
+            needs_refresh = True
+        if doc.get("billing_type") == "PIX" and not doc.get("asaas_pix_code"):
+            needs_refresh = True
+
+        if needs_refresh and asaas_service.is_configured:
+            try:
+                payment_data = await asaas_service.get_payment(payment_id)
+                updates = {}
+                if payment_data.get("invoiceUrl") and not doc.get("asaas_invoice_url"):
+                    updates["asaas_invoice_url"] = payment_data["invoiceUrl"]
+                if payment_data.get("bankSlipUrl") and not doc.get("asaas_bankslip_url"):
+                    updates["asaas_bankslip_url"] = payment_data["bankSlipUrl"]
+
+                if doc.get("billing_type") == "BOLETO" and not doc.get("barcode"):
+                    try:
+                        barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                        if barcode_data.get("identificationField"):
+                            updates["barcode"] = barcode_data["identificationField"]
+                    except Exception:
+                        pass
+
+                if doc.get("billing_type") == "PIX" and not doc.get("asaas_pix_code"):
+                    try:
+                        pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                        if pix_data.get("payload"):
+                            updates["asaas_pix_code"] = pix_data["payload"]
+                        if pix_data.get("encodedImage"):
+                            updates["asaas_pix_qrcode"] = pix_data["encodedImage"]
+                    except Exception:
+                        pass
+
+                if updates:
+                    await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": updates})
+                    doc.update(updates)
+                    logger.info(f"Dados Asaas atualizados antes do envio de email: {list(updates.keys())}")
+            except Exception as e:
+                logger.warning(f"Erro ao atualizar dados Asaas antes do envio: {e}")
 
     # Formatar vencimento
     venc_raw = doc.get("vencimento", "")
