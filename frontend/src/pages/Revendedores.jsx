@@ -215,7 +215,7 @@ export function Revendedores() {
           color: white;
         }
         .card-left svg { background: white; padding: 2px; border-radius: 1.5mm; }
-        .card-left .iccid-label { font-size: 4pt; font-family: monospace; margin-top: 1mm; word-break: break-all; text-align: center; line-height: 1.2; color: #a0c4e8; }
+        .card-left .iccid-label { font-size: 5pt; font-family: monospace; margin-top: 1mm; word-break: break-all; text-align: center; line-height: 1.2; color: #ffffff; font-weight: bold; letter-spacing: 0.2px; }
         .card-left .logo-text { font-size: 5.5pt; font-weight: bold; margin-bottom: 1.5mm; letter-spacing: 0.3px; }
         .card-right {
           flex: 1; padding: 2mm 3mm;
@@ -507,11 +507,12 @@ export function Revendedores() {
                             HomeOn Internet
                           </div>
                           <div style={{ background: 'white', padding: '2px', borderRadius: '1.5mm' }}>
-                            <QRCodeSVG value={getChipUrl(iccid)} size={62} level="M" />
+                            <QRCodeSVG value={getChipUrl(iccid)} size={60} level="M" />
                           </div>
                           <div style={{
-                            fontFamily: 'monospace', fontSize: '4pt', marginTop: '1mm',
-                            wordBreak: 'break-all', textAlign: 'center', lineHeight: '1.2', color: '#a0c4e8',
+                            fontFamily: 'monospace', fontSize: '5pt', marginTop: '1mm',
+                            wordBreak: 'break-all', textAlign: 'center', lineHeight: '1.2', color: '#ffffff',
+                            fontWeight: 'bold', letterSpacing: '0.2px',
                           }}>
                             {iccid}
                           </div>
