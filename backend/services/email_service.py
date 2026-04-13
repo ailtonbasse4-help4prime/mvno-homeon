@@ -66,6 +66,7 @@ def email_cobranca_criada(
     invoice_url: str = None,
     pix_code: str = None,
     barcode: str = None,
+    bankslip_url: str = None,
 ) -> str:
     """Template para cobranca/boleto criado."""
     valor_fmt = f"R$ {valor:.2f}"
@@ -82,12 +83,13 @@ def email_cobranca_criada(
           </a>
         </div>"""
 
-    if pix_code:
+    if bankslip_url:
         payment_section += f"""
-        <div style="background:#f0f7ff;border:1px solid #d0e3f7;border-radius:6px;padding:16px;margin:16px 0;">
-          <p style="margin:0 0 8px;font-weight:bold;color:{BRAND_COLOR};font-size:13px;">Codigo PIX (Copia e Cola):</p>
-          <p style="margin:0;font-family:monospace;font-size:11px;word-break:break-all;color:#333;
-            background:#fff;padding:10px;border:1px dashed #ccc;border-radius:4px;">{pix_code}</p>
+        <div style="text-align:center;margin:10px 0;">
+          <a href="{bankslip_url}" style="display:inline-block;background:#2e7d32;color:#fff;padding:12px 28px;
+            border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px;">
+            Baixar Boleto PDF
+          </a>
         </div>"""
 
     if barcode:
@@ -96,6 +98,14 @@ def email_cobranca_criada(
           <p style="margin:0 0 8px;font-weight:bold;color:{BRAND_COLOR};font-size:13px;">Linha Digitavel do Boleto:</p>
           <p style="margin:0;font-family:monospace;font-size:11px;word-break:break-all;color:#333;
             background:#fff;padding:10px;border:1px dashed #ccc;border-radius:4px;">{barcode}</p>
+        </div>"""
+
+    if pix_code:
+        payment_section += f"""
+        <div style="background:#f0f7ff;border:1px solid #d0e3f7;border-radius:6px;padding:16px;margin:16px 0;">
+          <p style="margin:0 0 8px;font-weight:bold;color:{BRAND_COLOR};font-size:13px;">Codigo PIX (Copia e Cola):</p>
+          <p style="margin:0;font-family:monospace;font-size:11px;word-break:break-all;color:#333;
+            background:#fff;padding:10px;border:1px dashed #ccc;border-radius:4px;">{pix_code}</p>
         </div>"""
 
     content = f"""
@@ -264,15 +274,16 @@ class EmailService:
     async def send_cobranca(
         self, to_email: str, cliente_nome: str, valor: float, vencimento: str,
         descricao: str, billing_type: str, invoice_url: str = None,
-        pix_code: str = None, barcode: str = None,
+        pix_code: str = None, barcode: str = None, bankslip_url: str = None,
     ) -> dict:
         """Envia email de cobranca/boleto."""
         html = email_cobranca_criada(
             cliente_nome=cliente_nome, valor=valor, vencimento=vencimento,
             descricao=descricao, billing_type=billing_type,
             invoice_url=invoice_url, pix_code=pix_code, barcode=barcode,
+            bankslip_url=bankslip_url,
         )
-        subject = f"Cobranca {BRAND_NAME} - {descricao[:50]}"
+        subject = f"Fatura {BRAND_NAME} - {descricao[:50]}"
         return await self.send_email(to_email, subject, html)
 
     async def send_ativacao_sucesso(
