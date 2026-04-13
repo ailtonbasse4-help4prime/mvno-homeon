@@ -231,6 +231,7 @@ export function GestaoCobrancas() {
   };
 
   const handleShareWhatsApp = (c) => {
+    if (!window.confirm(`Enviar cobranca por WhatsApp para ${c.cliente_nome}?`)) return;
     let msg = `*Cobranca MVNO*\nCliente: ${c.cliente_nome}\nValor: R$ ${c.valor.toFixed(2)}\nVencimento: ${c.vencimento}\nTipo: ${c.billing_type}`;
     if (c.asaas_invoice_url) msg += `\n\nLink para pagamento:\n${c.asaas_invoice_url}`;
     if (c.barcode) msg += `\n\nCodigo de barras:\n${c.barcode}`;
@@ -241,6 +242,7 @@ export function GestaoCobrancas() {
   const [sendingEmail, setSendingEmail] = useState(null);
 
   const handleSendEmail = async (c) => {
+    if (!window.confirm(`Enviar cobranca por email para ${c.cliente_nome}?`)) return;
     setSendingEmail(c.id);
     try {
       const res = await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/enviar-email`, {}, { withCredentials: true });

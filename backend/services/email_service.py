@@ -46,8 +46,8 @@ def _base_template(content: str, title: str = "") -> str:
   </td></tr>
   <!-- Footer -->
   <tr><td style="background:#f8f9fa;padding:20px 32px;border-top:1px solid #e9ecef;text-align:center;">
-    <p style="color:#666;font-size:12px;margin:0;">
-      <strong style="color:{BRAND_COLOR};">Contato: {CONTACT_PHONE}</strong>
+    <p style="color:#666;font-size:12px;margin:0;white-space:nowrap;">
+      <strong style="color:{BRAND_COLOR};">Contato:&nbsp;{CONTACT_PHONE}</strong>
     </p>
     {f'<p style="color:#999;font-size:11px;margin:6px 0 0;"><a href="{SITE_URL}/portal" style="color:{BRAND_COLOR};text-decoration:none;">{SITE_URL}/portal</a></p>' if SITE_URL else ''}
     <p style="color:#bbb;font-size:10px;margin:8px 0 0;">{BRAND_NAME} - Todos os direitos reservados</p>
@@ -104,7 +104,7 @@ def email_cobranca_criada(
       Ola <strong>{cliente_nome}</strong>,
     </p>
     <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 20px;">
-      Uma nova cobranca foi gerada para voce:
+      Segue fatura referente ao seu plano de telefonia movel:
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa;border-radius:6px;overflow:hidden;margin-bottom:16px;">
       <tr><td style="padding:12px 16px;border-bottom:1px solid #e9ecef;">
@@ -126,7 +126,7 @@ def email_cobranca_criada(
     </table>
     {payment_section}
     <p style="color:#999;font-size:12px;margin:16px 0 0;text-align:center;">
-      Em caso de duvidas, entre em contato: <strong>{CONTACT_PHONE}</strong>
+      Em caso de duvidas, entre em contato: <strong style="white-space:nowrap;">{CONTACT_PHONE}</strong>
     </p>
     """
     return _base_template(content, f"Cobranca - {BRAND_NAME}")
@@ -162,7 +162,7 @@ def email_ativacao_sucesso(
     </table>
     {f'<div style="text-align:center;margin:20px 0;"><a href="{SITE_URL}/portal" style="display:inline-block;background:{BRAND_COLOR};color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">Acessar Portal do Cliente</a></div>' if SITE_URL else ''}
     <p style="color:#999;font-size:12px;margin:16px 0 0;text-align:center;">
-      Em caso de duvidas, entre em contato: <strong>{CONTACT_PHONE}</strong>
+      Em caso de duvidas, entre em contato: <strong style="white-space:nowrap;">{CONTACT_PHONE}</strong>
     </p>
     """
     return _base_template(content, f"Chip Ativado - {BRAND_NAME}")
