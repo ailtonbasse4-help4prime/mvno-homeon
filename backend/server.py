@@ -2694,6 +2694,51 @@ async def send_test_email(data: EmailTestRequest, request: Request):
         await create_log("email", f"Email de teste enviado para {data.to_email}", None, "admin")
     return result
 
+@api_router.post("/carteira/cobrancas/{cobranca_id}/enviar-email")
+async def send_cobranca_email(cobranca_id: str, request: Request):
+    """Envia email da cobranca para o cliente."""
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+
+    cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    cliente_email = cliente.get("email")
+    if not cliente_email:
+        raise HTTPException(status_code=400, detail="Cliente nao possui email cadastrado. Atualize o cadastro do cliente com um email.")
+
+    if not email_service.is_configured:
+        raise HTTPException(status_code=400, detail="Servico de email nao configurado. Adicione GMAIL_USER e GMAIL_APP_PASSWORD no .env")
+
+    # Formatar vencimento
+    venc_raw = doc.get("vencimento", "")
+    try:
+        parts = venc_raw.split("-")
+        venc_fmt = f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else venc_raw
+    except Exception:
+        venc_fmt = venc_raw
+
+    result = await email_service.send_cobranca(
+        to_email=cliente_email,
+        cliente_nome=cliente.get("nome", "Cliente"),
+        valor=doc.get("valor", 0),
+        vencimento=venc_fmt,
+        descricao=doc.get("descricao", "Cobranca"),
+        billing_type=doc.get("billing_type", "BOLETO"),
+        invoice_url=doc.get("asaas_invoice_url"),
+        pix_code=doc.get("asaas_pix_code"),
+        barcode=doc.get("barcode"),
+    )
+
+    if result["success"]:
+        await create_log("email", f"Email de cobranca enviado para {cliente_email} ({cliente.get('nome')})", user["id"], user["name"])
+        return {"success": True, "message": f"Email enviado para {cliente_email}"}
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "Erro ao enviar email"))
+
 @api_router.get("/carteira/resumo")
 async def get_carteira_resumo(request: Request):
     await get_current_user(request)

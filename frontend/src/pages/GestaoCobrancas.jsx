@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import {
   Plus, Search, Trash2, Edit, RefreshCw, ExternalLink,
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
-  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download,
+  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download, Mail,
 } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
@@ -236,6 +236,19 @@ export function GestaoCobrancas() {
     if (c.barcode) msg += `\n\nCodigo de barras:\n${c.barcode}`;
     if (c.asaas_pix_code) msg += `\n\nPix Copia e Cola:\n${c.asaas_pix_code}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const [sendingEmail, setSendingEmail] = useState(null);
+
+  const handleSendEmail = async (c) => {
+    setSendingEmail(c.id);
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/cobrancas/${c.id}/enviar-email`, {}, { withCredentials: true });
+      toast.success(res.data.message || 'Email enviado!');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao enviar email');
+    }
+    setSendingEmail(null);
   };
 
   const handlePrintCarne = (clienteId) => {
@@ -620,6 +633,10 @@ export function GestaoCobrancas() {
                     <button onClick={() => handleShareWhatsApp(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Enviar por WhatsApp">
                       <Share2 className="w-3.5 h-3.5 text-emerald-400" />
                     </button>
+                    <button onClick={() => handleSendEmail(c)} disabled={sendingEmail === c.id} className="p-1.5 hover:bg-zinc-800 rounded" title="Enviar por Email"
+                      data-testid={`send-email-btn-${c.id}`}>
+                      <Mail className={`w-3.5 h-3.5 text-blue-400 ${sendingEmail === c.id ? 'animate-pulse' : ''}`} />
+                    </button>
                     {isAdmin && !['CONFIRMED','RECEIVED'].includes(c.status) && (
                       <>
                         <button onClick={() => handleOpenDialog(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Editar">
@@ -736,12 +753,18 @@ export function GestaoCobrancas() {
               )}
 
               {/* Botoes de acao */}
-              <div className="grid grid-cols-2 gap-2 pt-2">
+              <div className="grid grid-cols-3 gap-2 pt-2">
                 <Button onClick={() => handlePrint(sc)} variant="outline" className="flex items-center gap-2 border-zinc-700">
-                  <Printer className="w-4 h-4" />{sc.asaas_invoice_url ? 'Abrir Fatura' : 'Gerar Fatura'}
+                  <Printer className="w-4 h-4" />{sc.asaas_invoice_url ? 'Fatura' : 'Gerar'}
                 </Button>
                 <Button onClick={() => handleShareWhatsApp(sc)} variant="outline" className="flex items-center gap-2 border-zinc-700 text-emerald-400 hover:text-emerald-300">
                   <Share2 className="w-4 h-4" />WhatsApp
+                </Button>
+                <Button onClick={() => handleSendEmail(sc)} disabled={sendingEmail === sc.id} variant="outline"
+                  className="flex items-center gap-2 border-zinc-700 text-blue-400 hover:text-blue-300"
+                  data-testid="send-email-detail-btn">
+                  <Mail className={`w-4 h-4 ${sendingEmail === sc.id ? 'animate-pulse' : ''}`} />
+                  {sendingEmail === sc.id ? 'Enviando...' : 'Email'}
                 </Button>
                 {sc.asaas_payment_id && (
                   <Button onClick={() => { handleConsultar(sc.id); setDetailDialogOpen(false); }} variant="outline" className="flex items-center gap-2 border-zinc-700 col-span-2">
