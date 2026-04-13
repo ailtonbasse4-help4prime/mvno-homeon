@@ -2714,8 +2714,50 @@ async def send_cobranca_email(cobranca_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Servico de email nao configurado. Adicione GMAIL_USER e GMAIL_APP_PASSWORD no .env")
 
     # Se tem payment_id real, garantir que todos os dados de pagamento estao atualizados
+    # Se NAO tem payment_id, criar pagamento no Asaas primeiro
     payment_id = doc.get("asaas_payment_id")
-    if payment_id and not payment_id.startswith("mock_") and asaas_service.is_configured:
+
+    if (not payment_id or payment_id.startswith("mock_")) and asaas_service.is_configured:
+        # Criar pagamento no Asaas
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            result_pay = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=doc.get("billing_type", "BOLETO"),
+                value=doc.get("valor", 0),
+                due_date=doc.get("vencimento"),
+                description=_append_portal_link(doc.get("descricao", "Cobranca")),
+            )
+            updates = {
+                "asaas_payment_id": result_pay.get("id"),
+                "asaas_invoice_url": result_pay.get("invoiceUrl"),
+                "asaas_bankslip_url": result_pay.get("bankSlipUrl"),
+                "status": result_pay.get("status", doc.get("status", "PENDING")),
+            }
+            new_payment_id = result_pay.get("id")
+            if new_payment_id:
+                try:
+                    if doc.get("billing_type") == "BOLETO":
+                        barcode_data = await asaas_service.get_boleto_barcode(new_payment_id)
+                        if barcode_data.get("identificationField"):
+                            updates["barcode"] = barcode_data["identificationField"]
+                    elif doc.get("billing_type") == "PIX":
+                        pix_data = await asaas_service.get_pix_qrcode(new_payment_id)
+                        if pix_data.get("payload"):
+                            updates["asaas_pix_code"] = pix_data["payload"]
+                        if pix_data.get("encodedImage"):
+                            updates["asaas_pix_qrcode"] = pix_data["encodedImage"]
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar detalhes do pagamento recem-criado: {e}")
+
+            await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": updates})
+            doc.update(updates)
+            payment_id = new_payment_id
+            logger.info(f"Pagamento Asaas criado antes do envio de email: {new_payment_id}")
+        except Exception as e:
+            logger.warning(f"Erro ao criar pagamento Asaas antes do envio de email: {e}")
+
+    elif payment_id and not payment_id.startswith("mock_") and asaas_service.is_configured:
         try:
             payment_data = await asaas_service.get_payment(payment_id)
             updates = {}
