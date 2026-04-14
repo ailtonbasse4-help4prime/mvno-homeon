@@ -1,108 +1,126 @@
 {
-  "theme": "Dark",
-  "archetype": "Archetype 2: The Performance Pro",
-  "reasoning": "A telecom portal requires a high-visibility, 'command-center' feel. The Performance Pro archetype uses Deep Obsidian as a base with high-contrast Volt Blue and Electric Blaze accents, ensuring complex data (like usage gauges and invoice statuses) is easily legible while maintaining a premium, mobile-first aesthetic similar to top carriers.",
+  "project_name": "HELP4PRIME MVNO",
+  "theme_and_archetype": {
+    "theme": "dark",
+    "archetype": "Archetype 4: Swiss & High-Contrast (Tech/B2B)",
+    "description": "A sleek, authoritative dark mode inspired by Linear.app and Betterstack. Utilizes deep tinted greys (Zinc), stark white for high contrast typography, and WhatsApp Green / Electric Blue as kinetic triggers to drive conversions."
+  },
   "typography": {
-    "headings": "Outfit",
-    "body": "Manrope",
-    "font_imports": "@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Outfit:wght@300;400;600;800;900&display=swap');",
-    "hierarchy": {
-      "h1": "font-outfit text-4xl sm:text-5xl font-black tracking-tight",
-      "h2": "font-outfit text-2xl sm:text-3xl font-bold tracking-tight",
-      "h3": "font-outfit text-xl sm:text-2xl font-bold",
-      "h4": "font-outfit text-lg sm:text-xl font-semibold",
-      "body": "font-manrope text-base leading-relaxed tracking-wide",
-      "labels": "font-outfit text-xs font-bold uppercase tracking-[0.2em]"
-    }
-  },
-  "colors": {
-    "backgrounds": {
-      "app": "#0A0A0A",
-      "surface_base": "#141414",
-      "surface_elevated": "#1A1A1A"
-    },
-    "borders": {
-      "subtle": "rgba(255, 255, 255, 0.1)",
-      "strong": "rgba(255, 255, 255, 0.2)"
-    },
-    "text": {
-      "primary": "#FFFFFF",
-      "secondary": "#A1A1AA",
-      "muted": "#71717A"
-    },
-    "brand_accents": {
-      "primary": "#007AFF",
-      "primary_hover": "#3395FF",
-      "electric_blaze": "#FF3B30",
-      "success_green": "#34C759"
-    }
-  },
-  "layout_and_spacing": {
-    "grid_system": "MODE B: The 'Control Room' Grid",
-    "spacing_scale": "Use tight gaps (gap-4 or gap-6) between widgets, but generous internal padding (p-6) inside bordered containers to prevent collision.",
-    "alignment": "Mobile-first. Left-align dense data, labels, and lists. Center align only major hero metrics if it improves visual rhythm.",
-    "borders": "Cardless or subtle roundness. Maximum border-radius of 8px (rounded-lg). Avoid heavy soft shadows."
-  },
-  "surfaces_and_components": {
-    "header": {
-      "style": "Crystal Glassmorphism",
-      "classes": "bg-black/60 backdrop-blur-xl border-b border-white/10 z-50 sticky top-0"
-    },
-    "cards_and_widgets": {
-      "style": "Tactical Minimalism",
-      "classes": "bg-[#141414] border border-white/10 rounded-lg shadow-sm"
-    },
-    "data_visualizations": {
-      "style": "High-Contrast Gauges",
-      "description": "Use thick strokes for data consumption bars. Base track in #262626, active progress in #007AFF. Text inside gauge must be Pure White."
-    },
-    "badges": {
-      "paid": "bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/20 rounded-md px-2 py-1 text-xs font-bold",
-      "overdue": "bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/20 rounded-md px-2 py-1 text-xs font-bold",
-      "pending": "bg-[#FF9500]/10 text-[#FF9500] border border-[#FF9500]/20 rounded-md px-2 py-1 text-xs font-bold"
-    },
-    "buttons": {
-      "primary": "bg-[#007AFF] hover:bg-[#3395FF] text-white font-bold rounded-lg px-6 py-3 transition-colors",
-      "outline": "bg-transparent border border-white/20 hover:bg-white/10 text-white font-bold rounded-lg px-6 py-3 transition-colors"
-    }
-  },
-  "interactions_and_motion": {
-    "hover_states": "Always explicitly define hover text color (e.g., hover:bg-white/10 hover:text-white). Ensure active states have a lighter hue than resting.",
-    "focus_states": "Must use focus:ring-2 focus:ring-[#007AFF] focus:ring-offset-2 focus:ring-offset-[#0A0A0A] for accessibility.",
-    "transitions": "Use specific property transitions: transition-colors duration-200 ease-in-out or transition-transform for micro-interactions (-translate-y-1 on card hover)."
-  },
-  "media_and_assets": {
-    "icons": "lucide-react",
-    "image_urls": {
-      "avatar_female": {
-        "url": "https://images.unsplash.com/photo-1517945577684-acd9255116a7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwyfHxicmF6aWxpYW4lMjB3b21hbiUyMHNtaWxpbmclMjBwb3J0cmFpdCUyMG1vYmlsZSUyMGF2YXRhcnxlbnwwfHx8fDE3NzU3NzM2MzV8MA&ixlib=rb-4.1.0&q=85",
-        "category": "user_avatar",
-        "description": "Smiling Brazilian woman profile picture for the personalized header greeting."
+    "headings": {
+      "family": "Outfit",
+      "weights": ["light", "bold", "black"],
+      "sizes": {
+        "h1": "text-5xl md:text-6xl tracking-tight",
+        "h2": "text-3xl md:text-4xl tracking-tight",
+        "h3": "text-xl md:text-2xl tracking-tight",
+        "h4": "text-lg md:text-xl font-bold"
       },
-      "texture_bg": {
-        "url": "https://images.unsplash.com/photo-1659185934209-454d02a134dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxkYXJrJTIwZnV0dXJpc3RpYyUyMGFic3RyYWN0JTIwdGV4dHVyZXxlbnwwfHx8fDE3NzU3NzM2NDZ8MA&ixlib=rb-4.1.0&q=85",
-        "category": "abstract_background",
-        "description": "Subtle dark futuristic abstract texture to be used sparingly behind major cards or the hero header area."
+      "rules": ["Never use Inter", "Never center align by default", "Use leading-none for H1/H2"]
+    },
+    "body": {
+      "family": "Manrope",
+      "weights": ["regular", "medium"],
+      "sizes": {
+        "large": "text-lg leading-relaxed text-zinc-300",
+        "base": "text-base leading-relaxed text-zinc-400",
+        "small": "text-sm text-zinc-500",
+        "overline": "text-xs font-bold uppercase tracking-[0.2em] text-blue-500"
       }
     }
   },
-  "accessibility_and_testing": {
-    "testing_attributes": "Every interactive element (PIX copy button, view invoice, expand line details) MUST include a data-testid attribute formatted as kebab-case, role-based.",
-    "contrast": "Ensure a minimum 4.5:1 ratio for normal text and 3:1 for large text. No transparent backgrounds behind critical text."
+  "color_palette": {
+    "backgrounds": {
+      "base": "bg-zinc-950",
+      "surface": "bg-zinc-900/50",
+      "surface_elevated": "bg-zinc-800/80",
+      "glass": "bg-zinc-950/60 backdrop-blur-2xl"
+    },
+    "text": {
+      "primary": "text-white",
+      "secondary": "text-zinc-400",
+      "muted": "text-zinc-500"
+    },
+    "borders": {
+      "default": "border-white/10",
+      "hover": "border-white/20",
+      "accent": "border-blue-500/50"
+    },
+    "accents": {
+      "primary_cta": "bg-[#25D366] text-zinc-950 hover:bg-[#1DA851]", 
+      "secondary_cta": "bg-zinc-900 text-white border border-white/10 hover:bg-zinc-800",
+      "highlight": "text-blue-500"
+    }
+  },
+  "layout_and_spacing": {
+    "grid_system": "The Tetris Grid (Bento mode) for features: grid-cols-1 md:grid-cols-12 gap-6 md:gap-8",
+    "section_padding": "py-24 md:py-32",
+    "container_padding": "px-6 md:px-12 max-w-7xl mx-auto",
+    "card_padding": "p-8 md:p-10",
+    "border_radius": "rounded-2xl md:rounded-3xl (nested radii required for inner elements)"
+  },
+  "components": {
+    "navigation": {
+      "style": "Crystal Glassmorphism",
+      "classes": "fixed top-0 left-0 right-0 z-50 bg-zinc-950/70 backdrop-blur-xl border-b border-white/10",
+      "elements": ["Logo (Text: HELP4PRIME MVNO)", "Links (Features, Screenshots, Pricing)", "Primary CTA (WhatsApp)"]
+    },
+    "hero_section": {
+      "layout": "Asymmetrical 2-column on desktop (Text left, Mockup right)",
+      "background": "Use 'hero_bg_mesh' with bg-zinc-950/60 overlay to ensure text contrast",
+      "headline": "Complete MVNO Management System",
+      "ctas": [
+        { "label": "Fale no WhatsApp", "style": "primary_cta", "icon": "WhatsappLogo", "href": "https://wa.me/5511915322526" }
+      ],
+      "visual": "Floating 3D-like perspective or layered mockup using '/demo-dashboard.jpg'"
+    },
+    "features_bento": {
+      "layout": "Grid Cols 12. Mix spans: col-span-12 md:col-span-8, col-span-12 md:col-span-4",
+      "cards_style": "Neumorphic/Glass hybrid: bg-zinc-900/50 border border-white/10 rounded-3xl p-8 hover:-translate-y-1 transition-transform",
+      "features_to_include": [
+        { "title": "Client Management", "icon": "Users", "span": "col-span-12 md:col-span-4" },
+        { "title": "Billing System (Asaas)", "icon": "Receipt", "span": "col-span-12 md:col-span-8", "bg_image": "bento_texture" },
+        { "title": "Self-Service QR Code", "icon": "QrCode", "span": "col-span-12 md:col-span-6" },
+        { "title": "Client Portal (PWA)", "icon": "DeviceMobile", "span": "col-span-12 md:col-span-6" },
+        { "title": "Reseller Management", "icon": "Storefront", "span": "col-span-12 md:col-span-8" },
+        { "title": "Email Notifications", "icon": "EnvelopeSimple", "span": "col-span-12 md:col-span-4" }
+      ]
+    },
+    "screenshot_carousel": {
+      "style": "Full-width marquee or interactive Swiper gallery",
+      "images": ["/demo-clientes.jpg", "/demo-cobrancas.jpg", "/demo-ativacoes.jpg", "/demo-portal.jpg"],
+      "wrapper_classes": "w-full overflow-hidden py-12"
+    },
+    "pricing_section": {
+      "layout": "2 Cards (12-month vs 24-month) side by side",
+      "cards": [
+        { "plan": "12 Meses", "price": "R$ 600/mês", "style": "default glass card" },
+        { "plan": "24 Meses", "price": "R$ 500/mês", "style": "The Tracing Beam / Highlighted border-blue-500/50, scaled up slightly" }
+      ]
+    },
+    "whatsapp_fab": {
+      "description": "Fixed bottom-right WhatsApp floating action button for constant conversion access.",
+      "classes": "fixed bottom-8 right-8 z-50 rounded-full p-4 bg-[#25D366] text-black shadow-lg hover:scale-110 transition-transform"
+    }
+  },
+  "media_urls": {
+    "hero_bg_mesh": "https://static.prod-images.emergentagent.com/jobs/cd589222-e194-4fe9-a668-39f150d64e78/images/3af39f5b23d54e5628deb0c7ab99e2518e1bae1a7778e0ce0e241d461a3181c6.png",
+    "bento_texture": "https://static.prod-images.emergentagent.com/jobs/cd589222-e194-4fe9-a668-39f150d64e78/images/6e680e4ad0bbe651d02c5050d7d8bfe1eb16d30890e0e46ae99fbef39a0818a8.png",
+    "local_screenshots": [
+      "/demo-dashboard.jpg",
+      "/demo-clientes.jpg",
+      "/demo-cobrancas.jpg",
+      "/demo-ativacoes.jpg",
+      "/demo-portal.jpg"
+    ]
   },
   "instructions_to_main_agent": [
-    "Read this JSON and implement a responsive, mobile-first dashboard layout.",
-    "Update tailwind.config.js to include the exact colors (Obsidian base #0A0A0A, Volt Blue #007AFF) and font families (Outfit, Manrope).",
-    "Add 'Manrope' and 'Outfit' fonts via Google Fonts in index.html or global css.",
-    "Create a sticky top navigation header using the Crystal Glassmorphism surface styling. Display a placeholder styled text 'HomeOn' as the logo and the 'avatar_female' image.",
-    "Below the header, display a personalized greeting: 'Good morning, [Name]!' in H2 font.",
-    "Implement the 'Control Room' grid layout for the data widgets.",
-    "Build a primary 'Data Usage' card showcasing a progress bar or circular gauge component utilizing the brand_accents.primary color.",
-    "Add tightly packed, colored summary mini-cards for 'Minutes Used' and 'SMS Used'.",
-    "Create a 'Quick Summary' section showing active lines and next invoice status.",
-    "Build an 'Invoices' list section where each invoice item uses the provided status badges (Paid/Overdue/Pending). Include a highly visible 'Copy PIX Code' button.",
-    "Ensure the UI uses 'Tactical Minimalism': 1px solid borders on cards instead of soft drop shadows, keeping it flat, dense, and tech-forward.",
-    "All components should be pure HTML+Tailwind or heavily customized Shadcn components meeting the 1px border rule.",
-    "Ensure you use 'lucide-react' for all icons. Add 'data-testid' to every interactive button and link."
+    "Execute `yarn add @phosphor-icons/react framer-motion` before starting.",
+    "Use Phosphor Icons (e.g., WhatsappLogo, Users, Receipt, QrCode) with weight='duotone'.",
+    "Strictly follow the color palette: Avoid pure #000000. Use Zinc scale.",
+    "Apply `data-testid` to all interactive elements (buttons, links, forms).",
+    "The 24-month pricing card MUST be visually highlighted compared to the 12-month card.",
+    "Do NOT use 'Inter' font. Add Google Fonts links for 'Outfit' and 'Manrope' in index.html.",
+    "Ensure the hero background image has a dark overlay (`bg-zinc-950/60` or similar) to keep the text readable.",
+    "Local screenshots MUST be loaded exactly with the paths provided (e.g., <img src='/demo-dashboard.jpg' />) as they exist in the public directory."
   ]
 }
