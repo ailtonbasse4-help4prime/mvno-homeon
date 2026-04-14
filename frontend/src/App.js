@@ -22,12 +22,14 @@ import AtivarSelfService from "./pages/AtivarSelfService";
 import PortalLogin from "./pages/PortalLogin";
 import PortalDashboard from "./pages/PortalDashboard";
 import Divulgacao from "./pages/Divulgacao";
+import LandingPage from "./pages/LandingPage";
 
 function AppRoutes() {
   const location = useLocation();
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/saas" element={<LandingPage />} />
       <Route path="/ativar" element={<ErrorBoundary resetKey={location.pathname}><AtivarSelfService /></ErrorBoundary>} />
       <Route path="/portal" element={<ErrorBoundary resetKey={location.pathname}><PortalLogin /></ErrorBoundary>} />
       <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />
