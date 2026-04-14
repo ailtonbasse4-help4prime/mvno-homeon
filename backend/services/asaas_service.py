@@ -296,6 +296,17 @@ class AsaasService:
         self._check_configured()
         return await self._request("GET", f"/payments/{payment_id}/identificationField")
 
+    async def get_installment_payment_book(self, installment_id: str) -> str:
+        """Retorna URL do carne PDF (paymentBook) de um parcelamento."""
+        self._check_configured()
+        result = await self._request("GET", f"/installments/{installment_id}/paymentBook")
+        return result
+
+    async def get_payment_installment_id(self, payment_id: str) -> Optional[str]:
+        """Busca o installment ID de um pagamento parcelado."""
+        payment = await self.get_payment(payment_id)
+        return payment.get("installment")
+
     async def get_invoice_url(self, payment_id: str) -> str:
         """Retorna URL do boleto/fatura para visualizacao."""
         payment = await self.get_payment(payment_id)

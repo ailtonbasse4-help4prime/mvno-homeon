@@ -2694,6 +2694,50 @@ async def send_test_email(data: EmailTestRequest, request: Request):
         await create_log("email", f"Email de teste enviado para {data.to_email}", None, "admin")
     return result
 
+
+@api_router.get("/carteira/carne/{cliente_id}")
+async def get_carne_pdf(cliente_id: str, request: Request):
+    """Busca URL do carne PDF do Asaas para um cliente parcelado."""
+    await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    # Buscar uma cobranca parcelada deste cliente para obter o installment_id
+    cobranca = await db.cobrancas.find_one({
+        "cliente_id": cliente_id,
+        "asaas_payment_id": {"$exists": True, "$ne": None, "$not": {"$regex": "^mock_"}},
+        "parcela_total": {"$gt": 1},
+    })
+    if not cobranca:
+        raise HTTPException(status_code=404, detail="Nenhuma cobranca parcelada encontrada para este cliente")
+
+    payment_id = cobranca["asaas_payment_id"]
+
+    try:
+        # Buscar installment_id do payment no Asaas
+        installment_id = await asaas_service.get_payment_installment_id(payment_id)
+        if not installment_id:
+            raise HTTPException(status_code=404, detail="Este pagamento nao possui parcelamento no Asaas")
+
+        # Buscar URL do carne PDF
+        result = await asaas_service.get_installment_payment_book(installment_id)
+
+        # O Asaas pode retornar a URL diretamente ou um objeto
+        if isinstance(result, str):
+            return {"success": True, "url": result}
+        elif isinstance(result, dict):
+            url = result.get("url") or result.get("invoiceUrl") or result.get("bankSlipUrl")
+            if url:
+                return {"success": True, "url": url}
+
+        raise HTTPException(status_code=404, detail="Nao foi possivel obter o carne PDF do Asaas")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao buscar carne PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar carne: {str(e)}")
+
+
 @api_router.post("/carteira/cobrancas/{cobranca_id}/enviar-email")
 async def send_cobranca_email(cobranca_id: str, request: Request):
     """Envia email da cobranca para o cliente. Atualiza dados do Asaas antes de enviar."""
