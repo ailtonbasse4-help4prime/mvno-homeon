@@ -304,7 +304,7 @@ class AsaasService:
     async def get_installment_payment_book(self, installment_id: str) -> bytes:
         """Retorna bytes do PDF do carne de um parcelamento."""
         self._check_configured()
-        url = f"{self.api_url}/installments/{installment_id}/paymentBook"
+        url = f"{self.base_url}/installments/{installment_id}/paymentBook"
         headers = {"access_token": self.api_key}
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(url, headers=headers)
