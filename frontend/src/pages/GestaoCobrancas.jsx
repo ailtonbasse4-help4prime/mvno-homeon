@@ -51,6 +51,10 @@ export function GestaoCobrancas() {
 
   const [carneDialogOpen, setCarneDialogOpen] = useState(false);
   const [carneCobrancas, setCarneCobrancas] = useState([]);
+  const [carneFilterOpen, setCarneFilterOpen] = useState(false);
+  const [carneClienteId, setCarneClienteId] = useState('');
+  const [carneDateFrom, setCarneDateFrom] = useState('');
+  const [carneDateTo, setCarneDateTo] = useState('');
 
   const [loteForm, setLoteForm] = useState({
     billing_type: 'BOLETO', valor: '', vencimento: '',
@@ -253,15 +257,20 @@ export function GestaoCobrancas() {
     setSendingEmail(null);
   };
 
-  const handlePrintCarne = (clienteId) => {
-    const clienteCobrancas = cobrancas
+  const handlePrintCarne = (clienteId, dateFrom, dateTo) => {
+    let clienteCobrancas = cobrancas
       .filter(c => c.cliente_id === clienteId)
       .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+
+    if (dateFrom) clienteCobrancas = clienteCobrancas.filter(c => c.vencimento >= dateFrom);
+    if (dateTo) clienteCobrancas = clienteCobrancas.filter(c => c.vencimento <= dateTo);
+
     if (!clienteCobrancas.length) {
-      toast.error('Nenhuma cobranca encontrada para este cliente');
+      toast.error('Nenhuma cobranca encontrada para este periodo');
       return;
     }
     setCarneCobrancas(clienteCobrancas);
+    setCarneFilterOpen(false);
     setCarneDialogOpen(true);
   };
 
@@ -272,55 +281,77 @@ export function GestaoCobrancas() {
     const html = `<!DOCTYPE html><html><head><title>Carne - ${clienteNome}</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
-      @media print { @page { margin: 10mm; size: A4; } .no-print { display: none; } }
-      .page { page-break-after: always; padding: 10px; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; }
+      @media print { @page { margin: 8mm; size: A4; } .no-print { display: none !important; } }
+      .page { page-break-after: always; padding: 5px 0; }
       .page:last-child { page-break-after: avoid; }
-      .boleto { border: 2px solid #333; padding: 12px; margin-bottom: 15px; border-radius: 4px; min-height: 240px; }
-      .boleto-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 10px; }
-      .boleto-header h2 { font-size: 16px; }
-      .parcela-badge { background: #333; color: #fff; padding: 4px 12px; border-radius: 4px; font-weight: bold; font-size: 14px; }
-      .boleto-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-      .field { margin-bottom: 6px; }
-      .field label { font-weight: bold; color: #666; font-size: 10px; text-transform: uppercase; display: block; }
-      .field span { font-size: 13px; }
-      .valor-destaque { font-size: 22px; font-weight: bold; color: #000; }
-      .barcode-section { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #999; }
-      .barcode-text { font-family: monospace; font-size: 11px; letter-spacing: 1px; word-break: break-all; background: #f5f5f5; padding: 6px; border-radius: 3px; }
-      .btn-print { display: block; margin: 20px auto; padding: 12px 40px; font-size: 16px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-      .btn-print:hover { background: #555; }
+      .boleto {
+        border: 2px solid #1e3a5f; padding: 14px 16px; margin-bottom: 10px;
+        border-radius: 6px; min-height: 250px; position: relative;
+      }
+      .boleto-header {
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; margin-bottom: 10px;
+      }
+      .boleto-header h2 { font-size: 16px; color: #1e3a5f; }
+      .boleto-header .subtitle { font-size: 9px; color: #888; }
+      .parcela-badge { background: #1e3a5f; color: #fff; padding: 4px 14px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+      .boleto-body { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 6px; }
+      .boleto-fields { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .field { margin-bottom: 4px; }
+      .field label { font-weight: bold; color: #888; font-size: 9px; text-transform: uppercase; display: block; letter-spacing: 0.3px; }
+      .field span { font-size: 13px; color: #222; }
+      .valor-destaque { font-size: 24px; font-weight: bold; color: #1e3a5f; }
+      .qr-section { display: flex; flex-direction: column; align-items: center; justify-content: center; border-left: 1px dashed #ccc; padding-left: 10px; }
+      .qr-section img { width: 90px; height: 90px; }
+      .qr-section .qr-label { font-size: 8px; color: #888; text-align: center; margin-top: 3px; }
+      .barcode-section { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #bbb; }
+      .barcode-label { font-weight: bold; color: #888; font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px; }
+      .barcode-text { font-family: monospace; font-size: 10px; letter-spacing: 0.5px; word-break: break-all; background: #f5f5f5; padding: 5px 8px; border-radius: 3px; margin-top: 3px; }
+      .footer-line { margin-top: 6px; font-size: 9px; color: #888; display: flex; justify-content: space-between; }
+      .btn-print { display: block; margin: 20px auto; padding: 12px 40px; font-size: 16px; background: #1e3a5f; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+      .btn-print:hover { background: #2a5080; }
     </style></head><body>
     <div class="no-print" style="text-align:center;padding:15px;background:#f0f0f0;">
-      <h2>Carne - ${clienteNome} (${carneCobrancas.length} parcelas)</h2>
+      <h2 style="color:#1e3a5f;">Carne - ${clienteNome} (${carneCobrancas.length} parcela${carneCobrancas.length > 1 ? 's' : ''})</h2>
       <button class="btn-print" onclick="window.print()">Imprimir Carne</button>
     </div>
     ${carneCobrancas.reduce((pages, c, idx) => {
       if (idx % 3 === 0) pages.push([]);
-      pages[pages.length - 1].push(c);
+      pages[pages.length - 1].push({ ...c, num: idx + 1 });
       return pages;
     }, []).map(group => `
       <div class="page">
-        ${group.map(c => `
+        ${group.map(c => {
+          const qrUrl = c.asaas_invoice_url || '';
+          const qrImg = qrUrl ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qrUrl)}" alt="QR"/><div class="qr-label">Escaneie para pagar</div>` : '<div style="width:90px;height:90px;border:1px dashed #ccc;display:flex;align-items:center;justify-content:center;font-size:9px;color:#bbb;text-align:center;border-radius:4px;">Sem link</div>';
+          return `
           <div class="boleto">
             <div class="boleto-header">
               <div>
                 <h2>HomeOn Internet</h2>
-                <div style="font-size:10px;color:#666;">Telefonia Movel - MVNO</div>
+                <div class="subtitle">Telefonia Movel - MVNO</div>
               </div>
-              ${c.parcela_num ? `<div class="parcela-badge">${c.parcela_num}/${c.parcela_total}</div>` : ''}
+              <div class="parcela-badge">${c.parcela_num ? `${c.parcela_num}/${c.parcela_total}` : `${c.num}/${carneCobrancas.length}`}</div>
             </div>
             <div class="boleto-body">
-              <div class="field"><label>Cliente</label><span>${c.cliente_nome || '-'}</span></div>
-              <div class="field"><label>Vencimento</label><span style="font-size:15px;font-weight:bold;">${c.vencimento.split('-').reverse().join('/')}</span></div>
-              <div class="field"><label>Tipo</label><span>${c.billing_type === 'BOLETO' ? 'Boleto Bancario' : 'PIX'}</span></div>
-              <div class="field"><label>Valor</label><span class="valor-destaque">R$ ${c.valor.toFixed(2)}</span></div>
-              ${c.descricao ? `<div class="field" style="grid-column:span 2"><label>Descricao</label><span>${c.descricao}</span></div>` : ''}
+              <div class="boleto-fields">
+                <div class="field"><label>Cliente</label><span>${c.cliente_nome || '-'}</span></div>
+                <div class="field"><label>Vencimento</label><span style="font-size:16px;font-weight:bold;color:#c62828;">${c.vencimento.split('-').reverse().join('/')}</span></div>
+                <div class="field"><label>Forma de Pagamento</label><span>${c.billing_type === 'BOLETO' ? 'Boleto Bancario' : c.billing_type === 'PIX' ? 'PIX' : c.billing_type}</span></div>
+                <div class="field"><label>Valor</label><span class="valor-destaque">R$ ${c.valor.toFixed(2)}</span></div>
+                ${c.descricao ? `<div class="field" style="grid-column:span 2"><label>Descricao</label><span>${c.descricao}</span></div>` : ''}
+              </div>
+              <div class="qr-section">${qrImg}</div>
             </div>
-            ${c.barcode ? `<div class="barcode-section"><label style="font-weight:bold;color:#666;font-size:10px;">LINHA DIGITAVEL</label><div class="barcode-text">${c.barcode}</div></div>` : ''}
-            ${c.asaas_pix_code ? `<div class="barcode-section"><label style="font-weight:bold;color:#666;font-size:10px;">PIX COPIA E COLA</label><div class="barcode-text">${c.asaas_pix_code}</div></div>` : ''}
-            ${c.asaas_invoice_url ? `<div style="margin-top:6px;font-size:10px;color:#666;">Pague online: ${c.asaas_invoice_url}</div>` : ''}
-          </div>
-        `).join('')}
+            ${c.barcode ? `<div class="barcode-section"><div class="barcode-label">Linha Digitavel</div><div class="barcode-text">${c.barcode}</div></div>` : ''}
+            ${c.asaas_pix_code ? `<div class="barcode-section"><div class="barcode-label">PIX Copia e Cola</div><div class="barcode-text">${c.asaas_pix_code.substring(0, 120)}...</div></div>` : ''}
+            <div class="footer-line">
+              <span>Contato: (19) 92005-1397</span>
+              ${c.asaas_invoice_url ? `<span>Pague online: ${c.asaas_invoice_url}</span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     `).join('')}
     </body></html>`;
@@ -502,21 +533,10 @@ export function GestaoCobrancas() {
             <Button onClick={() => setLoteDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="lote-cobranca-btn">
               <CreditCard className="w-3.5 h-3.5" /><span className="hidden sm:inline">Em Lote</span><span className="sm:hidden">Lote</span>
             </Button>
-            {cobrancas.filter(c => c.parcela_total > 1).length > 0 && (
-              <select
-                onChange={(e) => { if (e.target.value) handlePrintCarne(e.target.value); e.target.value = ''; }}
-                className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-1.5 text-xs sm:text-sm text-zinc-300"
-                data-testid="carne-select"
-                defaultValue="">
-                <option value="" disabled>Imprimir Carne</option>
-                {[...new Map(cobrancas.filter(c => c.parcela_total > 1).map(c => [c.cliente_id, c])).values()]
-                  .sort((a, b) => (a.cliente_nome || '').localeCompare(b.cliente_nome || '', 'pt-BR'))
-                  .map(c => (
-                    <option key={c.cliente_id} value={c.cliente_id}>
-                      {c.cliente_nome} ({cobrancas.filter(x => x.cliente_id === c.cliente_id && x.parcela_total > 1).length}x)
-                    </option>
-                  ))}
-              </select>
+            {cobrancas.length > 0 && (
+              <Button onClick={() => setCarneFilterOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="carne-btn">
+                <Printer className="w-3.5 h-3.5" /><span className="hidden sm:inline">Imprimir Carne</span><span className="sm:hidden">Carne</span>
+              </Button>
             )}
             <Button onClick={() => handleOpenDialog()} size="sm" className="btn-primary flex items-center gap-1.5 text-xs sm:text-sm" data-testid="nova-cobranca-btn">
               <Plus className="w-3.5 h-3.5" />Nova
@@ -1011,13 +1031,63 @@ export function GestaoCobrancas() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog Filtro de Carne */}
+      <Dialog open={carneFilterOpen} onOpenChange={setCarneFilterOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader><DialogTitle>Imprimir Carne</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-zinc-300 mb-1.5">Cliente *</label>
+              <select value={carneClienteId} onChange={e => setCarneClienteId(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-zinc-300"
+                data-testid="carne-cliente-select">
+                <option value="">Selecione o cliente</option>
+                {[...new Map(cobrancas.map(c => [c.cliente_id, c.cliente_nome])).entries()]
+                  .sort((a, b) => (a[1] || '').localeCompare(b[1] || '', 'pt-BR'))
+                  .map(([id, nome]) => (
+                    <option key={id} value={id}>{nome} ({cobrancas.filter(c => c.cliente_id === id).length} cobrancas)</option>
+                  ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-zinc-300 mb-1.5">Vencimento De</label>
+                <Input type="date" value={carneDateFrom} onChange={e => setCarneDateFrom(e.target.value)}
+                  className="form-input" data-testid="carne-date-from" />
+              </div>
+              <div>
+                <label className="block text-sm text-zinc-300 mb-1.5">Vencimento Ate</label>
+                <Input type="date" value={carneDateTo} onChange={e => setCarneDateTo(e.target.value)}
+                  className="form-input" data-testid="carne-date-to" />
+              </div>
+            </div>
+            {carneClienteId && (
+              <p className="text-xs text-zinc-500">
+                {cobrancas.filter(c => {
+                  if (c.cliente_id !== carneClienteId) return false;
+                  if (carneDateFrom && c.vencimento < carneDateFrom) return false;
+                  if (carneDateTo && c.vencimento > carneDateTo) return false;
+                  return true;
+                }).length} cobrancas no periodo selecionado
+              </p>
+            )}
+            <Button onClick={() => handlePrintCarne(carneClienteId, carneDateFrom, carneDateTo)}
+              disabled={!carneClienteId}
+              className="w-full btn-primary flex items-center justify-center gap-2"
+              data-testid="carne-filter-btn">
+              <Printer className="w-4 h-4" /> Gerar Carne
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog Impressao de Carne */}
       <Dialog open={carneDialogOpen} onOpenChange={setCarneDialogOpen}>
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-lg">
           <DialogHeader><DialogTitle>Imprimir Carne</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-zinc-400">
-              {carneCobrancas.length} parcelas encontradas para <strong className="text-white">{carneCobrancas[0]?.cliente_nome || 'Cliente'}</strong>
+              {carneCobrancas.length} parcela{carneCobrancas.length !== 1 ? 's' : ''} para <strong className="text-white">{carneCobrancas[0]?.cliente_nome || 'Cliente'}</strong>
             </p>
             <div className="max-h-60 overflow-y-auto space-y-1">
               {carneCobrancas.map((c, i) => (
@@ -1029,9 +1099,9 @@ export function GestaoCobrancas() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-zinc-300">Layout: 3 boletos por pagina A4, em ordem de vencimento</p>
+            <p className="text-xs text-zinc-500">3 boletos por pagina A4 | Com QR Code de pagamento | Ordem por vencimento</p>
             <Button onClick={printCarne} className="w-full btn-primary flex items-center justify-center gap-2" data-testid="print-carne-btn">
-              <Printer className="w-4 h-4" /> Imprimir Carne ({carneCobrancas.length} parcelas)
+              <Printer className="w-4 h-4" /> Imprimir Carne ({carneCobrancas.length} parcela{carneCobrancas.length !== 1 ? 's' : ''})
             </Button>
           </div>
         </DialogContent>
