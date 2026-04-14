@@ -5,6 +5,7 @@ import {
   Shield, RefreshCw, BarChart3, Zap, ChevronRight, MessageCircle,
   Check, ArrowRight, MonitorSmartphone, Clock,
 } from 'lucide-react';
+import { MockDashboard, MockClientes, MockCobrancas, MockAtivacoes } from '../components/LandingMockups';
 
 const WA_LINK = 'https://wa.me/5511915322526?text=Olá! Tenho interesse no sistema HELP4PRIME MVNO.';
 const WA_NUMBER = '(11) 91532-2526';
@@ -28,10 +29,10 @@ const extraFeatures = [
 ];
 
 const screenshots = [
-  { src: '/demo-dashboard.jpg', label: 'Dashboard' },
-  { src: '/demo-clientes.jpg', label: 'Clientes' },
-  { src: '/demo-cobrancas.jpg', label: 'Cobrancas' },
-  { src: '/demo-ativacoes.jpg', label: 'Ativacoes' },
+  { component: MockDashboard, label: 'Dashboard' },
+  { component: MockClientes, label: 'Clientes' },
+  { component: MockCobrancas, label: 'Cobrancas' },
+  { component: MockAtivacoes, label: 'Ativacoes' },
 ];
 
 function FadeIn({ children, className = '', delay = 0 }) {
@@ -152,8 +153,9 @@ function Hero() {
           >
             <div className="relative">
               <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/20 to-blue-600/10 rounded-3xl blur-2xl" />
-              <img src="/demo-dashboard.jpg" alt="Dashboard HELP4PRIME" loading="eager"
-                className="relative rounded-2xl border border-white/10 shadow-2xl w-full" />
+              <div className="relative">
+                <MockDashboard />
+              </div>
             </div>
           </motion.div>
         </div>
@@ -246,9 +248,8 @@ function Screenshots() {
         <FadeIn delay={0.2}>
           <div className="relative">
             <div className="absolute -inset-4 bg-gradient-to-b from-blue-500/10 to-transparent rounded-3xl blur-2xl" />
-            <div className="relative rounded-2xl border border-white/10 overflow-hidden shadow-2xl bg-zinc-900">
-              <img src={screenshots[active].src} alt={screenshots[active].label}
-                className="w-full transition-opacity duration-300" loading="lazy" />
+            <div className="relative">
+              {(() => { const Comp = screenshots[active].component; return <Comp />; })()}
             </div>
           </div>
         </FadeIn>
