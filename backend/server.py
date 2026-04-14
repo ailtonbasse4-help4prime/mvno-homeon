@@ -3054,7 +3054,8 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
                             doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
                     except Exception as e:
                         logger.warning(f"Erro ao buscar detalhes do pagamento installment: {e}")
-            elif not installment_id:
+            else:
+                # Fallback: criar payment individual (se installment falhou ou avulso)
                 try:
                     asaas_customer_id = await _get_asaas_customer_id(cliente, user)
                     ref = f"cob-{data.cliente_id}-{i+1}"
@@ -3072,6 +3073,12 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
                     doc["asaas_invoice_url"] = result.get("invoiceUrl")
                     doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
                     doc["status"] = result.get("status", "PENDING")
+                    # Verificar se tem installment no resultado
+                    if result.get("installment") and not installment_id:
+                        installment_id = result.get("installment")
+                        doc["asaas_installment_id"] = installment_id
+                    elif installment_id:
+                        doc["asaas_installment_id"] = installment_id
                     payment_id = result.get("id")
                     if payment_id:
                         try:
