@@ -2997,7 +2997,9 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
                 try:
                     inst_data = await asaas_service.get_installment_payments(installment_id)
                     installment_payments = inst_data.get("data", [])
-                    logger.info(f"Installment payments: {len(installment_payments)}")
+                    # Ordenar por dueDate para garantir que parcela 1 = primeiro vencimento
+                    installment_payments.sort(key=lambda p: p.get("dueDate", ""))
+                    logger.info(f"Installment payments: {len(installment_payments)} (ordenados por dueDate)")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar payments do installment: {e}")
         except Exception as e:
