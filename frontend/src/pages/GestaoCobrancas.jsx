@@ -276,22 +276,41 @@ export function GestaoCobrancas() {
 
   const printCarne = () => {
     if (!carneCobrancas.length) return;
-    // Buscar boletos com bankslip_url (PDF real do Asaas)
-    const comPdf = carneCobrancas.filter(c => c.asaas_bankslip_url);
-    const comLink = comPdf.length > 0 ? comPdf : carneCobrancas.filter(c => c.asaas_invoice_url);
-
-    if (!comLink.length) {
+    const comPdf = carneCobrancas.filter(c => c.asaas_bankslip_url || c.asaas_invoice_url);
+    if (!comPdf.length) {
       toast.error('Nenhuma cobranca possui boleto no Asaas.');
       return;
     }
-
-    // Abrir todos os PDFs em sequência
-    comLink.forEach((c, i) => {
+    comPdf.forEach((c, i) => {
       setTimeout(() => {
         window.open(c.asaas_bankslip_url || c.asaas_invoice_url, '_blank');
       }, i * 500);
     });
-    toast.success(`Abrindo ${comLink.length} boleto${comLink.length > 1 ? 's' : ''} do Asaas para impressao`);
+    toast.success(`Abrindo ${comPdf.length} boleto${comPdf.length > 1 ? 's' : ''} do Asaas`);
+  };
+
+  const [loadingCarnePdf, setLoadingCarnePdf] = useState(false);
+
+  const handleCarnePdf = async () => {
+    if (!carneCobrancas.length) return;
+    const clienteId = carneCobrancas[0]?.cliente_id;
+    if (!clienteId) return;
+    setLoadingCarnePdf(true);
+    try {
+      const res = await axios.get(`${API_URL}/api/carteira/carne/${clienteId}`, {
+        withCredentials: true, responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      toast.success('Carne PDF aberto (3 boletos por folha)');
+    } catch (e) {
+      const msg = e.response?.data?.detail || (e.response?.data instanceof Blob
+        ? await e.response.data.text().then(t => { try { return JSON.parse(t).detail; } catch { return t; } })
+        : 'Erro ao gerar carne');
+      toast.error(typeof msg === 'string' ? msg : 'Erro ao gerar carne PDF');
+    }
+    setLoadingCarnePdf(false);
   };
 
   const handleLoteSubmit = async (e) => {
@@ -1053,13 +1072,18 @@ export function GestaoCobrancas() {
                 {carneCobrancas.filter(c => !c.asaas_invoice_url).length} cobranca(s) sem link do Asaas. Gere as cobrancas pelo Asaas primeiro.
               </p>
             )}
-            <div className="flex gap-2">
-              <Button onClick={printCarne} disabled={!carneCobrancas.some(c => c.asaas_bankslip_url || c.asaas_invoice_url)}
-                className="flex-1 btn-primary flex items-center justify-center gap-2" data-testid="print-carne-btn">
-                <Printer className="w-4 h-4" /> Imprimir Carne ({carneCobrancas.filter(c => c.asaas_bankslip_url || c.asaas_invoice_url).length} boletos)
+            <div className="flex flex-col gap-2">
+              <Button onClick={handleCarnePdf} disabled={loadingCarnePdf}
+                className="w-full btn-primary flex items-center justify-center gap-2" data-testid="carne-pdf-btn">
+                <Printer className={`w-4 h-4 ${loadingCarnePdf ? 'animate-spin' : ''}`} />
+                {loadingCarnePdf ? 'Gerando...' : 'Carne PDF (3 boletos/folha)'}
+              </Button>
+              <Button onClick={printCarne} variant="outline" disabled={!carneCobrancas.some(c => c.asaas_bankslip_url || c.asaas_invoice_url)}
+                className="w-full flex items-center justify-center gap-2 border-zinc-700 text-zinc-300" data-testid="print-carne-btn">
+                <ExternalLink className="w-4 h-4" /> Abrir Boletos Individuais ({carneCobrancas.filter(c => c.asaas_bankslip_url || c.asaas_invoice_url).length})
               </Button>
             </div>
-            <p className="text-xs text-zinc-600 text-center">Abre os boletos PDF reais do Asaas (2 por folha). Permita popups no navegador.</p>
+            <p className="text-xs text-zinc-600 text-center">O carne PDF funciona para cobrancas parceladas criadas com installment no Asaas.</p>
           </div>
         </DialogContent>
       </Dialog>

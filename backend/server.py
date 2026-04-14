@@ -2697,45 +2697,51 @@ async def send_test_email(data: EmailTestRequest, request: Request):
 
 @api_router.get("/carteira/carne/{cliente_id}")
 async def get_carne_pdf(cliente_id: str, request: Request):
-    """Busca URL do carne PDF do Asaas para um cliente parcelado."""
+    """Busca PDF do carne do Asaas (3 boletos por pagina) para um cliente parcelado."""
     await require_admin(request)
     if not asaas_service.is_configured:
         raise HTTPException(status_code=400, detail="Asaas nao configurado")
 
-    # Buscar uma cobranca parcelada deste cliente para obter o installment_id
+    # Buscar cobranca com installment_id
     cobranca = await db.cobrancas.find_one({
         "cliente_id": cliente_id,
-        "asaas_payment_id": {"$exists": True, "$ne": None, "$not": {"$regex": "^mock_"}},
-        "parcela_total": {"$gt": 1},
+        "asaas_installment_id": {"$exists": True, "$ne": None},
     })
-    if not cobranca:
-        raise HTTPException(status_code=404, detail="Nenhuma cobranca parcelada encontrada para este cliente")
 
-    payment_id = cobranca["asaas_payment_id"]
+    if not cobranca:
+        # Tentar buscar installment_id via API do Asaas
+        cobranca_any = await db.cobrancas.find_one({
+            "cliente_id": cliente_id,
+            "asaas_payment_id": {"$exists": True, "$ne": None, "$not": {"$regex": "^mock_"}},
+            "parcela_total": {"$gt": 1},
+        })
+        if cobranca_any:
+            try:
+                inst_id = await asaas_service.get_payment_installment_id(cobranca_any["asaas_payment_id"])
+                if inst_id:
+                    # Salvar para futuro
+                    await db.cobrancas.update_many(
+                        {"cliente_id": cliente_id, "parcela_total": cobranca_any.get("parcela_total")},
+                        {"$set": {"asaas_installment_id": inst_id}}
+                    )
+                    cobranca = {"asaas_installment_id": inst_id}
+            except Exception as e:
+                logger.warning(f"Erro ao buscar installment_id: {e}")
+
+    if not cobranca or not cobranca.get("asaas_installment_id"):
+        raise HTTPException(
+            status_code=404,
+            detail="Este cliente nao possui parcelamento (installment) no Asaas. O carne PDF so funciona para cobrancas parceladas criadas apos esta atualizacao. Para cobrancas anteriores, use os boletos individuais."
+        )
 
     try:
-        # Buscar installment_id do payment no Asaas
-        installment_id = await asaas_service.get_payment_installment_id(payment_id)
-        if not installment_id:
-            raise HTTPException(status_code=404, detail="Este pagamento nao possui parcelamento no Asaas")
-
-        # Buscar URL do carne PDF
-        result = await asaas_service.get_installment_payment_book(installment_id)
-
-        # O Asaas pode retornar a URL diretamente ou um objeto
-        if isinstance(result, str):
-            return {"success": True, "url": result}
-        elif isinstance(result, dict):
-            url = result.get("url") or result.get("invoiceUrl") or result.get("bankSlipUrl")
-            if url:
-                return {"success": True, "url": url}
-
-        raise HTTPException(status_code=404, detail="Nao foi possivel obter o carne PDF do Asaas")
-    except HTTPException:
-        raise
+        from fastapi.responses import Response
+        pdf_bytes = await asaas_service.get_installment_payment_book(cobranca["asaas_installment_id"])
+        return Response(content=pdf_bytes, media_type="application/pdf",
+                       headers={"Content-Disposition": f"inline; filename=carne-{cliente_id}.pdf"})
     except Exception as e:
         logger.error(f"Erro ao buscar carne PDF: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar carne: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar carne: {str(e)}")
 
 
 @api_router.post("/carteira/cobrancas/{cobranca_id}/enviar-email")
@@ -2965,6 +2971,39 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
         except Exception as e:
             logger.warning(f"Erro ao criar assinatura Asaas: {e}")
 
+    # Para parcelado: cria todas as parcelas de uma vez no Asaas (installment)
+    installment_id = None
+    installment_payments = []
+
+    if parcelas > 1 and asaas_service.is_configured and modalidade != "assinatura":
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            base_desc = data.descricao or f"Cobranca - {cliente.get('nome', 'Cliente')}"
+            result = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type.value,
+                value=data.valor * parcelas,
+                due_date=data.vencimento,
+                description=_append_portal_link(base_desc),
+                external_reference=f"cob-{data.cliente_id}-installment",
+                installment_count=parcelas,
+                installment_value=data.valor,
+            )
+            installment_id = result.get("installment")
+            logger.info(f"Installment criado no Asaas: {installment_id} ({parcelas} parcelas)")
+
+            # Buscar todos os pagamentos do installment
+            if installment_id:
+                try:
+                    inst_data = await asaas_service.get_installment_payments(installment_id)
+                    installment_payments = inst_data.get("data", [])
+                    logger.info(f"Installment payments: {len(installment_payments)}")
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar payments do installment: {e}")
+        except Exception as e:
+            logger.warning(f"Asaas installment error: {e}. Criando individualmente.")
+            installment_id = None
+
     for i in range(parcelas):
         from dateutil.relativedelta import relativedelta
         venc_date = base_date + relativedelta(months=i)
@@ -2993,26 +3032,17 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
             "created_at": datetime.now(timezone.utc),
         }
 
-        # Cria pagamento no Asaas (para avista e parcelado)
+        # Cria pagamento no Asaas (para avista e parcelado individual)
         if asaas_service.is_configured and modalidade != "assinatura":
-            try:
-                asaas_customer_id = await _get_asaas_customer_id(cliente, user)
-                ref = f"cob-{data.cliente_id}-{i+1}"
-                if data.linha_id:
-                    ref += f"-{data.linha_id}"
-                result = await asaas_service.create_payment(
-                    customer_id=asaas_customer_id,
-                    billing_type=data.billing_type.value,
-                    value=data.valor,
-                    due_date=vencimento_str,
-                    description=_append_portal_link(desc),
-                    external_reference=ref,
-                )
-                doc["asaas_payment_id"] = result.get("id")
-                doc["asaas_invoice_url"] = result.get("invoiceUrl")
-                doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
-                doc["status"] = result.get("status", "PENDING")
-                payment_id = result.get("id")
+            if installment_id and i < len(installment_payments):
+                # Usar payment ja criado pelo installment
+                ip = installment_payments[i]
+                doc["asaas_payment_id"] = ip.get("id")
+                doc["asaas_invoice_url"] = ip.get("invoiceUrl")
+                doc["asaas_bankslip_url"] = ip.get("bankSlipUrl")
+                doc["asaas_installment_id"] = installment_id
+                doc["status"] = ip.get("status", "PENDING")
+                payment_id = ip.get("id")
                 if payment_id:
                     try:
                         if data.billing_type.value == "BOLETO":
@@ -3023,9 +3053,39 @@ async def create_cobranca(data: CobrancaCreate, request: Request):
                             doc["asaas_pix_code"] = pix_data.get("payload")
                             doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
                     except Exception as e:
-                        logger.warning(f"Erro ao buscar detalhes do pagamento: {e}")
-            except Exception as e:
-                logger.warning(f"Asaas API error ao criar cobranca {i+1}: {e}")
+                        logger.warning(f"Erro ao buscar detalhes do pagamento installment: {e}")
+            elif not installment_id:
+                try:
+                    asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                    ref = f"cob-{data.cliente_id}-{i+1}"
+                    if data.linha_id:
+                        ref += f"-{data.linha_id}"
+                    result = await asaas_service.create_payment(
+                        customer_id=asaas_customer_id,
+                        billing_type=data.billing_type.value,
+                        value=data.valor,
+                        due_date=vencimento_str,
+                        description=_append_portal_link(desc),
+                        external_reference=ref,
+                    )
+                    doc["asaas_payment_id"] = result.get("id")
+                    doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                    doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
+                    doc["status"] = result.get("status", "PENDING")
+                    payment_id = result.get("id")
+                    if payment_id:
+                        try:
+                            if data.billing_type.value == "BOLETO":
+                                barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                                doc["barcode"] = barcode_data.get("identificationField")
+                            elif data.billing_type.value == "PIX":
+                                pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                                doc["asaas_pix_code"] = pix_data.get("payload")
+                                doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                        except Exception as e:
+                            logger.warning(f"Erro ao buscar detalhes do pagamento: {e}")
+                except Exception as e:
+                    logger.warning(f"Asaas API error ao criar cobranca {i+1}: {e}")
 
         inserted = await db.cobrancas.insert_one(doc)
         doc["_id"] = inserted.inserted_id

@@ -223,7 +223,9 @@ class AsaasService:
                              external_reference: Optional[str] = None,
                              discount_value: Optional[float] = None,
                              fine_value: Optional[float] = None,
-                             interest_value: Optional[float] = None) -> Dict[str, Any]:
+                             interest_value: Optional[float] = None,
+                             installment_count: Optional[int] = None,
+                             installment_value: Optional[float] = None) -> Dict[str, Any]:
         self._check_configured()
         payload = {
             "customer": customer_id,
@@ -242,6 +244,9 @@ class AsaasService:
             payload["fine"] = {"value": fine_value}
         if interest_value:
             payload["interest"] = {"value": interest_value}
+        if installment_count and installment_count > 1:
+            payload["installmentCount"] = installment_count
+            payload["installmentValue"] = installment_value or value
         return await self._request("POST", "/payments", payload)
 
     async def create_payments_batch(self, payments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -296,11 +301,22 @@ class AsaasService:
         self._check_configured()
         return await self._request("GET", f"/payments/{payment_id}/identificationField")
 
-    async def get_installment_payment_book(self, installment_id: str) -> str:
-        """Retorna URL do carne PDF (paymentBook) de um parcelamento."""
+    async def get_installment_payment_book(self, installment_id: str) -> bytes:
+        """Retorna bytes do PDF do carne de um parcelamento."""
         self._check_configured()
-        result = await self._request("GET", f"/installments/{installment_id}/paymentBook")
-        return result
+        url = f"{self.api_url}/installments/{installment_id}/paymentBook"
+        headers = {"access_token": self.api_key}
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.content
+            else:
+                raise AsaasApiError(f"Erro ao gerar carne PDF: {response.status_code} - {response.text}")
+
+    async def get_installment_payments(self, installment_id: str) -> Dict[str, Any]:
+        """Lista pagamentos de um parcelamento."""
+        self._check_configured()
+        return await self._request("GET", f"/installments/{installment_id}/payments")
 
     async def get_payment_installment_id(self, payment_id: str) -> Optional[str]:
         """Busca o installment ID de um pagamento parcelado."""
