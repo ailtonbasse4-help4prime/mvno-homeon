@@ -802,8 +802,8 @@ export function GestaoCobrancas() {
                 <select value={form.modalidade} onChange={e => setForm({ ...form, modalidade: e.target.value, parcelas: e.target.value === 'avista' ? 1 : form.parcelas })}
                   className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm mt-1" data-testid="cobranca-modalidade">
                   <option value="avista">A Vista (parcela unica)</option>
-                  <option value="parcelado">Parcelado (multiplas parcelas)</option>
-                  <option value="assinatura">Assinatura / Carne (recorrente)</option>
+                  <option value="parcelado">Parcelado / Carne</option>
+                  <option value="assinatura">Assinatura (recorrente mensal)</option>
                 </select>
               </div>
             )}
