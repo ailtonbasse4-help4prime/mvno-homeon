@@ -275,88 +275,18 @@ export function GestaoCobrancas() {
   };
 
   const printCarne = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Popup bloqueado. Permita popups.'); return; }
-    const clienteNome = carneCobrancas[0]?.cliente_nome || 'Cliente';
-    const html = `<!DOCTYPE html><html><head><title>Carne - ${clienteNome}</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #000; }
-      @media print { @page { margin: 8mm; size: A4; } .no-print { display: none !important; } }
-      .page { page-break-after: always; padding: 5px 0; }
-      .page:last-child { page-break-after: avoid; }
-      .boleto {
-        border: 2px solid #1e3a5f; padding: 14px 16px; margin-bottom: 10px;
-        border-radius: 6px; min-height: 250px; position: relative;
-      }
-      .boleto-header {
-        display: flex; justify-content: space-between; align-items: center;
-        border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; margin-bottom: 10px;
-      }
-      .boleto-header h2 { font-size: 16px; color: #1e3a5f; }
-      .boleto-header .subtitle { font-size: 9px; color: #888; }
-      .parcela-badge { background: #1e3a5f; color: #fff; padding: 4px 14px; border-radius: 4px; font-weight: bold; font-size: 13px; }
-      .boleto-body { display: grid; grid-template-columns: 1fr 1fr 120px; gap: 6px; }
-      .boleto-fields { grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-      .field { margin-bottom: 4px; }
-      .field label { font-weight: bold; color: #888; font-size: 9px; text-transform: uppercase; display: block; letter-spacing: 0.3px; }
-      .field span { font-size: 13px; color: #222; }
-      .valor-destaque { font-size: 24px; font-weight: bold; color: #1e3a5f; }
-      .qr-section { display: flex; flex-direction: column; align-items: center; justify-content: center; border-left: 1px dashed #ccc; padding-left: 10px; }
-      .qr-section img { width: 90px; height: 90px; }
-      .qr-section .qr-label { font-size: 8px; color: #888; text-align: center; margin-top: 3px; }
-      .barcode-section { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #bbb; }
-      .barcode-label { font-weight: bold; color: #888; font-size: 9px; text-transform: uppercase; letter-spacing: 0.3px; }
-      .barcode-text { font-family: monospace; font-size: 10px; letter-spacing: 0.5px; word-break: break-all; background: #f5f5f5; padding: 5px 8px; border-radius: 3px; margin-top: 3px; }
-      .footer-line { margin-top: 6px; font-size: 9px; color: #888; display: flex; justify-content: space-between; }
-      .btn-print { display: block; margin: 20px auto; padding: 12px 40px; font-size: 16px; background: #1e3a5f; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-      .btn-print:hover { background: #2a5080; }
-    </style></head><body>
-    <div class="no-print" style="text-align:center;padding:15px;background:#f0f0f0;">
-      <h2 style="color:#1e3a5f;">Carne - ${clienteNome} (${carneCobrancas.length} parcela${carneCobrancas.length > 1 ? 's' : ''})</h2>
-      <button class="btn-print" onclick="window.print()">Imprimir Carne</button>
-    </div>
-    ${carneCobrancas.reduce((pages, c, idx) => {
-      if (idx % 3 === 0) pages.push([]);
-      pages[pages.length - 1].push({ ...c, num: idx + 1 });
-      return pages;
-    }, []).map(group => `
-      <div class="page">
-        ${group.map(c => {
-          const qrUrl = c.asaas_invoice_url || '';
-          const qrImg = qrUrl ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qrUrl)}" alt="QR"/><div class="qr-label">Escaneie para pagar</div>` : '<div style="width:90px;height:90px;border:1px dashed #ccc;display:flex;align-items:center;justify-content:center;font-size:9px;color:#bbb;text-align:center;border-radius:4px;">Sem link</div>';
-          return `
-          <div class="boleto">
-            <div class="boleto-header">
-              <div>
-                <h2>HomeOn Internet</h2>
-                <div class="subtitle">Telefonia Movel - MVNO</div>
-              </div>
-              <div class="parcela-badge">${c.parcela_num ? `${c.parcela_num}/${c.parcela_total}` : `${c.num}/${carneCobrancas.length}`}</div>
-            </div>
-            <div class="boleto-body">
-              <div class="boleto-fields">
-                <div class="field"><label>Cliente</label><span>${c.cliente_nome || '-'}</span></div>
-                <div class="field"><label>Vencimento</label><span style="font-size:16px;font-weight:bold;color:#c62828;">${c.vencimento.split('-').reverse().join('/')}</span></div>
-                <div class="field"><label>Forma de Pagamento</label><span>${c.billing_type === 'BOLETO' ? 'Boleto Bancario' : c.billing_type === 'PIX' ? 'PIX' : c.billing_type}</span></div>
-                <div class="field"><label>Valor</label><span class="valor-destaque">R$ ${c.valor.toFixed(2)}</span></div>
-                ${c.descricao ? `<div class="field" style="grid-column:span 2"><label>Descricao</label><span>${c.descricao}</span></div>` : ''}
-              </div>
-              <div class="qr-section">${qrImg}</div>
-            </div>
-            ${c.barcode ? `<div class="barcode-section"><div class="barcode-label">Linha Digitavel</div><div class="barcode-text">${c.barcode}</div></div>` : ''}
-            ${c.asaas_pix_code ? `<div class="barcode-section"><div class="barcode-label">PIX Copia e Cola</div><div class="barcode-text">${c.asaas_pix_code.substring(0, 120)}...</div></div>` : ''}
-            <div class="footer-line">
-              <span>Contato: (19) 92005-1397</span>
-              ${c.asaas_invoice_url ? `<span>Pague online: ${c.asaas_invoice_url}</span>` : ''}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    `).join('')}
-    </body></html>`;
-    printWindow.document.write(html);
-    printWindow.document.close();
+    // Abrir todos os boletos do Asaas em sequência
+    const comLink = carneCobrancas.filter(c => c.asaas_invoice_url);
+    if (!comLink.length) {
+      toast.error('Nenhuma cobranca possui link de pagamento do Asaas. Gere as cobrancas pelo Asaas primeiro.');
+      return;
+    }
+    comLink.forEach((c, i) => {
+      setTimeout(() => {
+        window.open(c.asaas_invoice_url, '_blank');
+      }, i * 600);
+    });
+    toast.success(`Abrindo ${comLink.length} boleto${comLink.length > 1 ? 's' : ''} do Asaas`);
   };
 
   const handleLoteSubmit = async (e) => {
@@ -1084,25 +1014,47 @@ export function GestaoCobrancas() {
       {/* Dialog Impressao de Carne */}
       <Dialog open={carneDialogOpen} onOpenChange={setCarneDialogOpen}>
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-lg">
-          <DialogHeader><DialogTitle>Imprimir Carne</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Carne - Boletos Asaas</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-zinc-400">
-              {carneCobrancas.length} parcela{carneCobrancas.length !== 1 ? 's' : ''} para <strong className="text-white">{carneCobrancas[0]?.cliente_nome || 'Cliente'}</strong>
+              {carneCobrancas.length} cobranca{carneCobrancas.length !== 1 ? 's' : ''} de <strong className="text-white">{carneCobrancas[0]?.cliente_nome || 'Cliente'}</strong>
             </p>
-            <div className="max-h-60 overflow-y-auto space-y-1">
-              {carneCobrancas.map((c, i) => (
-                <div key={c.id} className="flex justify-between items-center p-2 bg-zinc-900 rounded text-sm">
-                  <span className="text-zinc-300">{c.parcela_num ? `${c.parcela_num}/${c.parcela_total}` : `#${i+1}`}</span>
-                  <span className="text-zinc-400">{c.vencimento.split('-').reverse().join('/')}</span>
-                  <span className="font-medium">R$ {c.valor.toFixed(2)}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-xs ${statusBg(c.status)}`}>{statusLabel(c.status)}</span>
-                </div>
-              ))}
+            <div className="max-h-72 overflow-y-auto space-y-1.5">
+              {carneCobrancas.map((c, i) => {
+                const hasLink = !!c.asaas_invoice_url;
+                return (
+                  <div key={c.id} className="flex items-center justify-between gap-2 p-2.5 bg-zinc-900 rounded border border-zinc-800">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className="text-zinc-500 text-xs font-mono w-8">{c.parcela_num ? `${c.parcela_num}/${c.parcela_total}` : `#${i+1}`}</span>
+                      <span className="text-zinc-300 text-sm">{c.vencimento.split('-').reverse().join('/')}</span>
+                      <span className="text-white text-sm font-medium">R$ {c.valor.toFixed(2)}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${statusBg(c.status)}`}>{statusLabel(c.status)}</span>
+                    </div>
+                    {hasLink ? (
+                      <a href={c.asaas_invoice_url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                        data-testid={`carne-boleto-link-${i}`}>
+                        <ExternalLink className="w-3 h-3" /> Boleto
+                      </a>
+                    ) : (
+                      <span className="text-zinc-600 text-xs">Sem link</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <p className="text-xs text-zinc-500">3 boletos por pagina A4 | Com QR Code de pagamento | Ordem por vencimento</p>
-            <Button onClick={printCarne} className="w-full btn-primary flex items-center justify-center gap-2" data-testid="print-carne-btn">
-              <Printer className="w-4 h-4" /> Imprimir Carne ({carneCobrancas.length} parcela{carneCobrancas.length !== 1 ? 's' : ''})
-            </Button>
+            {carneCobrancas.filter(c => !c.asaas_invoice_url).length > 0 && (
+              <p className="text-xs text-amber-400">
+                {carneCobrancas.filter(c => !c.asaas_invoice_url).length} cobranca(s) sem link do Asaas. Gere as cobrancas pelo Asaas primeiro.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button onClick={printCarne} disabled={!carneCobrancas.some(c => c.asaas_invoice_url)}
+                className="flex-1 btn-primary flex items-center justify-center gap-2" data-testid="print-carne-btn">
+                <ExternalLink className="w-4 h-4" /> Abrir Todos os Boletos ({carneCobrancas.filter(c => c.asaas_invoice_url).length})
+              </Button>
+            </div>
+            <p className="text-xs text-zinc-600 text-center">Cada boleto abre na pagina do Asaas para impressao. Permita popups no navegador.</p>
           </div>
         </DialogContent>
       </Dialog>
