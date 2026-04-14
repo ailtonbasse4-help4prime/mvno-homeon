@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, Edit, Trash2, Search, Store, Package, CheckCircle, Link,
-  QrCode, Printer,
+  QrCode, Printer, Download,
 } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
@@ -247,6 +247,70 @@ export function Revendedores() {
     printWindow.onload = () => { printWindow.print(); };
   };
 
+  const [downloading, setDownloading] = useState(false);
+
+  const executeDownloadPDF = async () => {
+    const printArea = document.getElementById('qr-print-area');
+    if (!printArea) return;
+    setDownloading(true);
+    try {
+      const { toPng } = await import('html-to-image');
+      const { jsPDF } = await import('jspdf');
+
+      const dataUrl = await toPng(printArea, { quality: 1, pixelRatio: 2, backgroundColor: '#ffffff' });
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 5;
+      const usableW = pageW - margin * 2;
+
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise(resolve => { img.onload = resolve; });
+
+      const ratio = img.height / img.width;
+      const imgW = usableW;
+      const imgH = imgW * ratio;
+
+      if (imgH <= pageH - margin * 2) {
+        pdf.addImage(dataUrl, 'PNG', margin, margin, imgW, imgH);
+      } else {
+        // Paginate
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        const pageContentH = pageH - margin * 2;
+        const sliceH = (pageContentH / imgH) * img.height;
+        let yOffset = 0;
+        let page = 0;
+
+        while (yOffset < img.height) {
+          if (page > 0) pdf.addPage();
+          const slice = document.createElement('canvas');
+          slice.width = img.width;
+          slice.height = Math.min(sliceH, img.height - yOffset);
+          const sctx = slice.getContext('2d');
+          sctx.drawImage(canvas, 0, yOffset, slice.width, slice.height, 0, 0, slice.width, slice.height);
+          const sliceRatio = slice.height / slice.width;
+          pdf.addImage(slice.toDataURL('image/png'), 'PNG', margin, margin, imgW, imgW * sliceRatio);
+          yOffset += sliceH;
+          page++;
+        }
+      }
+
+      pdf.save(`cartoes-ativacao-${selectedRevName.replace(/\s+/g, '-')}.pdf`);
+      toast.success('PDF baixado!');
+    } catch (e) {
+      console.error('Erro ao gerar PDF:', e);
+      toast.error('Erro ao gerar PDF');
+    }
+    setDownloading(false);
+  };
+
   const filtered = revendedores.filter(r =>
     !search || r.nome.toLowerCase().includes(search.toLowerCase()) ||
     (r.contato || '').toLowerCase().includes(search.toLowerCase())
@@ -480,9 +544,15 @@ export function Revendedores() {
                 <Button onClick={() => setShowQrPrint(false)} variant="outline" size="sm" className="border-zinc-700 text-zinc-400">
                   Voltar
                 </Button>
-                <Button onClick={executePrint} className="btn-primary flex items-center gap-2" data-testid="print-qr-btn">
-                  <Printer className="w-4 h-4" /> Imprimir {qrSelectedIccids.length} Cartao{qrSelectedIccids.length !== 1 ? 'es' : ''}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button onClick={executeDownloadPDF} disabled={downloading} variant="outline" className="flex items-center gap-2 border-blue-700 text-blue-400 hover:bg-blue-900/20" data-testid="download-pdf-btn">
+                    <Download className={`w-4 h-4 ${downloading ? 'animate-pulse' : ''}`} />
+                    {downloading ? 'Gerando...' : 'Baixar PDF'}
+                  </Button>
+                  <Button onClick={executePrint} className="btn-primary flex items-center gap-2" data-testid="print-qr-btn">
+                    <Printer className="w-4 h-4" /> Imprimir {qrSelectedIccids.length} Cartao{qrSelectedIccids.length !== 1 ? 'es' : ''}
+                  </Button>
+                </div>
               </div>
 
               {/* Preview */}
