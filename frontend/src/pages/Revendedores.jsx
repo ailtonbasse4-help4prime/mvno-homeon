@@ -195,8 +195,12 @@ export function Revendedores() {
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; }
-        @page { margin: 8mm; }
-        .cards-container { display: flex; flex-direction: column; gap: 6mm; }
+        @page { margin: 5mm 8mm; size: A4; }
+        .cards-container {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 3mm 4mm;
+        }
         .activation-card {
           width: 80mm; height: 50mm;
           border: 1.5px solid #1e3a5f;
@@ -484,7 +488,7 @@ export function Revendedores() {
               {/* Preview */}
               <div className="border border-zinc-500/60 rounded-lg p-4 bg-white overflow-auto max-h-[500px]">
                 <div id="qr-print-area">
-                  <div className="cards-container" style={{ display: 'flex', flexDirection: 'column', gap: '6mm' }}>
+                  <div className="cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '3mm 4mm' }}>
                     {qrSelectedIccids.map(iccid => {
                       const rev = getSelectedRevendedor();
                       const isRevendedor = !!rev;
