@@ -1664,12 +1664,27 @@ async def query_line_from_operator(line_id: str, request: Request):
     result = await operadora_service.consultar_linha(
         iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
     )
+
+    # Atualizar plano automaticamente se mudou na operadora
+    updated_plan = None
+    if result.success and result.data and result.data.get("plano"):
+        plano_operadora = result.data["plano"]
+        plano_atual = await db.planos.find_one({"_id": ObjectId(line["plano_id"])}) if line.get("plano_id") else None
+        if not plano_atual or plano_atual.get("nome") != plano_operadora:
+            # Buscar plano novo pelo nome
+            novo_plano = await db.planos.find_one({"nome": plano_operadora})
+            if novo_plano:
+                await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"plano_id": str(novo_plano["_id"])}})
+                updated_plan = plano_operadora
+                logger.info(f"Plano atualizado automaticamente: {plano_atual.get('nome') if plano_atual else '?'} -> {plano_operadora} (linha {line_id})")
+
     return {
         "success": result.success,
         "status": result.status if isinstance(result.status, str) else result.status.value,
         "message": result.message,
         "data": result.data,
         "response_time_ms": result.response_time_ms,
+        "updated_plan": updated_plan,
     }
 
 @api_router.post("/linhas/{line_id}/bloquear-parcial")
