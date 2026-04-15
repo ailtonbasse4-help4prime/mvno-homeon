@@ -893,6 +893,62 @@ async def get_client(client_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Cliente nao encontrado")
     return await build_client_response(c)
 
+
+@api_router.get("/clientes/buscar-cpf/{cpf}")
+async def buscar_cliente_por_cpf(cpf: str, request: Request):
+    """Busca cliente pelo CPF/CNPJ no banco local. Retorna dados para auto preenchimento."""
+    await get_current_user(request)
+    doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
+    if len(doc_clean) < 11:
+        return {"found": False}
+    cliente = await db.clientes.find_one({"documento": doc_clean})
+    if cliente:
+        return {
+            "found": True,
+            "source": "local",
+            "data": {
+                "nome": cliente.get("nome", ""),
+                "documento": cliente.get("documento", ""),
+                "telefone": cliente.get("telefone", ""),
+                "email": cliente.get("email", ""),
+                "data_nascimento": cliente.get("data_nascimento", ""),
+                "cep": cliente.get("cep", ""),
+                "endereco": cliente.get("endereco", ""),
+                "numero_endereco": cliente.get("numero_endereco", ""),
+                "bairro": cliente.get("bairro", ""),
+                "cidade": cliente.get("cidade", ""),
+                "estado": cliente.get("estado", ""),
+            },
+        }
+    return {"found": False}
+
+@api_router.get("/public/buscar-cpf/{cpf}")
+async def buscar_cpf_publico(cpf: str):
+    """Busca CPF no banco local (endpoint publico para self-service)."""
+    doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
+    if len(doc_clean) < 11:
+        return {"found": False}
+    cliente = await db.clientes.find_one({"documento": doc_clean})
+    if cliente:
+        return {
+            "found": True,
+            "source": "local",
+            "data": {
+                "nome": cliente.get("nome", ""),
+                "telefone": cliente.get("telefone", ""),
+                "email": cliente.get("email", ""),
+                "data_nascimento": cliente.get("data_nascimento", ""),
+                "cep": cliente.get("cep", ""),
+                "endereco": cliente.get("endereco", ""),
+                "numero_endereco": cliente.get("numero_endereco", ""),
+                "bairro": cliente.get("bairro", ""),
+                "cidade": cliente.get("cidade", ""),
+                "estado": cliente.get("estado", ""),
+            },
+        }
+    return {"found": False}
+
+
 @api_router.put("/clientes/{client_id}", response_model=ClientResponse)
 async def update_client(client_id: str, data: ClientCreate, request: Request):
     user = await get_current_user(request)

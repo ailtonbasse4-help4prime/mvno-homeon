@@ -216,6 +216,39 @@ export function Clientes() {
 
   const f = (field, val) => setFormData(prev => ({ ...prev, [field]: val }));
 
+  const [cpfSearching, setCpfSearching] = useState(false);
+
+  const handleDocumentoChange = async (rawVal) => {
+    const formatted = formatDoc(rawVal, formData.tipo_pessoa);
+    f('documento', formatted);
+    const cleaned = rawVal.replace(/\D/g, '');
+    if ((formData.tipo_pessoa === 'pf' && cleaned.length === 11) || (formData.tipo_pessoa === 'pj' && cleaned.length === 14)) {
+      if (editingCliente) return; // Não buscar ao editar
+      setCpfSearching(true);
+      try {
+        const res = await axios.get(`${API_URL}/api/clientes/buscar-cpf/${cleaned}`, { withCredentials: true });
+        if (res.data?.found && res.data.data) {
+          const d = res.data.data;
+          setFormData(prev => ({
+            ...prev,
+            nome: d.nome || prev.nome,
+            telefone: d.telefone ? formatPhone(d.telefone) : prev.telefone,
+            email: d.email || prev.email,
+            data_nascimento: d.data_nascimento || prev.data_nascimento,
+            cep: d.cep || prev.cep,
+            endereco: d.endereco || prev.endereco,
+            numero_endereco: d.numero_endereco || prev.numero_endereco,
+            bairro: d.bairro || prev.bairro,
+            cidade: d.cidade || prev.cidade,
+            estado: d.estado || prev.estado,
+          }));
+          toast.info('Cliente encontrado! Dados preenchidos automaticamente.');
+        }
+      } catch {} // eslint-disable-line no-empty
+      setCpfSearching(false);
+    }
+  };
+
   const handleCepLookup = async (rawCep) => {
     const cleaned = rawCep.replace(/\D/g, '').slice(0, 8);
     f('cep', cleaned);
@@ -391,7 +424,10 @@ export function Clientes() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-zinc-300 text-xs">{formData.tipo_pessoa === 'pj' ? 'CNPJ' : 'CPF'}</Label>
-                  <Input value={formData.documento} onChange={(e) => f('documento', formatDoc(e.target.value, formData.tipo_pessoa))} className="form-input font-mono" placeholder={formData.tipo_pessoa === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'} maxLength={formData.tipo_pessoa === 'pj' ? 18 : 14} required data-testid="cliente-documento-input" />
+                  <div className="relative">
+                    <Input value={formData.documento} onChange={(e) => handleDocumentoChange(e.target.value)} className="form-input font-mono" placeholder={formData.tipo_pessoa === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'} maxLength={formData.tipo_pessoa === 'pj' ? 18 : 14} required data-testid="cliente-documento-input" />
+                    {cpfSearching && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-zinc-300 text-xs">Telefone</Label>

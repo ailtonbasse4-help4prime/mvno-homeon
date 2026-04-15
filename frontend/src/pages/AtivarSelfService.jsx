@@ -65,6 +65,43 @@ export default function AtivarSelfService() {
 
   const updateForm = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
+  const [cpfSearching, setCpfSearching] = useState(false);
+
+  const handleDocumentoLookup = async (rawVal) => {
+    const cleaned = rawVal.replace(/\D/g, '');
+    // Format CPF
+    let formatted = cleaned;
+    if (cleaned.length <= 3) formatted = cleaned;
+    else if (cleaned.length <= 6) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3)}`;
+    else if (cleaned.length <= 9) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6)}`;
+    else formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6,9)}-${cleaned.slice(9,11)}`;
+    updateForm('documento', formatted);
+
+    if (cleaned.length === 11) {
+      setCpfSearching(true);
+      try {
+        const res = await axios.get(`${API_URL}/api/public/buscar-cpf/${cleaned}`);
+        if (res.data?.found && res.data.data) {
+          const d = res.data.data;
+          setForm(prev => ({
+            ...prev,
+            nome: d.nome || prev.nome,
+            telefone: d.telefone || prev.telefone,
+            email: d.email || prev.email,
+            data_nascimento: d.data_nascimento || prev.data_nascimento,
+            cep: d.cep || prev.cep,
+            endereco: d.endereco || prev.endereco,
+            numero_endereco: d.numero_endereco || prev.numero_endereco,
+            bairro: d.bairro || prev.bairro,
+            cidade: d.cidade || prev.cidade,
+            estado: d.estado || prev.estado,
+          }));
+        }
+      } catch {} // eslint-disable-line no-empty
+      setCpfSearching(false);
+    }
+  };
+
   // QR Scanner
   const startScanner = useCallback(async () => {
     if (scannerActive) return;
@@ -371,8 +408,11 @@ export default function AtivarSelfService() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-zinc-300 text-xs">CPF *</Label>
-                  <Input value={form.documento} onChange={e => updateForm('documento', e.target.value)}
-                    className="form-input" placeholder="000.000.000-00" data-testid="cpf-input" />
+                  <div className="relative">
+                    <Input value={form.documento} onChange={e => handleDocumentoLookup(e.target.value)}
+                      className="form-input" placeholder="000.000.000-00" maxLength={14} data-testid="cpf-input" />
+                    {cpfSearching && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>}
+                  </div>
                 </div>
                 <div>
                   <Label className="text-zinc-300 text-xs">Telefone *</Label>
