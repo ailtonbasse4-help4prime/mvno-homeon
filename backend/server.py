@@ -4492,12 +4492,12 @@ async def _trigger_selfservice_activation(doc: dict):
             await db.linhas.insert_one(line_doc)
 
             is_portability = doc.get("portability", False)
-            if status_str == "ativo":
+            if status_str == "ativo" or (result.success and not is_portability):
                 new_status = "ativo"
             elif is_portability:
                 new_status = "portabilidade_em_andamento"
             else:
-                new_status = "ativando"
+                new_status = "ativo"
 
             update_fields = {"status": new_status, "msisdn": msisdn}
             if is_portability:

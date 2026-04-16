@@ -225,18 +225,18 @@ export default function AtivarSelfService() {
 
   // Poll status
   useEffect(() => {
-    if (!activation?.id || activation?.status === 'ativo' || activation?.status === 'erro') return;
+    if (!activation?.id || activation?.status === 'ativo' || activation?.status === 'erro' || activation?.status === 'cancelado') return;
     setStatusPolling(true);
     const interval = setInterval(async () => {
       try {
         const res = await axios.get(`${API_URL}/api/public/ativacao/${activation.id}/status`);
         setActivation(prev => ({ ...prev, ...res.data }));
-        if (res.data.status === 'ativo' || res.data.status === 'erro') {
+        if (res.data.status === 'ativo' || res.data.status === 'erro' || res.data.status === 'cancelado') {
           clearInterval(interval);
           setStatusPolling(false);
         }
       } catch {} // eslint-disable-line no-empty
-    }, activation?.status === 'portabilidade_em_andamento' ? 30000 : 10000);
+    }, activation?.status === 'portabilidade_em_andamento' ? 30000 : activation?.status === 'retry_pendente' ? 30000 : 5000);
     return () => { clearInterval(interval); setStatusPolling(false); };
   }, [activation?.id, activation?.status]);
 
@@ -640,6 +640,16 @@ export default function AtivarSelfService() {
                   </div>
                   <h2 className="text-xl font-bold text-red-400">Erro na Ativacao</h2>
                   <p className="text-zinc-300 text-sm mt-1">Entre em contato com o suporte</p>
+                </>
+              )}
+              {activation.status === 'retry_pendente' && (
+                <>
+                  <div className="w-16 h-16 bg-amber-500/15 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                  </div>
+                  <h2 className="text-xl font-bold text-amber-400">Processando...</h2>
+                  <p className="text-zinc-300 text-sm mt-1">Houve uma falha temporaria. Estamos retentando automaticamente.</p>
+                  <p className="text-zinc-500 text-xs mt-2">Voce pode fechar esta pagina. A ativacao sera concluida em breve.</p>
                 </>
               )}
             </div>
