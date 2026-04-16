@@ -31,8 +31,8 @@ const extraFeatures = [
 const screenshots = [
   { component: MockDashboard, label: 'Dashboard' },
   { component: MockClientes, label: 'Clientes' },
-  { component: MockCobrancas, label: 'Cobrancas' },
-  { component: MockAtivacoes, label: 'Ativacoes' },
+  { component: MockCobrancas, label: 'Cobranças' },
+  { component: MockAtivacoes, label: 'Ativações' },
 ];
 
 function FadeIn({ children, className = '', delay = 0 }) {
@@ -74,6 +74,7 @@ function Navbar() {
           <a href="#features" className="text-zinc-400 hover:text-white text-sm font-['Manrope'] font-medium transition-colors">Funcionalidades</a>
           <a href="#screenshots" className="text-zinc-400 hover:text-white text-sm font-['Manrope'] font-medium transition-colors">Sistema</a>
           <a href="#pricing" className="text-zinc-400 hover:text-white text-sm font-['Manrope'] font-medium transition-colors">Planos</a>
+          <a href="#contato" className="text-zinc-400 hover:text-white text-sm font-['Manrope'] font-medium transition-colors">Contato</a>
         </div>
         <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
           className="flex items-center gap-2 bg-[#25D366] text-zinc-950 px-5 py-2.5 rounded-full text-sm font-['Manrope'] font-bold hover:bg-[#1DA851] transition-all hover:scale-105"
@@ -404,6 +405,82 @@ function Pricing() {
   );
 }
 
+function ContactForm() {
+  const [form, setForm] = useState({ nome: '', email: '', telefone: '', mensagem: '' });
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.nome || !form.telefone) return;
+    setSending(true);
+    // Enviar via WhatsApp com dados do formulário
+    const msg = `*Contato HELP4PRIME MVNO*\nNome: ${form.nome}\nEmail: ${form.email || 'Não informado'}\nTelefone: ${form.telefone}\n\n${form.mensagem || 'Tenho interesse no sistema.'}`;
+    window.open(`https://wa.me/5511915322526?text=${encodeURIComponent(msg)}`, '_blank');
+    setSending(false);
+    setSent(true);
+    setTimeout(() => setSent(false), 5000);
+  };
+
+  return (
+    <section id="contato" className="relative py-24 md:py-32" data-testid="contact-section">
+      <div className="max-w-7xl mx-auto px-6 md:px-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+          <FadeIn>
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500 font-['Manrope']">Contato</span>
+            <h2 className="font-['Outfit'] font-bold text-3xl md:text-4xl text-white tracking-tight mt-3 mb-4">
+              Quer saber mais?
+            </h2>
+            <p className="text-zinc-400 font-['Manrope'] text-lg leading-relaxed mb-8">
+              Preencha o formulário ou fale diretamente pelo WhatsApp. Retornamos seu contato o mais rápido possível.
+            </p>
+            <a href={WA_LINK} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 bg-[#25D366] text-zinc-950 px-6 py-3 rounded-full font-['Manrope'] font-bold hover:bg-[#1DA851] transition-all hover:scale-105">
+              <MessageCircle className="w-5 h-5" /> Chamar no WhatsApp
+            </a>
+          </FadeIn>
+
+          <FadeIn delay={0.2}>
+            <form onSubmit={handleSubmit} className="bg-zinc-900/50 border border-white/10 rounded-2xl p-6 md:p-8 space-y-4" data-testid="contact-form">
+              <div>
+                <label className="block text-sm text-zinc-300 font-['Manrope'] font-medium mb-1.5">Nome *</label>
+                <input type="text" value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} required
+                  className="w-full bg-zinc-950 border border-white/10 rounded-lg px-4 py-3 text-white text-sm font-['Manrope'] placeholder-zinc-600 focus:border-blue-500 focus:outline-none transition-colors"
+                  placeholder="Seu nome completo" data-testid="contact-nome" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-zinc-300 font-['Manrope'] font-medium mb-1.5">Telefone *</label>
+                  <input type="tel" value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} required
+                    className="w-full bg-zinc-950 border border-white/10 rounded-lg px-4 py-3 text-white text-sm font-['Manrope'] placeholder-zinc-600 focus:border-blue-500 focus:outline-none transition-colors"
+                    placeholder="(00) 00000-0000" data-testid="contact-telefone" />
+                </div>
+                <div>
+                  <label className="block text-sm text-zinc-300 font-['Manrope'] font-medium mb-1.5">Email</label>
+                  <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                    className="w-full bg-zinc-950 border border-white/10 rounded-lg px-4 py-3 text-white text-sm font-['Manrope'] placeholder-zinc-600 focus:border-blue-500 focus:outline-none transition-colors"
+                    placeholder="seu@email.com" data-testid="contact-email" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-zinc-300 font-['Manrope'] font-medium mb-1.5">Mensagem</label>
+                <textarea value={form.mensagem} onChange={e => setForm(p => ({ ...p, mensagem: e.target.value }))} rows={3}
+                  className="w-full bg-zinc-950 border border-white/10 rounded-lg px-4 py-3 text-white text-sm font-['Manrope'] placeholder-zinc-600 focus:border-blue-500 focus:outline-none transition-colors resize-none"
+                  placeholder="Conte sobre sua operação..." data-testid="contact-mensagem" />
+              </div>
+              <button type="submit" disabled={sending || !form.nome || !form.telefone}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-full font-['Manrope'] font-bold transition-all disabled:opacity-50"
+                data-testid="contact-submit">
+                {sent ? 'Enviado! Redirecionando ao WhatsApp...' : sending ? 'Enviando...' : 'Enviar e Falar no WhatsApp'}
+              </button>
+            </form>
+          </FadeIn>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Footer() {
   return (
     <footer className="border-t border-white/10 py-12" data-testid="landing-footer">
@@ -436,6 +513,7 @@ export default function LandingPage() {
       <Features />
       <Screenshots />
       <Pricing />
+      <ContactForm />
       <Footer />
 
       {/* WhatsApp FAB */}

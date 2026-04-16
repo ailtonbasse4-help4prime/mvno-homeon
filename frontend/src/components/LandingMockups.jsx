@@ -75,12 +75,12 @@ export function MockDashboard() {
 
 export function MockClientes() {
   const clientes = [
-    { nome: 'Ana Carolina Souza', doc: '123.456.789-00', tel: '(11) 98765-4321', plano: 'Premium 20GB', st: 'ativo' },
-    { nome: 'Bruno Oliveira Lima', doc: '987.654.321-00', tel: '(21) 97654-3210', plano: 'Basico 5GB', st: 'ativo' },
-    { nome: 'Carla Mendes Silva', doc: '456.789.123-00', tel: '(31) 96543-2109', plano: 'Premium 20GB', st: 'ativo' },
-    { nome: 'Daniel Ferreira Costa', doc: '321.654.987-00', tel: '(41) 95432-1098', plano: 'Intermediario 10GB', st: 'bloqueado' },
-    { nome: 'Eduardo Santos Reis', doc: '654.987.321-00', tel: '(51) 94321-0987', plano: 'Basico 5GB', st: 'ativo' },
-    { nome: 'Fernanda Alves Rocha', doc: '789.123.456-00', tel: '(61) 93210-9876', plano: 'Premium 20GB', st: 'ativo' },
+    { nome: 'Ana Carolina Souza', plano: 'Premium 20GB', st: 'ativo' },
+    { nome: 'Bruno Oliveira Lima', plano: 'Básico 5GB', st: 'ativo' },
+    { nome: 'Carla Mendes Silva', plano: 'Premium 20GB', st: 'ativo' },
+    { nome: 'Daniel Ferreira Costa', plano: 'Intermediário 10GB', st: 'bloqueado' },
+    { nome: 'Eduardo Santos Reis', plano: 'Básico 5GB', st: 'ativo' },
+    { nome: 'Fernanda Alves Rocha', plano: 'Premium 20GB', st: 'ativo' },
   ];
 
   return (
@@ -89,43 +89,37 @@ export function MockClientes() {
         <p className="text-white font-bold text-sm">Clientes</p>
         <p className="text-zinc-500 text-[10px]">156 clientes cadastrados</p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead><tr className="bg-zinc-900/80">
-            <th className={headerCell}>Nome</th>
-            <th className={headerCell}>Documento</th>
-            <th className={headerCell}>Telefone</th>
-            <th className={headerCell}>Plano</th>
-            <th className={headerCell}>Status</th>
-          </tr></thead>
-          <tbody>
-            {clientes.map((c, i) => (
-              <tr key={i} className="hover:bg-zinc-900/30">
-                <td className={cell + " text-white font-medium"}>{c.nome}</td>
-                <td className={cell + " font-mono text-[11px]"}>{c.doc}</td>
-                <td className={cell}>{c.tel}</td>
-                <td className={cell}>{c.plano}</td>
-                <td className={cell}>
-                  <span className={badge(c.st === 'ativo' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/15 text-red-400 border border-red-500/30')}>
-                    {c.st}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <table className="w-full">
+        <thead><tr className="bg-zinc-900/80">
+          <th className={headerCell}>Nome</th>
+          <th className={headerCell}>Plano</th>
+          <th className={headerCell}>Status</th>
+        </tr></thead>
+        <tbody>
+          {clientes.map((c, i) => (
+            <tr key={i} className="hover:bg-zinc-900/30">
+              <td className={cell + " text-white font-medium"}>{c.nome}</td>
+              <td className={cell}>{c.plano}</td>
+              <td className={cell}>
+                <span className={badge(c.st === 'ativo' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/15 text-red-400 border border-red-500/30')}>
+                  {c.st}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 export function MockCobrancas() {
   const cobrancas = [
-    { nome: 'Ana Carolina Souza', tipo: 'PIX', valor: 'R$ 49,90', venc: '15/05/2026', st: 'Pendente', stc: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
-    { nome: 'Bruno Oliveira Lima', tipo: 'BOLETO', valor: 'R$ 29,90', venc: '15/05/2026', st: 'Pago', stc: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-    { nome: 'Carla Mendes Silva', tipo: 'PIX', valor: 'R$ 49,90', venc: '10/05/2026', st: 'Pago', stc: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
-    { nome: 'Daniel Ferreira Costa', tipo: 'BOLETO', valor: 'R$ 39,90', venc: '06/04/2026', st: 'Vencido', stc: 'bg-red-500/15 text-red-400 border-red-500/30' },
-    { nome: 'Eduardo Santos Reis', tipo: 'PIX', valor: 'R$ 29,90', venc: '15/05/2026', st: 'Pendente', stc: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+    { nome: 'Ana Carolina Souza', tipo: 'PIX', valor: 'R$ 49,90', venc: '15/05', st: 'Pendente', stc: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+    { nome: 'Bruno Oliveira Lima', tipo: 'BOLETO', valor: 'R$ 29,90', venc: '15/05', st: 'Pago', stc: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
+    { nome: 'Carla Mendes Silva', tipo: 'PIX', valor: 'R$ 49,90', venc: '10/05', st: 'Pago', stc: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
+    { nome: 'Daniel Ferreira Costa', tipo: 'BOLETO', valor: 'R$ 39,90', venc: '06/04', st: 'Vencido', stc: 'bg-red-500/15 text-red-400 border-red-500/30' },
+    { nome: 'Eduardo Santos Reis', tipo: 'PIX', valor: 'R$ 29,90', venc: '15/05', st: 'Pendente', stc: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
   ];
 
   return (
@@ -136,11 +130,11 @@ export function MockCobrancas() {
           <p className="text-emerald-400 text-[10px]">Asaas: Conectado (production)</p>
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-3 p-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
         {[
           { n: 'R$ 1.240', l: 'Receita', c: 'text-emerald-400' },
-          { n: 'R$ 349,50', l: 'Pendente', c: 'text-amber-400' },
-          { n: 'R$ 39,90', l: 'Vencido', c: 'text-red-400' },
+          { n: 'R$ 349', l: 'Pendente', c: 'text-amber-400' },
+          { n: 'R$ 39', l: 'Vencido', c: 'text-red-400' },
           { n: '42', l: 'Cobranças', c: 'text-white' },
         ].map((s) => (
           <div key={s.l} className={cardStyle + " text-center"}>
@@ -149,32 +143,22 @@ export function MockCobrancas() {
           </div>
         ))}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead><tr className="bg-zinc-900/80">
-            <th className={headerCell}>Cliente</th>
-            <th className={headerCell}>Tipo</th>
-            <th className={headerCell}>Valor</th>
-            <th className={headerCell}>Vencimento</th>
-            <th className={headerCell}>Status</th>
-          </tr></thead>
-          <tbody>
-            {cobrancas.map((c, i) => (
-              <tr key={i} className="hover:bg-zinc-900/30">
-                <td className={cell + " text-white font-medium"}>{c.nome}</td>
-                <td className={cell}>
-                  <span className={badge(c.tipo === 'PIX' ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' : 'bg-blue-500/15 text-blue-400 border-blue-500/30')}>
-                    {c.tipo}
-                  </span>
-                </td>
-                <td className={cell + " font-mono"}>{c.valor}</td>
-                <td className={cell}>{c.venc}</td>
-                <td className={cell}><span className={badge(c.stc) + " border"}>{c.st}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <table className="w-full">
+        <thead><tr className="bg-zinc-900/80">
+          <th className={headerCell}>Cliente</th>
+          <th className={headerCell}>Valor</th>
+          <th className={headerCell}>Status</th>
+        </tr></thead>
+        <tbody>
+          {cobrancas.map((c, i) => (
+            <tr key={i} className="hover:bg-zinc-900/30">
+              <td className={cell + " text-white font-medium"}>{c.nome}</td>
+              <td className={cell + " font-mono"}>{c.valor}</td>
+              <td className={cell}><span className={badge(c.stc) + " border"}>{c.st}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
