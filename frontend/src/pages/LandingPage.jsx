@@ -65,7 +65,9 @@ function Navbar() {
     }`} data-testid="landing-navbar">
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between h-16 md:h-20">
         <a href="#hero" className="flex items-center gap-2">
-          <img src="/help4prime-logo.png" alt="HELP4PRIME" className="h-12 sm:h-16" />
+          <Phone className="w-7 h-7 text-blue-500" />
+          <span className="font-['Outfit'] font-black text-white text-xl tracking-tight">HELP4PRIME</span>
+          <span className="text-blue-400 text-sm font-['Manrope'] font-semibold hidden sm:inline">MVNO</span>
         </a>
         <div className="hidden md:flex items-center gap-8">
           <a href="#how-it-works" className="text-zinc-400 hover:text-white text-sm font-['Manrope'] font-medium transition-colors">Como Funciona</a>
@@ -408,7 +410,8 @@ function Footer() {
       <div className="max-w-7xl mx-auto px-6 md:px-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            <img src="/help4prime-logo.png" alt="HELP4PRIME" className="h-12" />
+            <Phone className="w-6 h-6 text-blue-500" />
+            <span className="font-['Outfit'] font-bold text-white text-lg">HELP4PRIME MVNO</span>
           </div>
           <div className="flex items-center gap-6 text-zinc-500 text-sm font-['Manrope']">
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors flex items-center gap-1.5">
