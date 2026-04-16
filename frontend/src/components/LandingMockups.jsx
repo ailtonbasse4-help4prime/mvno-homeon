@@ -22,7 +22,7 @@ export function MockDashboard() {
             </div>
           </div>
           <div className="space-y-1">
-            {['Dashboard', 'Clientes', 'Planos', 'Chips', 'Ativacoes', 'Linhas', 'Revendedores', 'Cobrancas'].map((item, i) => (
+            {['Dashboard', 'Clientes', 'Planos', 'Chips', 'Ativações', 'Linhas', 'Revendedores', 'Cobranças'].map((item, i) => (
               <div key={item} className={`text-[11px] py-1.5 px-2 rounded ${i === 0 ? 'bg-zinc-800 text-white font-medium' : 'text-zinc-500'}`}>{item}</div>
             ))}
           </div>
@@ -47,7 +47,7 @@ export function MockDashboard() {
             <div className={cardStyle}>
               <p className="text-zinc-300 text-xs font-medium mb-2">Status dos Chips</p>
               <div className="grid grid-cols-3 gap-2">
-                {[{ n: '540', l: 'Disponiveis', c: 'text-emerald-400' }, { n: '143', l: 'Ativados', c: 'text-blue-400' }, { n: '37', l: 'Bloqueados', c: 'text-red-400' }].map((s) => (
+                {[{ n: '540', l: 'Disponíveis', c: 'text-emerald-400' }, { n: '143', l: 'Ativados', c: 'text-blue-400' }, { n: '37', l: 'Bloqueados', c: 'text-red-400' }].map((s) => (
                   <div key={s.l} className="text-center">
                     <p className={`text-lg font-bold font-mono ${s.c}`}>{s.n}</p>
                     <p className="text-zinc-500 text-[9px]">{s.l}</p>
@@ -132,7 +132,7 @@ export function MockCobrancas() {
     <div className="bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
       <div className="p-4 md:p-5 border-b border-zinc-800 flex items-center justify-between">
         <div>
-          <p className="text-white font-bold text-sm">Gestao de Cobrancas</p>
+          <p className="text-white font-bold text-sm">Gestão de Cobranças</p>
           <p className="text-emerald-400 text-[10px]">Asaas: Conectado (production)</p>
         </div>
       </div>
@@ -141,7 +141,7 @@ export function MockCobrancas() {
           { n: 'R$ 1.240', l: 'Receita', c: 'text-emerald-400' },
           { n: 'R$ 349,50', l: 'Pendente', c: 'text-amber-400' },
           { n: 'R$ 39,90', l: 'Vencido', c: 'text-red-400' },
-          { n: '42', l: 'Cobrancas', c: 'text-white' },
+          { n: '42', l: 'Cobranças', c: 'text-white' },
         ].map((s) => (
           <div key={s.l} className={cardStyle + " text-center"}>
             <p className={`text-sm font-bold font-mono ${s.c}`}>{s.n}</p>
@@ -183,8 +183,8 @@ export function MockAtivacoes() {
   return (
     <div className="bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden shadow-2xl">
       <div className="p-4 md:p-5 border-b border-zinc-800">
-        <p className="text-white font-bold text-sm">Ativacao de Linha</p>
-        <p className="text-zinc-500 text-[10px]">Selecione o cliente e o chip. A oferta e o plano sao detectados automaticamente.</p>
+        <p className="text-white font-bold text-sm">Ativação de Linha</p>
+        <p className="text-zinc-500 text-[10px]">Selecione o cliente e o chip. A oferta e o plano são detectados automaticamente.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-5">
         <div className="md:col-span-3 space-y-4">
@@ -204,12 +204,12 @@ export function MockAtivacoes() {
         </div>
         <div className="md:col-span-2 space-y-3">
           <div className="bg-blue-900/30 border border-blue-800/50 rounded-lg p-4">
-            <p className="text-blue-300 text-xs font-bold mb-2">Sobre a Ativacao</p>
+            <p className="text-blue-300 text-xs font-bold mb-2">Sobre a Ativação</p>
             <ul className="text-zinc-400 text-[10px] space-y-1">
               <li>- Digite ou cole o ICCID diretamente</li>
               <li>- O sistema detecta a Oferta e o Plano</li>
-              <li>- Apenas chips disponiveis podem ser ativados</li>
-              <li>- A ativacao e processada via API da operadora</li>
+              <li>- Apenas chips disponíveis podem ser ativados</li>
+              <li>- A ativação é processada via API da operadora</li>
             </ul>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -219,7 +219,7 @@ export function MockAtivacoes() {
             </div>
             <div className={cardStyle + " text-center border-emerald-800/30"}>
               <p className="text-lg font-bold text-emerald-400">540</p>
-              <p className="text-zinc-500 text-[9px]">Chips Disponiveis</p>
+              <p className="text-zinc-500 text-[9px]">Chips Disponíveis</p>
             </div>
           </div>
         </div>

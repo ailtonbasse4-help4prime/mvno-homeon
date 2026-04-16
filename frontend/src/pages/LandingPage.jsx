@@ -11,20 +11,20 @@ const WA_LINK = 'https://wa.me/5511915322526?text=Olá! Tenho interesse no siste
 const WA_NUMBER = '(11) 91532-2526';
 
 const features = [
-  { icon: QrCode, title: 'Ativacao Automatica por QR Code', desc: 'O cliente escaneia o QR Code, preenche os dados, paga via PIX ou boleto e o chip e ativado automaticamente na operadora. Sem intervencao manual. Zero atendimento.', span: 'md:col-span-12', highlight: true },
-  { icon: Users, title: 'Gestao de Clientes', desc: 'Cadastro completo com CPF, linhas, planos e status. Sincronizacao direta com a operadora em tempo real.', span: 'md:col-span-6' },
-  { icon: Receipt, title: 'Cobrancas Automaticas (Asaas)', desc: 'Boletos, PIX e cartao. Envio por email e WhatsApp. Carne com 3 boletos por folha. Parcelamento integrado.', span: 'md:col-span-6' },
-  { icon: Smartphone, title: 'Portal do Cliente (PWA)', desc: 'App instalavel no celular do cliente. Consulta de saldo, consumo de dados e faturas em tempo real.', span: 'md:col-span-4' },
-  { icon: Store, title: 'Rede de Revendedores', desc: 'Revendedores com chips vinculados, descontos personalizados e cartoes QR Code para impressao em lote.', span: 'md:col-span-4' },
-  { icon: Mail, title: 'Notificacoes Automaticas', desc: 'Emails e lembretes automaticos para cobrancas, ativacoes e vencimentos. Layout personalizado com sua marca.', span: 'md:col-span-4' },
+  { icon: QrCode, title: 'Ativação Automática por QR Code', desc: 'O cliente escaneia o QR Code, preenche os dados, paga via PIX ou boleto e o chip é ativado automaticamente na operadora. Sem intervenção manual. Zero atendimento.', span: 'md:col-span-12', highlight: true },
+  { icon: Users, title: 'Gestão de Clientes', desc: 'Cadastro completo com CPF, linhas, planos e status. Sincronização direta com a operadora em tempo real.', span: 'md:col-span-6' },
+  { icon: Receipt, title: 'Cobranças Automáticas (Asaas)', desc: 'Boletos, PIX e cartão. Envio por email e WhatsApp. Carnê com 3 boletos por folha. Parcelamento integrado.', span: 'md:col-span-6' },
+  { icon: Smartphone, title: 'Portal do Cliente (PWA)', desc: 'App instalável no celular do cliente. Consulta de saldo, consumo de dados e faturas em tempo real.', span: 'md:col-span-4' },
+  { icon: Store, title: 'Rede de Revendedores', desc: 'Revendedores com chips vinculados, descontos personalizados e cartões QR Code para impressão em lote.', span: 'md:col-span-4' },
+  { icon: Mail, title: 'Notificações Automáticas', desc: 'Emails e lembretes automáticos para cobranças, ativações e vencimentos. Layout personalizado com sua marca.', span: 'md:col-span-4' },
 ];
 
 const extraFeatures = [
-  { icon: Shield, text: 'Seguranca Avancada' },
-  { icon: RefreshCw, text: 'Retry Automatico' },
+  { icon: Shield, text: 'Segurança Avançada' },
+  { icon: RefreshCw, text: 'Retry Automático' },
   { icon: BarChart3, text: 'Dashboard Completo' },
   { icon: Zap, text: 'API Real da Operadora' },
-  { icon: Clock, text: 'Backup Diario' },
+  { icon: Clock, text: 'Backup Diário' },
   { icon: MonitorSmartphone, text: 'Responsivo' },
 ];
 
@@ -65,9 +65,7 @@ function Navbar() {
     }`} data-testid="landing-navbar">
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between h-16 md:h-20">
         <a href="#hero" className="flex items-center gap-2">
-          <Phone className="w-6 h-6 text-blue-500" />
-          <span className="font-['Outfit'] font-black text-white text-lg tracking-tight">HELP4PRIME</span>
-          <span className="text-zinc-500 text-sm font-['Manrope'] hidden sm:inline">MVNO</span>
+          <img src="/help4prime-logo.png" alt="HELP4PRIME" className="h-8 sm:h-10" />
         </a>
         <div className="hidden md:flex items-center gap-8">
           <a href="#how-it-works" className="text-zinc-400 hover:text-white text-sm font-['Manrope'] font-medium transition-colors">Como Funciona</a>
@@ -98,7 +96,7 @@ function Hero() {
           <div>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
               <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-blue-500 font-['Manrope'] mb-6">
-                <Zap className="w-3.5 h-3.5" /> Ativacao Automatica de Chip por QR Code
+                <Zap className="w-3.5 h-3.5" /> Ativação Automática de Chip por QR Code
               </span>
             </motion.div>
 
@@ -108,7 +106,7 @@ function Hero() {
             >
               Seu cliente ativa
               <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">o proprio chip</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">o próprio chip</span>
               <br />
               sem atendimento
             </motion.h1>
@@ -117,8 +115,8 @@ function Hero() {
               className="text-lg text-zinc-400 font-['Manrope'] leading-relaxed max-w-lg mb-8"
               initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
             >
-              O cliente escaneia o QR Code, paga via PIX e o chip e ativado automaticamente na operadora.
-              Gestao completa da sua MVNO com cobrancas, portal do cliente e rede de revendedores.
+              O cliente escaneia o QR Code, paga via PIX e o chip é ativado automaticamente na operadora.
+              Gestão completa da sua MVNO com cobranças, portal do cliente e rede de revendedores.
             </motion.p>
 
             <motion.div
@@ -141,7 +139,7 @@ function Hero() {
               className="flex items-center gap-6 mt-10 text-zinc-500 text-sm font-['Manrope']"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6, delay: 0.5 }}
             >
-              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-blue-500" /> Ativacao Automatica</span>
+              <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-blue-500" /> Ativação Automática</span>
               <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-blue-500" /> QR Code + PIX</span>
               <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-blue-500" /> Zero Atendimento</span>
             </motion.div>
@@ -172,10 +170,10 @@ function Features() {
         <FadeIn>
           <span className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500 font-['Manrope']">Funcionalidades</span>
           <h2 className="font-['Outfit'] font-bold text-3xl md:text-4xl text-white tracking-tight mt-3 mb-4">
-            Tudo que voce precisa para gerenciar sua MVNO
+            Tudo que você precisa para gerenciar sua MVNO
           </h2>
           <p className="text-zinc-400 font-['Manrope'] text-lg max-w-2xl mb-12">
-            Um sistema completo e integrado, do cadastro do cliente ate a cobranca automatica.
+            Um sistema completo e integrado, do cadastro do cliente até a cobrança automática.
           </p>
         </FadeIn>
 
@@ -202,7 +200,7 @@ function Features() {
                     <div className="flex items-center gap-4 mt-6 text-sm font-['Manrope']">
                       <span className="flex items-center gap-1.5 text-blue-400"><QrCode className="w-4 h-4" /> QR Code</span>
                       <span className="flex items-center gap-1.5 text-blue-400"><CreditCard className="w-4 h-4" /> PIX / Boleto</span>
-                      <span className="flex items-center gap-1.5 text-blue-400"><Zap className="w-4 h-4" /> Ativacao Instantanea</span>
+                      <span className="flex items-center gap-1.5 text-blue-400"><Zap className="w-4 h-4" /> Ativação Instantânea</span>
                     </div>
                   )}
                 </div>
@@ -231,10 +229,10 @@ function Features() {
 
 function HowItWorks() {
   const steps = [
-    { num: '1', title: 'Escaneia o QR Code', desc: 'O cliente escaneia o QR Code impresso na embalagem do chip usando a camera do celular.', icon: QrCode },
-    { num: '2', title: 'Preenche os Dados', desc: 'Nome, CPF e endereco sao preenchidos. Rapido e sem complicacao.', icon: Users },
-    { num: '3', title: 'Paga via PIX ou Boleto', desc: 'Pagamento instantaneo via PIX ou boleto. Confirmacao automatica em segundos.', icon: CreditCard },
-    { num: '4', title: 'Chip Ativado!', desc: 'A ativacao e feita automaticamente na operadora. O cliente insere o chip e ja pode usar.', icon: Zap },
+    { num: '1', title: 'Escaneia o QR Code', desc: 'O cliente escaneia o QR Code impresso na embalagem do chip usando a câmera do celular.', icon: QrCode },
+    { num: '2', title: 'Preenche os Dados', desc: 'Nome, CPF e endereço são preenchidos. Rápido e sem complicação.', icon: Users },
+    { num: '3', title: 'Paga via PIX ou Boleto', desc: 'Pagamento instantâneo via PIX ou boleto. Confirmação automática em segundos.', icon: CreditCard },
+    { num: '4', title: 'Chip Ativado!', desc: 'A ativação é feita automaticamente na operadora. O cliente insere o chip e já pode usar.', icon: Zap },
   ];
 
   return (
@@ -245,10 +243,10 @@ function HowItWorks() {
           <div className="text-center mb-16">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500 font-['Manrope']">Como Funciona</span>
             <h2 className="font-['Outfit'] font-bold text-3xl md:text-4xl text-white tracking-tight mt-3 mb-4">
-              Ativacao automatica em 4 passos
+              Ativação automática em 4 passos
             </h2>
             <p className="text-zinc-400 font-['Manrope'] text-lg max-w-2xl mx-auto">
-              Sem atendimento, sem ligacao, sem espera. O cliente faz tudo sozinho pelo celular.
+              Sem atendimento, sem ligação, sem espera. O cliente faz tudo sozinho pelo celular.
             </p>
           </div>
         </FadeIn>
@@ -294,10 +292,10 @@ function Screenshots() {
         <FadeIn>
           <span className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500 font-['Manrope']">Sistema</span>
           <h2 className="font-['Outfit'] font-bold text-3xl md:text-4xl text-white tracking-tight mt-3 mb-4">
-            Conhca o sistema por dentro
+            Conheça o sistema por dentro
           </h2>
           <p className="text-zinc-400 font-['Manrope'] text-lg max-w-2xl mb-10">
-            Interface moderna, escura e intuitiva. Projetada para operacao rapida e eficiente.
+            Interface moderna, escura e intuitiva. Projetada para operação rápida e eficiente.
           </p>
         </FadeIn>
 
@@ -338,10 +336,10 @@ function Pricing() {
           <div className="text-center mb-16">
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500 font-['Manrope']">Planos</span>
             <h2 className="font-['Outfit'] font-bold text-3xl md:text-4xl text-white tracking-tight mt-3 mb-4">
-              Escolha o melhor plano para sua operacao
+              Escolha o melhor plano para sua operação
             </h2>
             <p className="text-zinc-400 font-['Manrope'] text-lg max-w-xl mx-auto">
-              Sistema completo com todas as funcionalidades incluidas. Sem taxas extras.
+              Sistema completo com todas as funcionalidades incluídas. Sem taxas extras.
             </p>
           </div>
         </FadeIn>
@@ -356,7 +354,7 @@ function Pricing() {
                 <span className="text-zinc-400 font-['Manrope'] text-base">/mes</span>
               </div>
               <ul className="space-y-3 mb-10 flex-1">
-                {['Todas as funcionalidades', 'Portal do Cliente PWA', 'Cobrancas automaticas', 'Suporte por WhatsApp', 'Atualizacoes incluidas'].map((item, i) => (
+                {['Todas as funcionalidades', 'Portal do Cliente PWA', 'Cobranças automáticas', 'Suporte por WhatsApp', 'Atualizações incluídas'].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-zinc-300 font-['Manrope'] text-sm">
                     <Check className="w-4 h-4 text-blue-500 flex-shrink-0" /> {item}
                   </li>
@@ -385,7 +383,7 @@ function Pricing() {
               </div>
               <p className="text-blue-400 font-['Manrope'] text-sm font-medium mb-8">Economize R$ 100/mes</p>
               <ul className="space-y-3 mb-10 flex-1">
-                {['Todas as funcionalidades', 'Portal do Cliente PWA', 'Cobrancas automaticas', 'Suporte prioritario', 'Atualizacoes incluidas', 'Setup e configuracao gratis'].map((item, i) => (
+                {['Todas as funcionalidades', 'Portal do Cliente PWA', 'Cobranças automáticas', 'Suporte prioritário', 'Atualizações incluídas', 'Setup e configuração grátis'].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-zinc-300 font-['Manrope'] text-sm">
                     <Check className="w-4 h-4 text-blue-500 flex-shrink-0" /> {item}
                   </li>
@@ -410,8 +408,7 @@ function Footer() {
       <div className="max-w-7xl mx-auto px-6 md:px-12">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            <Phone className="w-5 h-5 text-blue-500" />
-            <span className="font-['Outfit'] font-bold text-white">HELP4PRIME MVNO</span>
+            <img src="/help4prime-logo.png" alt="HELP4PRIME" className="h-8" />
           </div>
           <div className="flex items-center gap-6 text-zinc-500 text-sm font-['Manrope']">
             <a href={WA_LINK} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors flex items-center gap-1.5">
