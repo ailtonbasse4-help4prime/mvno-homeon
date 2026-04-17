@@ -4526,12 +4526,65 @@ async def _trigger_selfservice_activation(doc: dict):
             if isinstance(err_msg, list):
                 err_msg = "; ".join(str(m) for m in err_msg)
             error_code = result.error_code if hasattr(result, 'error_code') else None
+
+            # ===== VERIFICACAO POS-ERRO =====
+            # Quando da timeout ou erro retentavel, consultar a operadora para verificar
+            # se o chip foi ativado com sucesso antes de marcar como erro
+            is_timeout_or_retryable = _is_retryable_error(str(err_msg), str(error_code) if error_code else None)
+            if is_timeout_or_retryable:
+                logger.info(f"Verificacao pos-erro: consultando operadora para chip {chip['iccid']}...")
+                try:
+                    await asyncio.sleep(5)  # Aguardar 5s para a operadora processar
+                    check_result = await operadora_service.consultar_linha(
+                        iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                    )
+                    if check_result.success and check_result.data:
+                        check_status = check_result.data.get("status", "").lower()
+                        if check_status in ("ativo", "ativa", "active"):
+                            # Chip foi ativado com sucesso! Corrigir tudo
+                            msisdn = check_result.data.get("msisdn") or check_result.data.get("numero")
+                            logger.info(f"Verificacao pos-erro: chip {chip['iccid']} ATIVADO com sucesso! msisdn={msisdn}")
+                            await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+                                "status": ChipStatus.ativado.value, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+                            }})
+                            line_doc = {
+                                "numero": msisdn or "Pendente",
+                                "status": "ativo",
+                                "cliente_id": doc["cliente_id"],
+                                "chip_id": doc["chip_id"],
+                                "plano_id": doc.get("plano_id"),
+                                "oferta_id": doc.get("oferta_id"),
+                                "msisdn": msisdn,
+                                "created_at": datetime.now(timezone.utc),
+                            }
+                            existing_line = await db.linhas.find_one({"chip_id": doc["chip_id"]})
+                            if not existing_line:
+                                await db.linhas.insert_one(line_doc)
+                            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                                "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+                            }})
+                            await create_log("ativacao", f"Self-service ativacao confirmada pos-verificacao: {cliente['nome']} - chip {chip['iccid']} - {msisdn}", None, "self-service")
+                            if email_service.is_configured:
+                                cliente_email = cliente.get("email")
+                                if cliente_email:
+                                    try:
+                                        await email_service.send_ativacao_sucesso(
+                                            to_email=cliente_email, cliente_nome=cliente["nome"],
+                                            numero=msisdn, plano_nome=plano.get("nome") if plano else None,
+                                            iccid=chip["iccid"],
+                                        )
+                                    except Exception:
+                                        pass
+                            return  # Ativacao OK, nao marcar como erro
+                except Exception as e:
+                    logger.warning(f"Verificacao pos-erro falhou: {e}")
+
+            # Se chegou aqui, realmente falhou
             retry_count = doc.get("retry_count", 0)
-            is_retryable = _is_retryable_error(str(err_msg), str(error_code) if error_code else None)
             retry_errors = doc.get("retry_errors", [])
             retry_errors.append({"msg": str(err_msg), "code": str(error_code) if error_code else None, "at": datetime.now(timezone.utc).isoformat()})
 
-            if is_retryable and retry_count < RETRY_MAX_ATTEMPTS:
+            if is_timeout_or_retryable and retry_count < RETRY_MAX_ATTEMPTS:
                 delay_min = _get_next_retry_delay(retry_count)
                 next_retry = datetime.now(timezone.utc) + timedelta(minutes=delay_min)
                 await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
@@ -4561,6 +4614,40 @@ async def _trigger_selfservice_activation(doc: dict):
         is_retryable = _is_retryable_error(error_str)
         retry_errors = doc.get("retry_errors", [])
         retry_errors.append({"msg": error_str, "code": None, "at": datetime.now(timezone.utc).isoformat()})
+
+        # Verificacao pos-erro (exception): consultar operadora
+        if is_retryable:
+            try:
+                chip = await db.chips.find_one({"_id": ObjectId(doc["chip_id"])})
+                if chip:
+                    await asyncio.sleep(5)
+                    check_result = await operadora_service.consultar_linha(
+                        iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                    )
+                    if check_result.success and check_result.data:
+                        check_status = check_result.data.get("status", "").lower()
+                        if check_status in ("ativo", "ativa", "active"):
+                            msisdn = check_result.data.get("msisdn") or check_result.data.get("numero")
+                            logger.info(f"Verificacao pos-exception: chip {chip['iccid']} ATIVADO! msisdn={msisdn}")
+                            cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+                            await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+                                "status": ChipStatus.ativado.value, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+                            }})
+                            existing_line = await db.linhas.find_one({"chip_id": doc["chip_id"]})
+                            if not existing_line:
+                                await db.linhas.insert_one({
+                                    "numero": msisdn or "Pendente", "status": "ativo",
+                                    "cliente_id": doc["cliente_id"], "chip_id": doc["chip_id"],
+                                    "plano_id": doc.get("plano_id"), "oferta_id": doc.get("oferta_id"),
+                                    "msisdn": msisdn, "created_at": datetime.now(timezone.utc),
+                                })
+                            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                                "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+                            }})
+                            await create_log("ativacao", f"Self-service ativacao confirmada pos-exception: {cliente['nome'] if cliente else '?'} - chip {chip['iccid']}", None, "self-service")
+                            return
+            except Exception as ve:
+                logger.warning(f"Verificacao pos-exception falhou: {ve}")
 
         if is_retryable and retry_count < RETRY_MAX_ATTEMPTS:
             delay_min = _get_next_retry_delay(retry_count)

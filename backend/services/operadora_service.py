@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 USE_MOCK_API = os.environ.get("USE_MOCK_API", "true").lower() == "true"
 TATELECOM_API_URL = os.environ.get("TATELECOM_API_URL", "http://sistema.tatelecom.com.br/api/public")
 TATELECOM_USER_TOKEN = os.environ.get("TATELECOM_USER_TOKEN", "")
-TATELECOM_TIMEOUT = int(os.environ.get("TATELECOM_TIMEOUT", "30"))
+TATELECOM_TIMEOUT = int(os.environ.get("TATELECOM_TIMEOUT", "60"))
 
 
 # ==================== ENUMS ====================
