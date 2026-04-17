@@ -15,6 +15,7 @@ import secrets
 import json
 import bcrypt
 import jwt
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
@@ -894,9 +895,45 @@ async def get_client(client_id: str, request: Request):
     return await build_client_response(c)
 
 
+CPFHUB_API_KEY = os.environ.get("CPFHUB_API_KEY", "")
+
+async def _consultar_cpfhub(cpf_clean: str) -> dict:
+    """Consulta CPFHub.io para obter nome e data de nascimento."""
+    if not CPFHUB_API_KEY or len(cpf_clean) != 11:
+        return {"found": False}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://api.cpfhub.io/cpf/{cpf_clean}",
+                headers={"x-api-key": CPFHUB_API_KEY, "Accept": "application/json"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success") and data.get("data"):
+                    d = data["data"]
+                    birth = d.get("birthDate", "")
+                    # Converter dd/mm/yyyy para yyyy-mm-dd
+                    data_nascimento = ""
+                    if birth and "/" in birth:
+                        parts = birth.split("/")
+                        if len(parts) == 3:
+                            data_nascimento = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                    return {
+                        "found": True,
+                        "source": "cpfhub",
+                        "data": {
+                            "nome": d.get("name", ""),
+                            "documento": cpf_clean,
+                            "data_nascimento": data_nascimento,
+                        },
+                    }
+    except Exception as e:
+        logger.warning(f"CPFHub consulta falhou: {e}")
+    return {"found": False}
+
 @api_router.get("/clientes/buscar-cpf/{cpf}")
 async def buscar_cliente_por_cpf(cpf: str, request: Request):
-    """Busca cliente pelo CPF/CNPJ no banco local. Retorna dados para auto preenchimento."""
+    """Busca cliente pelo CPF: primeiro no banco local, depois no CPFHub.io."""
     await get_current_user(request)
     doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
     if len(doc_clean) < 11:
@@ -920,11 +957,12 @@ async def buscar_cliente_por_cpf(cpf: str, request: Request):
                 "estado": cliente.get("estado", ""),
             },
         }
-    return {"found": False}
+    # Nao encontrou localmente, consultar CPFHub
+    return await _consultar_cpfhub(doc_clean)
 
 @api_router.get("/public/buscar-cpf/{cpf}")
 async def buscar_cpf_publico(cpf: str):
-    """Busca CPF no banco local (endpoint publico para self-service)."""
+    """Busca CPF: banco local primeiro, depois CPFHub.io (endpoint publico)."""
     doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
     if len(doc_clean) < 11:
         return {"found": False}
@@ -946,7 +984,8 @@ async def buscar_cpf_publico(cpf: str):
                 "estado": cliente.get("estado", ""),
             },
         }
-    return {"found": False}
+    # Nao encontrou localmente, consultar CPFHub
+    return await _consultar_cpfhub(doc_clean)
 
 
 @api_router.put("/clientes/{client_id}", response_model=ClientResponse)
