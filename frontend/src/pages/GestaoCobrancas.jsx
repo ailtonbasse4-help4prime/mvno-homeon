@@ -383,6 +383,7 @@ export function GestaoCobrancas() {
   const sc = selectedCobranca;
 
   const [syncing, setSyncing] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const handleSyncStatus = async () => {
     setSyncing(true);
@@ -400,6 +401,27 @@ export function GestaoCobrancas() {
       toast.error(e.response?.data?.detail || 'Erro ao sincronizar');
     }
     setSyncing(false);
+  };
+
+  const handleImportAsaas = async () => {
+    if (!window.confirm('Importar TODAS as cobrancas existentes no Asaas que ainda nao estao no sistema? Esta operacao pode demorar alguns minutos.')) return;
+    setImporting(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/sincronizar-asaas`, {}, { withCredentials: true, timeout: 180000 });
+      const { imported, skipped, no_client, total_asaas } = res.data;
+      if (imported > 0) {
+        toast.success(`${imported} cobranca(s) importada(s) de ${total_asaas} no Asaas`);
+      } else {
+        toast.info(`Nenhuma cobranca nova. Total no Asaas: ${total_asaas}, ja sincronizadas: ${skipped}`);
+      }
+      if (no_client > 0) {
+        toast.warning(`${no_client} cobranca(s) sem cliente local correspondente (cadastre os clientes ou use "Sincronizar Asaas" na ficha do cliente)`);
+      }
+      fetchAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao importar cobrancas do Asaas');
+    }
+    setImporting(false);
   };
 
   const handleSaveAsaasConfig = async () => {
@@ -480,6 +502,9 @@ export function GestaoCobrancas() {
           <div className="flex gap-2 w-full sm:w-auto flex-wrap">
             <Button onClick={handleSyncStatus} disabled={syncing} variant="outline" size="sm" className="flex items-center gap-1.5 border-emerald-700 text-emerald-400 hover:bg-emerald-900/20 text-xs sm:text-sm" data-testid="sync-status-btn">
               <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">{syncing ? 'Sincronizando...' : 'Sincronizar Status'}</span><span className="sm:hidden">{syncing ? 'Sync...' : 'Sync'}</span>
+            </Button>
+            <Button onClick={handleImportAsaas} disabled={importing} variant="outline" size="sm" className="flex items-center gap-1.5 border-amber-700 text-amber-400 hover:bg-amber-900/20 text-xs sm:text-sm" data-testid="import-asaas-btn" title="Importa cobrancas existentes no Asaas para o sistema local">
+              <RefreshCw className={`w-3.5 h-3.5 ${importing ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">{importing ? 'Importando...' : 'Importar do Asaas'}</span><span className="sm:hidden">{importing ? 'Imp...' : 'Importar'}</span>
             </Button>
             <Button onClick={() => setConfigDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-blue-700 text-blue-400 hover:bg-blue-900/20 text-xs sm:text-sm" data-testid="config-asaas-btn">
               <Settings className="w-3.5 h-3.5" /><span className="hidden sm:inline">API Asaas</span><span className="sm:hidden">API</span>

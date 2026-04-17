@@ -797,12 +797,31 @@ async def list_clients(request: Request, search: Optional[str] = None):
     await get_current_user(request)
     query = {}
     if search:
+        # Regex accent-insensitive: cada letra vira uma classe com suas variantes
+        accent_map = {
+            'a': 'aáàâãä', 'e': 'eéèêë', 'i': 'iíìîï',
+            'o': 'oóòôõö', 'u': 'uúùûü', 'c': 'cç', 'n': 'nñ',
+        }
+        import unicodedata
+        search_no_accent = ''.join(
+            c for c in unicodedata.normalize('NFD', search)
+            if unicodedata.category(c) != 'Mn'
+        ).lower()
+        regex_parts = []
+        for ch in search_no_accent:
+            if ch in accent_map:
+                regex_parts.append(f"[{accent_map[ch]}]")
+            elif ch.isalnum():
+                regex_parts.append(re.escape(ch))
+            else:
+                regex_parts.append(re.escape(ch))
+        nome_regex = ''.join(regex_parts)
         query = {"$or": [
-            {"nome": {"$regex": search, "$options": "i"}},
-            {"documento": {"$regex": search, "$options": "i"}},
-            {"cpf": {"$regex": search, "$options": "i"}},
-            {"telefone": {"$regex": search, "$options": "i"}},
-            {"email": {"$regex": search, "$options": "i"}},
+            {"nome": {"$regex": nome_regex, "$options": "i"}},
+            {"documento": {"$regex": re.escape(search), "$options": "i"}},
+            {"cpf": {"$regex": re.escape(search), "$options": "i"}},
+            {"telefone": {"$regex": re.escape(search), "$options": "i"}},
+            {"email": {"$regex": re.escape(search), "$options": "i"}},
         ]}
     clients = await db.clientes.find(query).sort("nome", 1).to_list(1000)
     # Pre-fetch all lines in bulk for performance
@@ -2827,6 +2846,117 @@ async def diagnostico_asaas(request: Request):
     except Exception as e:
         result["db_error"] = str(e)
     return result
+
+
+@api_router.post("/carteira/sincronizar-asaas")
+async def sincronizar_cobrancas_asaas(request: Request):
+    """Importa cobrancas do Asaas que nao existem no sistema local."""
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    # Buscar todos payments do Asaas
+    all_asaas = []
+    offset = 0
+    while True:
+        result = await asaas_service._request("GET", f"/payments?limit=100&offset={offset}")
+        data = result.get("data", [])
+        all_asaas.extend(data)
+        if not data or not result.get("hasMore"):
+            break
+        offset += 100
+
+    # IDs locais
+    local_ids = set()
+    async for c in db.cobrancas.find({"asaas_payment_id": {"$exists": True, "$ne": None}}, {"asaas_payment_id": 1}):
+        local_ids.add(c["asaas_payment_id"])
+
+    # Map Asaas customer_id -> cliente local
+    customer_map = {}
+    async for cl in db.clientes.find({"asaas_customer_id": {"$exists": True, "$ne": None}}, {"asaas_customer_id": 1, "nome": 1}):
+        customer_map[cl["asaas_customer_id"]] = {"id": str(cl["_id"]), "nome": cl.get("nome", "")}
+
+    imported = 0
+    skipped = 0
+    no_client = 0
+
+    for p in all_asaas:
+        if p["id"] in local_ids:
+            skipped += 1
+            continue
+        if p["status"] in ("REFUNDED", "REFUND_REQUESTED"):
+            skipped += 1
+            continue
+
+        customer_id = p.get("customer")
+        local_cliente = customer_map.get(customer_id)
+
+        if not local_cliente:
+            # Tentar encontrar por CPF
+            try:
+                cust_data = await asaas_service._request("GET", f"/customers/{customer_id}")
+                cpf = cust_data.get("cpfCnpj", "")
+                if cpf:
+                    cl = await db.clientes.find_one({"documento": cpf})
+                    if cl:
+                        local_cliente = {"id": str(cl["_id"]), "nome": cl.get("nome", "")}
+                        # Salvar asaas_customer_id para futuro
+                        await db.clientes.update_one({"_id": cl["_id"]}, {"$set": {"asaas_customer_id": customer_id}})
+                        customer_map[customer_id] = local_cliente
+            except Exception:
+                pass
+
+        if not local_cliente:
+            no_client += 1
+            continue
+
+        # Criar cobranca local
+        doc = {
+            "cliente_id": local_cliente["id"],
+            "billing_type": p.get("billingType", "BOLETO"),
+            "valor": p.get("value", 0),
+            "vencimento": p.get("dueDate", ""),
+            "descricao": p.get("description", "Importado do Asaas"),
+            "status": p.get("status", "PENDING"),
+            "asaas_payment_id": p["id"],
+            "asaas_invoice_url": p.get("invoiceUrl"),
+            "asaas_bankslip_url": p.get("bankSlipUrl"),
+            "asaas_installment_id": p.get("installment"),
+            "modalidade": "avista",
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        # Verificar parcelas
+        inst_number = p.get("installmentNumber")
+        if inst_number:
+            doc["parcela_num"] = inst_number
+            doc["modalidade"] = "parcelado"
+
+        # Buscar barcode se boleto
+        try:
+            if doc["billing_type"] == "BOLETO":
+                barcode_data = await asaas_service.get_boleto_barcode(p["id"])
+                doc["barcode"] = barcode_data.get("identificationField")
+            elif doc["billing_type"] == "PIX":
+                pix_data = await asaas_service.get_pix_qrcode(p["id"])
+                doc["asaas_pix_code"] = pix_data.get("payload")
+        except Exception:
+            pass
+
+        await db.cobrancas.insert_one(doc)
+        imported += 1
+
+    await create_log("sync", f"Sincronizacao Asaas: {imported} importados, {skipped} ja existiam, {no_client} sem cliente local", user["id"], user["name"])
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "no_client": no_client,
+        "total_asaas": len(all_asaas),
+        "message": f"{imported} cobrancas importadas do Asaas",
+    }
+
 
 # ==================== EMAIL CONFIG ====================
 class EmailTestRequest(BaseModel):
