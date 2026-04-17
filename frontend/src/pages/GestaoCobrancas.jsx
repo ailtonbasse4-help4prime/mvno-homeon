@@ -366,13 +366,14 @@ export function GestaoCobrancas() {
     RECEIVED_IN_CASH: 'bg-emerald-900/30 text-emerald-400', CANCELLED: 'bg-zinc-800 text-zinc-500',
   }[s] || 'bg-zinc-800 text-zinc-400');
 
+  const normalize = (str) => (str || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const filtered = cobrancas.filter(c => {
     if (filterStatus && c.status !== filterStatus) return false;
     if (filterBilling && c.billing_type !== filterBilling) return false;
     if (search) {
-      const s = search.toLowerCase();
-      return (c.cliente_nome || '').toLowerCase().includes(s) ||
-             (c.msisdn || '').includes(s) || (c.descricao || '').toLowerCase().includes(s);
+      const s = normalize(search);
+      return normalize(c.cliente_nome).includes(s) ||
+             (c.msisdn || '').includes(search) || normalize(c.descricao).includes(s);
     }
     return true;
   });
