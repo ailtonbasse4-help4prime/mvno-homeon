@@ -33,10 +33,17 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Fontes Outfit + Manrope, Framer Motion animations
 - [x] Contato: (11) 91532-2526
 
+### Correção Sincronização Asaas (17/04/2026)
+- [x] Fixado IndentationError em server.py que quebrava backend (endpoint injetado no meio de outra função)
+- [x] Busca accent-insensitive real (regex com classes [aáàâã] etc) em GET /api/clientes?search=
+- [x] Endpoint POST /api/carteira/sincronizar-asaas importa cobrancas existentes no Asaas para MongoDB local
+- [x] Botão "Importar do Asaas" em GestaoCobrancas (data-testid="import-asaas-btn") com confirmação
+- [x] Testado end-to-end: 9 cobrancas importadas de 185 no Asaas, 117 clientes totais
+
 ## Backlog
 
 ### P1 - Alta Prioridade
-- [ ] Desmembrar server.py (4700+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (5300+ linhas) em roteadores separados
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
