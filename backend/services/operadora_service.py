@@ -143,6 +143,10 @@ class IOperadoraAdapter(ABC):
     async def alterar_plano(self, iccid: str, plan_code: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
         pass
 
+    @abstractmethod
+    async def cancelar_linha(self, iccid: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        pass
+
 
 # ==================== MOCK ADAPTER ====================
 class MockTaTelecomAdapter(IOperadoraAdapter):
@@ -261,6 +265,16 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
         resp = OperadoraResponse(
             success=True, status=OperadoraStatus.ATIVO,
             message=f"Plano alterado para {plan_code} (mock)", response_time_ms=300, http_status_code=200,
+        )
+        return req, resp
+
+    async def cancelar_linha(self, iccid: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        import asyncio
+        await asyncio.sleep(0.3)
+        req = OperadoraRequest(endpoint=f"/simcard/{iccid}/cancelar", method="POST", payload={})
+        resp = OperadoraResponse(
+            success=True, status=OperadoraStatus.CANCELADO,
+            message="Linha cancelada (mock)", response_time_ms=300, http_status_code=200,
         )
         return req, resp
 
@@ -511,6 +525,9 @@ class RealTaTelecomAdapter(IOperadoraAdapter):
     async def alterar_plano(self, iccid: str, plan_code: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("POST", f"/simcard/{iccid}/plano/alterar", {"plan_code": plan_code})
 
+    async def cancelar_linha(self, iccid: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
+        return await self._request("POST", f"/simcard/{iccid}/cancelar")
+
     async def consultar_saldo_dados(self, numero: str) -> Tuple[OperadoraRequest, OperadoraResponse]:
         return await self._request("POST", f"/saldo/{numero}/dados")
 
@@ -677,6 +694,13 @@ class OperadoraService:
         req, resp = await self.adapter.alterar_plano(iccid, plan_code)
         action = "alteracao_plano" if resp.success else "erro"
         await self._save_log(db, action, req, resp, user_id, user_name, f"Alteracao plano ICCID: {iccid} -> {plan_code}")
+        return resp
+
+    # ---------- Cancelar Linha ----------
+    async def cancelar_linha(self, iccid: str, db=None, user_id=None, user_name=None) -> OperadoraResponse:
+        req, resp = await self.adapter.cancelar_linha(iccid)
+        action = "cancelamento" if resp.success else "erro"
+        await self._save_log(db, action, req, resp, user_id, user_name, f"Cancelamento ICCID: {iccid}")
         return resp
 
     # ---------- Consultar Saldo de Dados ----------

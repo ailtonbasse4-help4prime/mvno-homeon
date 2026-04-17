@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -93,6 +93,20 @@ export function Linhas() {
       else toast.error(r.data.message);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao desbloquear');
+    } finally { setProcessing(false); }
+  };
+
+  // Cancel
+  const [cancelDialog, setCancelDialog] = useState(false);
+  const handleCancel = async () => {
+    if (!selectedLinha) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/linhas/${selectedLinha.id}/cancelar`, {}, { withCredentials: true });
+      if (r.data.success) { toast.success('Linha cancelada com sucesso'); setCancelDialog(false); fetchLinhas(); }
+      else toast.error(r.data.message);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao cancelar');
     } finally { setProcessing(false); }
   };
 
@@ -269,6 +283,11 @@ export function Linhas() {
                           <Unlock className="w-4 h-4" />
                         </Button>
                       )}
+                      {isAdmin && linha.status !== 'cancelado' && (
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setCancelDialog(true); }} className="text-zinc-400 hover:text-red-500" title="Cancelar Linha" data-testid={`cancel-line-${linha.id}`}>
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -429,6 +448,27 @@ export function Linhas() {
             )}
           </div>
           <DialogFooter><Button onClick={() => setStatusDialog(false)} className="btn-secondary">Fechar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Dialog */}
+      <Dialog open={cancelDialog} onOpenChange={setCancelDialog}>
+        <DialogContent className="bg-zinc-900 border-zinc-500/60">
+          <DialogHeader><DialogTitle className="text-red-400">Cancelar Linha</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-zinc-300 text-sm">
+              Tem certeza que deseja <strong className="text-red-400">cancelar</strong> a linha <strong className="text-white">{selectedLinha?.numero || selectedLinha?.msisdn}</strong>?
+            </p>
+            <p className="text-amber-400 text-xs">
+              Esta ação é irreversível na operadora. A linha será desativada permanentemente.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialog(false)} className="border-zinc-700">Voltar</Button>
+            <Button onClick={handleCancel} disabled={processing} className="bg-red-600 hover:bg-red-700 text-white" data-testid="confirm-cancel-line">
+              {processing ? 'Cancelando...' : 'Confirmar Cancelamento'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

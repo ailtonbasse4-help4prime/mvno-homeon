@@ -1907,6 +1907,31 @@ async def change_plan(line_id: str, data: PlanChangeRequest, request: Request):
         "response_time_ms": result.response_time_ms,
     }
 
+@api_router.post("/linhas/{line_id}/cancelar")
+async def cancel_line(line_id: str, request: Request):
+    """Cancela uma linha na operadora e atualiza o sistema."""
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    if line["status"] == "cancelado":
+        raise HTTPException(status_code=400, detail="Linha ja esta cancelada")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    result = await operadora_service.cancelar_linha(
+        iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if result.success:
+        await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"status": "cancelado"}})
+        await db.chips.update_one({"_id": chip["_id"]}, {"$set": {"status": "cancelado"}})
+        await create_log("cancelamento", f"Linha cancelada: {line.get('numero', '?')} - ICCID {chip['iccid']}", user["id"], user["name"])
+    return {
+        "success": result.success,
+        "message": result.message,
+        "response_time_ms": result.response_time_ms,
+    }
+
 # ==================== OPERADORA SYNC ROUTES ====================
 @api_router.post("/operadora/sincronizar-planos")
 async def sync_plans_from_operator(request: Request):
