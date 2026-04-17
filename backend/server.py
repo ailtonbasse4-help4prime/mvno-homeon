@@ -1762,16 +1762,33 @@ async def query_line_from_operator(line_id: str, request: Request):
 
     # Atualizar plano automaticamente se mudou na operadora
     updated_plan = None
-    if result.success and result.data and result.data.get("plano"):
-        plano_operadora = result.data["plano"]
-        plano_atual = await db.planos.find_one({"_id": ObjectId(line["plano_id"])}) if line.get("plano_id") else None
-        if not plano_atual or plano_atual.get("nome") != plano_operadora:
-            # Buscar plano novo pelo nome
-            novo_plano = await db.planos.find_one({"nome": plano_operadora})
-            if novo_plano:
-                await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"plano_id": str(novo_plano["_id"])}})
-                updated_plan = plano_operadora
-                logger.info(f"Plano atualizado automaticamente: {plano_atual.get('nome') if plano_atual else '?'} -> {plano_operadora} (linha {line_id})")
+    updated_numero = None
+    if result.success and result.data:
+        line_updates = {}
+
+        # Atualizar plano se mudou
+        if result.data.get("plano"):
+            plano_operadora = result.data["plano"]
+            plano_atual = await db.planos.find_one({"_id": ObjectId(line["plano_id"])}) if line.get("plano_id") else None
+            if not plano_atual or plano_atual.get("nome") != plano_operadora:
+                novo_plano = await db.planos.find_one({"nome": plano_operadora})
+                if novo_plano:
+                    line_updates["plano_id"] = str(novo_plano["_id"])
+                    updated_plan = plano_operadora
+                    logger.info(f"Plano atualizado: {plano_atual.get('nome') if plano_atual else '?'} -> {plano_operadora}")
+
+        # Atualizar numero se estava "Pendente" ou vazio
+        numero_operadora = result.data.get("numero") or result.data.get("msisdn")
+        if numero_operadora and (not line.get("numero") or line.get("numero") == "Pendente"):
+            line_updates["numero"] = numero_operadora
+            line_updates["msisdn"] = numero_operadora
+            updated_numero = numero_operadora
+            logger.info(f"Numero atualizado: Pendente -> {numero_operadora}")
+            # Atualizar chip tambem
+            await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"msisdn": numero_operadora}})
+
+        if line_updates:
+            await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": line_updates})
 
     return {
         "success": result.success,
@@ -1780,6 +1797,7 @@ async def query_line_from_operator(line_id: str, request: Request):
         "data": result.data,
         "response_time_ms": result.response_time_ms,
         "updated_plan": updated_plan,
+        "updated_numero": updated_numero,
     }
 
 @api_router.post("/linhas/{line_id}/bloquear-parcial")
@@ -4513,6 +4531,27 @@ async def _trigger_selfservice_activation(doc: dict):
             else:
                 chip_status = ChipStatus.reservado.value
             msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
+
+            # Se nao obteve o MSISDN no resultado, consultar a operadora
+            if not msisdn and new_status == "ativo":
+                try:
+                    await asyncio.sleep(3)  # Aguardar operadora processar
+                    check = await operadora_service.consultar_linha(
+                        iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                    )
+                    if check.success and check.data:
+                        msisdn = check.data.get("msisdn") or check.data.get("numero")
+                        if not msisdn:
+                            # Tentar segunda vez após mais tempo
+                            await asyncio.sleep(5)
+                            check2 = await operadora_service.consultar_linha(
+                                iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                            )
+                            if check2.success and check2.data:
+                                msisdn = check2.data.get("msisdn") or check2.data.get("numero")
+                    logger.info(f"MSISDN obtido pos-ativacao: {msisdn}")
+                except Exception as e:
+                    logger.warning(f"Erro ao consultar MSISDN pos-ativacao: {e}")
 
             await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
                 "status": chip_status, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
