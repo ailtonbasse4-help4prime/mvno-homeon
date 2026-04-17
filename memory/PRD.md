@@ -36,9 +36,12 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Correção Sincronização Asaas (17/04/2026)
 - [x] Fixado IndentationError em server.py que quebrava backend (endpoint injetado no meio de outra função)
 - [x] Busca accent-insensitive real (regex com classes [aáàâã] etc) em GET /api/clientes?search=
+- [x] Busca accent-insensitive client-side na tela Cobranças (filtro por cliente_nome/descricao)
+- [x] **Fix crítico:** GET /api/carteira/cobrancas tinha limit=100 → cobranças/carnês antigos ficavam invisíveis quando havia mais de 100. Aumentado para 5000
+- [x] Mesmo fix em GET /api/carteira/assinaturas
 - [x] Endpoint POST /api/carteira/sincronizar-asaas importa cobrancas existentes no Asaas para MongoDB local
 - [x] Botão "Importar do Asaas" em GestaoCobrancas (data-testid="import-asaas-btn") com confirmação
-- [x] Testado end-to-end: 9 cobrancas importadas de 185 no Asaas, 117 clientes totais
+- [x] Testado end-to-end: todas 187 cobrancas retornam, 9 importadas de 185 no Asaas
 
 ## Backlog
 

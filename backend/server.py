@@ -3204,7 +3204,7 @@ async def get_carteira_resumo(request: Request):
 # --- Cobrancas ---
 @api_router.get("/carteira/cobrancas", response_model=List[CobrancaResponse])
 async def list_cobrancas(request: Request, cliente_id: Optional[str] = None,
-                         status: Optional[str] = None, limit: int = 100):
+                         status: Optional[str] = None, limit: int = 5000):
     await get_current_user(request)
     query = {}
     if cliente_id:
@@ -3664,7 +3664,7 @@ async def consultar_cobranca(cobranca_id: str, request: Request):
 # --- Assinaturas ---
 @api_router.get("/carteira/assinaturas", response_model=List[AssinaturaResponse])
 async def list_assinaturas(request: Request, cliente_id: Optional[str] = None,
-                           status: Optional[str] = None, limit: int = 100):
+                           status: Optional[str] = None, limit: int = 5000):
     await get_current_user(request)
     query = {}
     if cliente_id:
