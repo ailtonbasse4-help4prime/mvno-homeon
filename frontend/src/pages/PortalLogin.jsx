@@ -58,15 +58,25 @@ export default function PortalLogin() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Check if already logged in
-  const existing = sessionStorage.getItem('portal_token');
-  if (existing) {
-    const cliente = JSON.parse(sessionStorage.getItem('portal_cliente') || '{}');
-    if (cliente.nome) {
-      navigate('/portal/dashboard', { replace: true });
-      return null;
+  // Check if already logged in - dentro de useEffect (nunca durante render)
+  useEffect(() => {
+    try {
+      const existing = sessionStorage.getItem('portal_token');
+      if (!existing) return;
+      const raw = sessionStorage.getItem('portal_cliente');
+      if (!raw) return;
+      const cliente = JSON.parse(raw);
+      if (cliente && cliente.nome) {
+        navigate('/portal/dashboard', { replace: true });
+      }
+    } catch (err) {
+      // sessionStorage corrompido - limpar e seguir para login
+      try {
+        sessionStorage.removeItem('portal_token');
+        sessionStorage.removeItem('portal_cliente');
+      } catch (_) { /* ignore */ }
     }
-  }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

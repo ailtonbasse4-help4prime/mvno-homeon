@@ -38,9 +38,18 @@ function usePortalPWA() {
 }
 
 function getPortalAuth() {
-  const token = sessionStorage.getItem('portal_token');
-  const cliente = JSON.parse(sessionStorage.getItem('portal_cliente') || 'null');
-  return { token, cliente };
+  try {
+    const token = sessionStorage.getItem('portal_token');
+    const raw = sessionStorage.getItem('portal_cliente');
+    const cliente = raw ? JSON.parse(raw) : null;
+    return { token, cliente };
+  } catch (_err) {
+    try {
+      sessionStorage.removeItem('portal_token');
+      sessionStorage.removeItem('portal_cliente');
+    } catch (_) { /* ignore */ }
+    return { token: null, cliente: null };
+  }
 }
 
 function portalHeaders(token) {
