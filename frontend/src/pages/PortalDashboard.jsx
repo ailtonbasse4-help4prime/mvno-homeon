@@ -18,7 +18,18 @@ function usePortalPWA() {
     const manifestLink = document.querySelector('link[rel="manifest"]');
     if (manifestLink) manifestLink.href = '/portal-manifest.json';
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        reg.update().catch(() => {});
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (nw) nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              nw.postMessage({ type: 'SKIP_WAITING' });
+              window.location.reload();
+            }
+          });
+        });
+      }).catch(() => {});
     }
     return () => {
       if (manifestLink) manifestLink.href = '/manifest.json';
