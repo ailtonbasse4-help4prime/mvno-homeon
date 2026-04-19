@@ -59,12 +59,14 @@ export function Ofertas() {
       setEditingOferta(oferta);
       setFormData({
         nome: oferta.nome, plano_id: oferta.plano_id,
-        valor: oferta.valor.toString(), descricao: oferta.descricao || '',
+        valor: oferta.valor.toString(),
+        custo: (oferta.custo || 0).toString(),
+        descricao: oferta.descricao || '',
         categoria: oferta.categoria || 'movel', ativo: oferta.ativo,
       });
     } else {
       setEditingOferta(null);
-      setFormData({ nome: '', plano_id: '', valor: '', descricao: '', categoria: 'movel', ativo: true });
+      setFormData({ nome: '', plano_id: '', valor: '', custo: '', descricao: '', categoria: 'movel', ativo: true });
     }
     setDialogOpen(true);
   };
@@ -74,7 +76,9 @@ export function Ofertas() {
     setSubmitting(true);
     const payload = {
       nome: formData.nome, plano_id: formData.plano_id,
-      valor: parseFloat(formData.valor), descricao: formData.descricao || null,
+      valor: parseFloat(formData.valor),
+      custo: parseFloat(formData.custo || 0),
+      descricao: formData.descricao || null,
       categoria: formData.categoria, ativo: formData.ativo,
     };
     try {
@@ -287,6 +291,16 @@ export function Ofertas() {
             <div className="space-y-2">
               <Label className="text-zinc-300">Valor (R$)</Label>
               <Input type="number" step="0.01" min="0" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} className="form-input font-mono" required data-testid="oferta-valor-input" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-zinc-300">Custo (R$) - custo operacional por mes</Label>
+              <Input type="number" step="0.01" min="0" value={formData.custo} onChange={(e) => setFormData({ ...formData, custo: e.target.value })} className="form-input font-mono" placeholder="0.00" data-testid="oferta-custo-input" />
+              {formData.valor && formData.custo && (
+                <p className="text-xs text-zinc-500">
+                  Lucro: <span className="text-emerald-400">R$ {(parseFloat(formData.valor) - parseFloat(formData.custo || 0)).toFixed(2)}</span>
+                  {' | Margem: '}<span className="text-violet-400">{parseFloat(formData.valor) > 0 ? ((parseFloat(formData.valor) - parseFloat(formData.custo || 0)) / parseFloat(formData.valor) * 100).toFixed(1) : '0.0'}%</span>
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="text-zinc-300">Descricao (opcional)</Label>

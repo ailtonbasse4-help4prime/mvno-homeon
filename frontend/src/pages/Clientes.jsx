@@ -24,6 +24,7 @@ const emptyForm = {
   nome: '', tipo_pessoa: 'pf', documento: '', telefone: '', email: '',
   data_nascimento: '', cep: '', endereco: '', numero_endereco: '',
   bairro: '', cidade: '', estado: '', city_code: '', complemento: '',
+  canal: '', observacoes: '',
   status: 'ativo',
 };
 
@@ -79,7 +80,9 @@ export function Clientes() {
         numero_endereco: cliente.numero_endereco || '',
         bairro: cliente.bairro || '', cidade: cliente.cidade || '',
         estado: cliente.estado || '', city_code: cliente.city_code || '',
-        complemento: cliente.complemento || '', status: cliente.status,
+        complemento: cliente.complemento || '',
+        canal: cliente.canal || '', observacoes: cliente.observacoes || '',
+        status: cliente.status,
       });
     } else {
       setEditingCliente(null);
@@ -488,6 +491,26 @@ export function Clientes() {
                 <div className="space-y-1">
                   <Label className="text-zinc-300 text-xs">Complemento</Label>
                   <Input value={formData.complemento} onChange={(e) => f('complemento', e.target.value)} className="form-input" placeholder="Apto, Sala..." data-testid="cliente-complemento-input" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1">
+                  <Label className="text-zinc-300 text-xs">Canal de venda</Label>
+                  <Select value={formData.canal || '__none__'} onValueChange={(v) => f('canal', v === '__none__' ? '' : v)}>
+                    <SelectTrigger className="form-input" data-testid="cliente-canal-select"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-500/60">
+                      <SelectItem value="__none__">—</SelectItem>
+                      <SelectItem value="Proprio">Proprio</SelectItem>
+                      <SelectItem value="Shopee">Shopee</SelectItem>
+                      <SelectItem value="Revendedor">Revendedor</SelectItem>
+                      <SelectItem value="Mercado Livre">Mercado Livre</SelectItem>
+                      <SelectItem value="Outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-zinc-300 text-xs">Observacoes</Label>
+                  <Input value={formData.observacoes} onChange={(e) => f('observacoes', e.target.value)} className="form-input" placeholder="Notas internas" data-testid="cliente-observacoes-input" />
                 </div>
               </div>
             </div>

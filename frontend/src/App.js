@@ -23,6 +23,7 @@ import PortalLogin from "./pages/PortalLogin";
 import PortalDashboard from "./pages/PortalDashboard";
 import Divulgacao from "./pages/Divulgacao";
 import LandingPage from "./pages/LandingPage";
+import PlanilhaOperacional from "./pages/PlanilhaOperacional";
 
 function AppRoutes() {
   const location = useLocation();
@@ -35,6 +36,7 @@ function AppRoutes() {
       <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />
       <Route element={<MainLayout />}>
         <Route path="/" element={<ErrorBoundary resetKey={location.pathname}><Dashboard /></ErrorBoundary>} />
+        <Route path="/operacional" element={<ErrorBoundary resetKey={location.pathname}><PlanilhaOperacional /></ErrorBoundary>} />
         <Route path="/clientes" element={<ErrorBoundary resetKey={location.pathname}><Clientes /></ErrorBoundary>} />
         <Route path="/chips" element={<ErrorBoundary resetKey={location.pathname}><Chips /></ErrorBoundary>} />
         <Route path="/planos" element={<ErrorBoundary resetKey={location.pathname}><Planos /></ErrorBoundary>} />

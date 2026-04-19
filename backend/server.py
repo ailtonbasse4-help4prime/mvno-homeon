@@ -243,6 +243,8 @@ class ClientCreate(BaseModel):
     estado: Optional[str] = None
     city_code: Optional[str] = None
     complemento: Optional[str] = None
+    canal: Optional[str] = None  # Proprio, Shopee, Revendedor, Outro
+    observacoes: Optional[str] = None
     status: ClientStatus = ClientStatus.ativo
 
 class ClientResponse(BaseModel):
@@ -261,6 +263,8 @@ class ClientResponse(BaseModel):
     estado: Optional[str] = None
     city_code: Optional[str] = None
     complemento: Optional[str] = None
+    canal: Optional[str] = None
+    observacoes: Optional[str] = None
     status: str = "ativo"
     dados_completos: bool = False
     created_at: Optional[datetime] = None
@@ -291,6 +295,7 @@ class OfferCreate(BaseModel):
     nome: str
     plano_id: str
     valor: float
+    custo: float = 0.0
     descricao: Optional[str] = None
     categoria: CategoriaOferta = CategoriaOferta.movel
     ativo: bool = True
@@ -303,6 +308,7 @@ class OfferResponse(BaseModel):
     franquia: Optional[str] = None
     plan_code: Optional[str] = None
     valor: float
+    custo: float = 0.0
     descricao: Optional[str] = None
     categoria: str = "movel"
     ativo: bool
@@ -550,6 +556,7 @@ async def build_client_response(c: dict) -> ClientResponse:
         bairro=c.get("bairro"), cidade=c.get("cidade"),
         estado=c.get("estado"), city_code=c.get("city_code"),
         complemento=c.get("complemento"),
+        canal=c.get("canal"), observacoes=c.get("observacoes"),
         status=c["status"], dados_completos=is_complete,
         created_at=c.get("created_at", datetime.now(timezone.utc)),
         linhas_count=len(linhas_data),
@@ -868,6 +875,7 @@ async def list_clients(request: Request, search: Optional[str] = None):
             bairro=c.get("bairro"), cidade=c.get("cidade"),
             estado=c.get("estado"), city_code=c.get("city_code"),
             complemento=c.get("complemento"),
+            canal=c.get("canal"), observacoes=c.get("observacoes"),
             status=c["status"], dados_completos=is_complete,
             created_at=c.get("created_at", datetime.now(timezone.utc)),
             linhas_count=len(linhas),
@@ -897,6 +905,7 @@ async def create_client(data: ClientCreate, request: Request):
         "bairro": data.bairro, "cidade": data.cidade,
         "estado": data.estado, "city_code": data.city_code,
         "complemento": data.complemento,
+        "canal": data.canal, "observacoes": data.observacoes,
         "status": data.status.value,
         "created_at": datetime.now(timezone.utc)
     }
@@ -1032,6 +1041,7 @@ async def update_client(client_id: str, data: ClientCreate, request: Request):
         "bairro": data.bairro, "cidade": data.cidade,
         "estado": data.estado, "city_code": data.city_code,
         "complemento": data.complemento,
+        "canal": data.canal, "observacoes": data.observacoes,
         "status": data.status.value,
     }
     await db.clientes.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
@@ -1121,7 +1131,7 @@ async def build_offer_response(o: dict) -> OfferResponse:
     return OfferResponse(
         id=str(o["_id"]), nome=o["nome"], plano_id=o["plano_id"],
         plano_nome=plano_nome, franquia=franquia, plan_code=plan_code,
-        valor=o["valor"], descricao=o.get("descricao"),
+        valor=o["valor"], custo=o.get("custo", 0.0), descricao=o.get("descricao"),
         categoria=o.get("categoria", "movel"),
         ativo=o.get("ativo", True),
         created_at=o.get("created_at", datetime.now(timezone.utc))
@@ -1152,7 +1162,7 @@ async def list_offers(request: Request, ativo: Optional[bool] = None, categoria:
             plano_nome=plano["nome"] if plano else None,
             franquia=plano["franquia"] if plano else None,
             plan_code=plano.get("plan_code") if plano else None,
-            valor=o["valor"], descricao=o.get("descricao"),
+            valor=o["valor"], custo=o.get("custo", 0.0), descricao=o.get("descricao"),
             categoria=o.get("categoria", "movel"),
             ativo=o.get("ativo", True),
             created_at=o.get("created_at", datetime.now(timezone.utc))
@@ -1175,7 +1185,8 @@ async def create_offer(data: OfferCreate, request: Request):
         raise HTTPException(status_code=400, detail="Plano nao encontrado")
     offer_doc = {
         "nome": data.nome, "plano_id": data.plano_id,
-        "valor": data.valor, "descricao": data.descricao,
+        "valor": data.valor, "custo": data.custo,
+        "descricao": data.descricao,
         "categoria": data.categoria.value,
         "ativo": data.ativo, "created_at": datetime.now(timezone.utc)
     }
@@ -1195,7 +1206,8 @@ async def update_offer(offer_id: str, data: OfferCreate, request: Request):
         raise HTTPException(status_code=400, detail="Plano nao encontrado")
     await db.ofertas.update_one({"_id": ObjectId(offer_id)}, {"$set": {
         "nome": data.nome, "plano_id": data.plano_id,
-        "valor": data.valor, "descricao": data.descricao,
+        "valor": data.valor, "custo": data.custo,
+        "descricao": data.descricao,
         "categoria": data.categoria.value, "ativo": data.ativo,
     }})
     await create_log("cadastro", f"Oferta atualizada: {data.nome}", user["id"], user["name"])
@@ -5281,6 +5293,13 @@ async def startup_event():
     logger.info("Application started successfully (retry worker ativo)")
 
 app.include_router(api_router)
+
+# Registrar router Operacional (novo modulo)
+from routes.operacional import router as operacional_router, init as init_operacional
+init_operacional(db=db, get_current_user=get_current_user, require_admin=require_admin, create_log=create_log)
+api_router_v2 = APIRouter(prefix="/api")
+api_router_v2.include_router(operacional_router)
+app.include_router(api_router_v2)
 
 # Download endpoint for VPS deploy package
 @app.get("/download/deploy-package")

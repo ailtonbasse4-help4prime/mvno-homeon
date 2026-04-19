@@ -13,26 +13,70 @@ import {
   LayoutDashboard, Users, CreditCard, Package, Tag, Zap,
   Phone, FileText, LogOut, Wifi, WifiOff, UserCog, KeyRound,
   Wallet, RefreshCw, X, Receipt, Store, Smartphone, Share2,
+  Table2, ChevronDown, ChevronRight, Activity, DollarSign, Settings, Radio,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
-const allNavItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'atendente'] },
-  { path: '/clientes', icon: Users, label: 'Clientes', roles: ['admin', 'atendente'] },
-  { path: '/planos', icon: Package, label: 'Planos', roles: ['admin', 'atendente'] },
-  { path: '/ofertas', icon: Tag, label: 'Ofertas', roles: ['admin', 'atendente'] },
-  { path: '/chips', icon: CreditCard, label: 'Chips', roles: ['admin', 'atendente'] },
-  { path: '/ativacoes', icon: Zap, label: 'Ativacoes', roles: ['admin', 'atendente'] },
-  { path: '/linhas', icon: Phone, label: 'Linhas', roles: ['admin', 'atendente'] },
-  { path: '/revendedores', icon: Store, label: 'Revendedores', roles: ['admin'] },
-  { path: '/ativacoes-selfservice', icon: Smartphone, label: 'Self-Service', roles: ['admin'] },
-  { path: '/divulgacao', icon: Share2, label: 'Divulgacao', roles: ['admin'] },
-  { path: '/carteira', icon: Wallet, label: 'Carteira Movel', roles: ['admin'] },
-  { path: '/cobrancas', icon: Receipt, label: 'Cobrancas', roles: ['admin'] },
-  { path: '/assinaturas', icon: RefreshCw, label: 'Assinaturas', roles: ['admin'] },
-  { path: '/usuarios', icon: UserCog, label: 'Usuarios', roles: ['admin'] },
-  { path: '/logs', icon: FileText, label: 'Logs', roles: ['admin'] },
+const navGroups = [
+  {
+    id: 'operacao',
+    label: 'Operacao',
+    icon: Activity,
+    items: [
+      { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'atendente'] },
+      { path: '/operacional', icon: Table2, label: 'Planilha Operacional', roles: ['admin', 'atendente'] },
+      { path: '/ativacoes', icon: Zap, label: 'Ativacoes', roles: ['admin', 'atendente'] },
+    ],
+  },
+  {
+    id: 'clientes',
+    label: 'Clientes & Linhas',
+    icon: Users,
+    items: [
+      { path: '/clientes', icon: Users, label: 'Clientes', roles: ['admin', 'atendente'] },
+      { path: '/chips', icon: CreditCard, label: 'Chips', roles: ['admin', 'atendente'] },
+      { path: '/linhas', icon: Phone, label: 'Linhas', roles: ['admin', 'atendente'] },
+    ],
+  },
+  {
+    id: 'financeiro',
+    label: 'Financeiro',
+    icon: DollarSign,
+    items: [
+      { path: '/cobrancas', icon: Receipt, label: 'Cobrancas', roles: ['admin'] },
+      { path: '/assinaturas', icon: RefreshCw, label: 'Assinaturas', roles: ['admin'] },
+      { path: '/carteira', icon: Wallet, label: 'Carteira Movel', roles: ['admin'] },
+    ],
+  },
+  {
+    id: 'cadastros',
+    label: 'Cadastros',
+    icon: Package,
+    items: [
+      { path: '/planos', icon: Package, label: 'Planos', roles: ['admin', 'atendente'] },
+      { path: '/ofertas', icon: Tag, label: 'Ofertas', roles: ['admin', 'atendente'] },
+    ],
+  },
+  {
+    id: 'rede',
+    label: 'Rede',
+    icon: Radio,
+    items: [
+      { path: '/revendedores', icon: Store, label: 'Revendedores', roles: ['admin'] },
+      { path: '/ativacoes-selfservice', icon: Smartphone, label: 'Self-Service', roles: ['admin'] },
+      { path: '/divulgacao', icon: Share2, label: 'Divulgacao', roles: ['admin'] },
+    ],
+  },
+  {
+    id: 'sistema',
+    label: 'Sistema',
+    icon: Settings,
+    items: [
+      { path: '/usuarios', icon: UserCog, label: 'Usuarios', roles: ['admin'] },
+      { path: '/logs', icon: FileText, label: 'Logs', roles: ['admin'] },
+    ],
+  },
 ];
 
 export function Sidebar({ isOpen, onClose }) {
@@ -79,7 +123,26 @@ export function Sidebar({ isOpen, onClose }) {
   };
 
   const userRole = user?.role || 'atendente';
-  const navItems = allNavItems.filter(item => item.roles.includes(userRole));
+  const filteredGroups = navGroups.map(g => ({
+    ...g,
+    items: g.items.filter(i => i.roles.includes(userRole)),
+  })).filter(g => g.items.length > 0);
+
+  // Estado de grupos expandidos (padrao: Operacao + Clientes abertos)
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sidebar_expanded_groups');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return { operacao: true, clientes: true, financeiro: false, cadastros: false, rede: false, sistema: false };
+  });
+  const toggleGroup = (id) => {
+    setExpanded(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem('sidebar_expanded_groups', JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  };
 
   return (
     <>
@@ -124,21 +187,40 @@ export function Sidebar({ isOpen, onClose }) {
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto min-h-0">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/'}
-              onClick={handleNavClick}
-              className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'active' : ''}`
-              }
-              data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
-            >
-              <item.icon className="w-5 h-5 shrink-0" />
-              <span className="truncate">{item.label}</span>
-            </NavLink>
-          ))}
+          {filteredGroups.map((group) => {
+            const GroupIcon = group.icon;
+            const isOpen = expanded[group.id];
+            return (
+              <div key={group.id} className="mb-1">
+                <button
+                  onClick={() => toggleGroup(group.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 rounded-md transition-colors"
+                  data-testid={`nav-group-${group.id}`}
+                >
+                  <GroupIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="flex-1 text-left">{group.label}</span>
+                  {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </button>
+                {isOpen && (
+                  <div className="mt-1 space-y-0.5 ml-1">
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        end={item.path === '/'}
+                        onClick={handleNavClick}
+                        className={({ isActive }) => `sidebar-link pl-6 ${isActive ? 'active' : ''}`}
+                        data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
+                      >
+                        <item.icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate text-sm">{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-zinc-800">
