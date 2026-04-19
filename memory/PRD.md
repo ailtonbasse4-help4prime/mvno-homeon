@@ -43,6 +43,23 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Botão "Importar do Asaas" em GestaoCobrancas (data-testid="import-asaas-btn") com confirmação
 - [x] Testado end-to-end: todas 187 cobrancas retornam, 9 importadas de 185 no Asaas
 
+### Fix Tela Preta Portal Cliente (18/04/2026)
+- [x] sw.js v3: network-first para HTML, sem precache de /portal, auto-update via postMessage SKIP_WAITING
+- [x] PortalLogin/Dashboard: JSON.parse(sessionStorage) envolto em try/catch (causava crash em iOS PWA)
+- [x] navigate() movido de render para useEffect
+
+### Planilha Operacional + Menu reorganizado + Custo/Lucro (19/04/2026)
+- [x] Nova rota /operacional com tabela consolidada (114 linhas) estilo Excel
+- [x] Campos novos: `custo` em Ofertas, `canal`+`observacoes` em Clientes, `proxima_recarga`+`status_chip`+`expirar_dados` em Linhas
+- [x] Endpoint consolidado GET /api/operacional/planilha com resumo Receita/Custo/Lucro/Margem
+- [x] Edição inline (PATCH /api/operacional/linha/{id}) para obs, proxima_recarga, canal, status_chip
+- [x] Export Excel (.xlsx com 2 abas: Planilha + Resumo) e Import Excel (merge por CPF/tel/nome)
+- [x] Endpoint POST /api/operacional/atualizar-expirar-dados/{iccid} consulta Ta Telecom e cacheia
+- [x] Menu lateral agrupado colapsável: Operação, Clientes & Linhas, Financeiro, Cadastros, Rede, Sistema
+- [x] Campo custo em Oferta com preview de lucro/margem no form
+- [x] Select canal em Cliente (Próprio, Shopee, Revendedor, Mercado Livre, Outro)
+- [x] Testado: 17/17 backend + 100% frontend pass
+
 ## Backlog
 
 ### P1 - Alta Prioridade
