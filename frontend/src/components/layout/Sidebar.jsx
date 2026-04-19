@@ -56,6 +56,7 @@ const navGroups = [
     items: [
       { path: '/planos', icon: Package, label: 'Planos', roles: ['admin', 'atendente'] },
       { path: '/ofertas', icon: Tag, label: 'Ofertas', roles: ['admin', 'atendente'] },
+      { path: '/custos', icon: DollarSign, label: 'Custos & Automacao', roles: ['admin'] },
     ],
   },
   {

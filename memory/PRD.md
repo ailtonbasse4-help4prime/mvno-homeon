@@ -60,6 +60,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Select canal em Cliente (Próprio, Shopee, Revendedor, Mercado Livre, Outro)
 - [x] Testado: 17/17 backend + 100% frontend pass
 
+### Custos & Automações (19/04/2026)
+- [x] Nova página `/custos` (menu Cadastros → Custos & Automação) para cadastro em lote de custos por oferta
+- [x] Tabela com linhas ativas por oferta, cálculo automático de lucro/margem/lucro total
+- [x] Salvar em batch: POST /api/operacional/custos/batch
+- [x] **Automação 1**: POST /api/operacional/sincronizar-tatelecom — consulta Ta Telecom para todas linhas ativas, atualiza status_chip (FS/NP/BLOQ) + expirar_dados em lote
+- [x] **Automação 2**: POST /api/operacional/auto-canal — preenche "Revendedor" se chip tem revendedor_id, "Próprio" se veio de self-service
+- [x] **Automação 3**: POST /api/operacional/auto-proxima-recarga — calcula próxima recarga = último boleto pago + 30 dias
+
 ## Backlog
 
 ### P1 - Alta Prioridade

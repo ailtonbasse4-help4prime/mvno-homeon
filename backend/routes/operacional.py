@@ -35,6 +35,14 @@ class LinhaOperacionalUpdate(BaseModel):
     status_chip: Optional[str] = None  # FS, NP, BLOQ.PARC, BLOQ.TOTAL, CANCELADO (manual)
 
 
+class OfertaCustoUpdate(BaseModel):
+    custo: float
+
+
+class CustosBatchUpdate(BaseModel):
+    custos: dict  # {"oferta_id": custo_float}
+
+
 @router.get("/planilha")
 async def planilha_consolidada(request: Request, search: Optional[str] = None, status: Optional[str] = None,
                                 canal: Optional[str] = None, bloqueio: Optional[str] = None):
@@ -429,3 +437,261 @@ async def atualizar_expirar_dados(iccid: str, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== CUSTOS ====================
+@router.get("/ofertas-com-stats")
+async def ofertas_com_stats(request: Request):
+    """Lista todas ofertas com numero de linhas ativas e soma de receita/custo/lucro para gestao de custos."""
+    await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    ofertas = await db.ofertas.find({}).to_list(1000)
+    # Planos
+    plano_ids = list({o.get("plano_id") for o in ofertas if o.get("plano_id")})
+    planos_map = {}
+    if plano_ids:
+        pls = await db.planos.find({"_id": {"$in": [ObjectId(p) for p in plano_ids if ObjectId.is_valid(p)]}}).to_list(500)
+        planos_map = {str(p["_id"]): p for p in pls}
+
+    # Contar linhas ativas por oferta (ou por plano se linha nao tem oferta_id)
+    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
+    count_por_oferta = {}
+    count_por_plano = {}
+    for l in linhas:
+        oid = l.get("oferta_id")
+        if oid:
+            count_por_oferta[oid] = count_por_oferta.get(oid, 0) + 1
+        else:
+            pid = l.get("plano_id")
+            if pid:
+                count_por_plano[pid] = count_por_plano.get(pid, 0) + 1
+
+    result = []
+    for o in ofertas:
+        oid = str(o["_id"])
+        plano = planos_map.get(o.get("plano_id") or "", {})
+        direct = count_por_oferta.get(oid, 0)
+        # Se for a oferta default de um plano, contar linhas do plano sem oferta_id
+        indirect = count_por_plano.get(o.get("plano_id"), 0) if direct == 0 else 0
+        total_linhas = direct + indirect
+        valor = o.get("valor", 0) or 0
+        custo = o.get("custo", 0) or 0
+        result.append({
+            "id": oid,
+            "nome": o["nome"],
+            "categoria": o.get("categoria", "movel"),
+            "plano_nome": plano.get("nome", ""),
+            "franquia": plano.get("franquia", ""),
+            "valor": valor,
+            "custo": custo,
+            "lucro": valor - custo,
+            "margem_pct": round((valor - custo) / valor * 100, 2) if valor > 0 else 0,
+            "linhas_ativas": total_linhas,
+            "receita_total": round(valor * total_linhas, 2),
+            "custo_total": round(custo * total_linhas, 2),
+            "lucro_total": round((valor - custo) * total_linhas, 2),
+            "ativo": o.get("ativo", True),
+        })
+    result.sort(key=lambda x: (-x["linhas_ativas"], x["nome"]))
+    return result
+
+
+@router.patch("/oferta/{oferta_id}/custo")
+async def atualizar_custo_oferta(oferta_id: str, data: OfertaCustoUpdate, request: Request):
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    if not ObjectId.is_valid(oferta_id):
+        raise HTTPException(status_code=400, detail="ID invalido")
+    oferta = await db.ofertas.find_one({"_id": ObjectId(oferta_id)})
+    if not oferta:
+        raise HTTPException(status_code=404, detail="Oferta nao encontrada")
+    if data.custo < 0:
+        raise HTTPException(status_code=400, detail="Custo nao pode ser negativo")
+    await db.ofertas.update_one({"_id": ObjectId(oferta_id)}, {"$set": {"custo": data.custo}})
+    await _ctx["create_log"]("operacional", f"Custo da oferta '{oferta['nome']}' atualizado: R$ {data.custo:.2f}", user["id"], user["name"])
+    return {"success": True, "oferta_id": oferta_id, "custo": data.custo}
+
+
+@router.post("/custos/batch")
+async def atualizar_custos_batch(data: CustosBatchUpdate, request: Request):
+    """Atualiza custos de varias ofertas de uma vez."""
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    updated = 0
+    errors = []
+    for oferta_id, custo in data.custos.items():
+        try:
+            if not ObjectId.is_valid(oferta_id):
+                errors.append(f"{oferta_id}: ID invalido")
+                continue
+            custo_f = float(custo)
+            if custo_f < 0:
+                errors.append(f"{oferta_id}: custo negativo")
+                continue
+            r = await db.ofertas.update_one({"_id": ObjectId(oferta_id)}, {"$set": {"custo": custo_f}})
+            if r.modified_count:
+                updated += 1
+        except Exception as e:
+            errors.append(f"{oferta_id}: {e}")
+    await _ctx["create_log"]("operacional", f"Custos em lote: {updated} ofertas atualizadas", user["id"], user["name"])
+    return {"updated": updated, "errors": errors}
+
+
+# ==================== SINCRONIZACAO AUTOMATICA TA TELECOM ====================
+@router.post("/sincronizar-tatelecom")
+async def sincronizar_tatelecom_batch(request: Request):
+    """Consulta Ta Telecom para TODAS as linhas ativas e atualiza expirar_dados + status_chip em cache local."""
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    from services.operadora_service import operadora_service
+    if not operadora_service.is_configured:
+        raise HTTPException(status_code=400, detail="Ta Telecom nao configurado")
+
+    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
+    # Precisamos do ICCID (vem do chip)
+    chip_ids = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
+    chips_map = {}
+    if chip_ids:
+        chs = await db.chips.find({"_id": {"$in": [ObjectId(c) for c in chip_ids]}}).to_list(5000)
+        chips_map = {str(c["_id"]): c for c in chs}
+
+    atualizados = 0
+    erros = []
+    nao_encontrados = 0
+    for l in linhas:
+        chip = chips_map.get(l.get("chip_id") or "")
+        if not chip or not chip.get("iccid"):
+            nao_encontrados += 1
+            continue
+        iccid = chip["iccid"]
+        try:
+            req, resp = await operadora_service.consultar_linha(iccid)
+            if resp.status != 200 or not resp.body:
+                erros.append(f"{iccid}: status {resp.status}")
+                continue
+            body = resp.body if isinstance(resp.body, dict) else {}
+            # Extrair data expiracao
+            expirar = (
+                body.get("data_expiracao")
+                or body.get("dataExpiracao")
+                or body.get("expira_em")
+                or body.get("validity")
+                or (body.get("data") or {}).get("data_expiracao")
+            )
+            # Extrair status do chip bruto (mapear para siglas)
+            status_raw = (body.get("status") or body.get("situacao") or (body.get("data") or {}).get("status") or "").upper()
+            # Mapeamento simples
+            status_map = {
+                "FUNCIONAL": "FS",
+                "ATIVO": "FS",
+                "NOVO": "NP",
+                "NAO_PORTADO": "NP",
+                "BLOQUEADO_PARCIAL": "BLOQ.PARC",
+                "BLOQUEADO_TOTAL": "BLOQ.TOTAL",
+                "BLOQUEADO": "BLOQ.TOTAL",
+                "CANCELADO": "CANCELADO",
+                "SUSPENSO": "BLOQ.PARC",
+            }
+            status_chip_sigla = status_map.get(status_raw, status_raw[:10] if status_raw else None)
+
+            update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
+            if expirar:
+                update["expirar_dados"] = expirar
+            if status_chip_sigla:
+                update["status_chip"] = status_chip_sigla
+            if len(update) > 1:
+                await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
+                atualizados += 1
+        except Exception as e:
+            erros.append(f"{iccid}: {str(e)[:100]}")
+
+    await _ctx["create_log"]("operacional", f"Sync TaTelecom batch: {atualizados}/{len(linhas)} atualizadas", user["id"], user["name"])
+    return {
+        "total_linhas": len(linhas),
+        "atualizadas": atualizados,
+        "sem_chip": nao_encontrados,
+        "erros": erros[:30],
+        "total_erros": len(erros),
+    }
+
+
+# ==================== AUTO-PREENCHER CANAL ====================
+@router.post("/auto-canal")
+async def auto_preencher_canal(request: Request):
+    """Preenche canal automaticamente:
+       - Cliente veio de self-service sem revendedor -> 'Proprio'
+       - Cliente vinculado a chip de revendedor -> 'Revendedor'
+    Nao sobrescreve canal ja definido manualmente.
+    """
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+
+    # 1. Clientes com chip de revendedor
+    chips_rev = await db.chips.find({"revendedor_id": {"$exists": True, "$ne": None}}, {"cliente_id": 1}).to_list(5000)
+    cliente_ids_rev = list({c.get("cliente_id") for c in chips_rev if c.get("cliente_id")})
+    updated_rev = 0
+    if cliente_ids_rev:
+        r = await db.clientes.update_many(
+            {"_id": {"$in": [ObjectId(c) for c in cliente_ids_rev if ObjectId.is_valid(c)]},
+             "$or": [{"canal": None}, {"canal": ""}, {"canal": {"$exists": False}}]},
+            {"$set": {"canal": "Revendedor"}}
+        )
+        updated_rev = r.modified_count
+
+    # 2. Clientes de self-service (sem revendedor) -> Proprio
+    ss_ativacoes = await db.ativacoes_selfservice.find({"cliente_id": {"$exists": True, "$ne": None}}, {"cliente_id": 1}).to_list(5000)
+    cliente_ids_ss = list({s.get("cliente_id") for s in ss_ativacoes if s.get("cliente_id")})
+    updated_ss = 0
+    if cliente_ids_ss:
+        r = await db.clientes.update_many(
+            {"_id": {"$in": [ObjectId(c) for c in cliente_ids_ss if ObjectId.is_valid(c)]},
+             "$or": [{"canal": None}, {"canal": ""}, {"canal": {"$exists": False}}]},
+            {"$set": {"canal": "Proprio"}}
+        )
+        updated_ss = r.modified_count
+
+    await _ctx["create_log"]("operacional", f"Auto canal: {updated_rev} Revendedor, {updated_ss} Proprio", user["id"], user["name"])
+    return {"updated_revendedor": updated_rev, "updated_proprio": updated_ss}
+
+
+# ==================== AUTO PROXIMA RECARGA ====================
+@router.post("/auto-proxima-recarga")
+async def auto_proxima_recarga(request: Request):
+    """Calcula proxima_recarga a partir do ultimo boleto pago do cliente:
+       vencimento do ultimo pago + 30 dias. Nao sobrescreve valor ja preenchido manualmente.
+    """
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    from datetime import timedelta
+
+    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
+    # Ultima cobranca paga por cliente
+    pagas = await db.cobrancas.find({"status": {"$in": ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"]}}, {"cliente_id": 1, "vencimento": 1}).to_list(20000)
+    ultima_paga_por_cliente = {}
+    for c in pagas:
+        cid = c.get("cliente_id")
+        venc = c.get("vencimento")
+        if not cid or not venc:
+            continue
+        if cid not in ultima_paga_por_cliente or venc > ultima_paga_por_cliente[cid]:
+            ultima_paga_por_cliente[cid] = venc
+
+    updated = 0
+    for l in linhas:
+        if l.get("proxima_recarga"):
+            continue  # nao sobrescreve manual
+        cid = l.get("cliente_id")
+        last_venc = ultima_paga_por_cliente.get(cid)
+        if not last_venc:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(last_venc)[:10])
+            prox = dt + timedelta(days=30)
+            await db.linhas.update_one({"_id": l["_id"]}, {"$set": {"proxima_recarga": prox.strftime("%Y-%m-%d")}})
+            updated += 1
+        except Exception:
+            continue
+
+    await _ctx["create_log"]("operacional", f"Auto proxima recarga: {updated} linhas atualizadas", user["id"], user["name"])
+    return {"updated": updated, "total_linhas": len(linhas)}
+
