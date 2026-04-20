@@ -41,6 +41,7 @@ export default function PlanilhaOperacional() {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [syncingTa, setSyncingTa] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null); // {processadas, total, atualizadas}
   const [syncingAsaas, setSyncingAsaas] = useState(false);
   const [lastSyncTa, setLastSyncTa] = useState(() => {
     try { return localStorage.getItem('last_sync_tatelecom'); } catch { return null; }
@@ -60,20 +61,45 @@ export default function PlanilhaOperacional() {
   };
 
   const syncTaTelecom = async () => {
-    if (!window.confirm('Sincronizar dados de TODAS as linhas ativas com a Ta Telecom? Pode demorar 1-3 minutos.')) return;
+    if (!window.confirm('Sincronizar dados de TODAS as linhas ativas com a Ta Telecom? A sync roda em background e leva 2-5 minutos.')) return;
     setSyncingTa(true);
     try {
-      const r = await axios.post(`${API_URL}/api/operacional/sincronizar-tatelecom`, {}, { withCredentials: true, timeout: 600000 });
-      const { atualizadas, total_linhas, sem_chip, total_erros } = r.data;
-      toast.success(`${atualizadas}/${total_linhas} linhas atualizadas${sem_chip ? ` · ${sem_chip} sem chip` : ''}${total_erros ? ` · ${total_erros} erros` : ''}`);
-      const now = new Date().toISOString();
-      setLastSyncTa(now);
-      try { localStorage.setItem('last_sync_tatelecom', now); } catch {}
-      fetchData();
+      const r = await axios.post(`${API_URL}/api/operacional/sincronizar-tatelecom`, {}, { withCredentials: true, timeout: 30000 });
+      if (r.data.status === 'already_running') {
+        toast.info('Ja existe uma sincronizacao em andamento');
+      } else {
+        toast.success('Sincronizacao iniciada - acompanhe o progresso no rodape');
+      }
+      // Polling do status a cada 3s
+      const poll = setInterval(async () => {
+        try {
+          const s = await axios.get(`${API_URL}/api/operacional/sync-status/tatelecom`, { withCredentials: true });
+          const st = s.data;
+          if (st.status === 'completed') {
+            clearInterval(poll);
+            setSyncingTa(false);
+            toast.success(`Sincronizacao concluida: ${st.atualizadas}/${st.total} linhas atualizadas${st.erros ? ` (${st.erros} erros)` : ''}`);
+            const now = new Date().toISOString();
+            setLastSyncTa(now);
+            try { localStorage.setItem('last_sync_tatelecom', now); } catch {}
+            fetchData();
+          } else if (st.status === 'error') {
+            clearInterval(poll);
+            setSyncingTa(false);
+            toast.error(`Erro: ${st.error_message || 'desconhecido'}`);
+          } else if (st.status === 'running') {
+            setSyncProgress({ processadas: st.processadas || 0, total: st.total || 0, atualizadas: st.atualizadas || 0 });
+          }
+        } catch (err) {
+          // mantem polling
+        }
+      }, 3000);
+      // Timeout de seguranca de 15 min
+      setTimeout(() => { clearInterval(poll); setSyncingTa(false); }, 900000);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Erro ao sincronizar Ta Telecom');
+      setSyncingTa(false);
+      toast.error(e.response?.data?.detail || 'Erro ao iniciar sincronizacao');
     }
-    setSyncingTa(false);
   };
 
   const syncAsaas = async () => {
@@ -90,6 +116,44 @@ export default function PlanilhaOperacional() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Ao montar, checa se ja existe sync em andamento
+  useEffect(() => {
+    let poll = null;
+    const checkJob = async () => {
+      try {
+        const s = await axios.get(`${API_URL}/api/operacional/sync-status/tatelecom`, { withCredentials: true });
+        const st = s.data;
+        if (st.status === 'running') {
+          setSyncingTa(true);
+          setSyncProgress({ processadas: st.processadas || 0, total: st.total || 0, atualizadas: st.atualizadas || 0 });
+          poll = setInterval(async () => {
+            try {
+              const r2 = await axios.get(`${API_URL}/api/operacional/sync-status/tatelecom`, { withCredentials: true });
+              const s2 = r2.data;
+              if (s2.status === 'completed') {
+                clearInterval(poll);
+                setSyncingTa(false);
+                setSyncProgress(null);
+                toast.success(`Sync concluida: ${s2.atualizadas}/${s2.total} linhas`);
+                fetchData();
+              } else if (s2.status === 'running') {
+                setSyncProgress({ processadas: s2.processadas || 0, total: s2.total || 0, atualizadas: s2.atualizadas || 0 });
+              } else {
+                clearInterval(poll);
+                setSyncingTa(false);
+                setSyncProgress(null);
+              }
+            } catch {}
+          }, 3000);
+        } else if (st.iniciado_em && st.status === 'completed') {
+          setLastSyncTa(st.finalizado_em || st.iniciado_em);
+        }
+      } catch {}
+    };
+    checkJob();
+    return () => { if (poll) clearInterval(poll); };
+  }, []);
 
   const canais = useMemo(() => {
     const set = new Set(linhas.map(l => l.canal).filter(Boolean));
@@ -264,7 +328,7 @@ export default function PlanilhaOperacional() {
         <span><strong className="text-zinc-200">{filtered.length}</strong> de {linhas.length} linhas · <span className="text-emerald-400">{resumo.ativas || 0}</span> ativas · <span className="text-amber-400">{resumo.suspensas || 0}</span> suspensas · <span className="text-zinc-500">{resumo.canceladas || 0}</span> canceladas</span>
         <span className="text-xs text-zinc-500 flex items-center gap-3">
           <span title="Cobrancas Asaas sao atualizadas automaticamente via webhook em tempo real"><Receipt className="w-3 h-3 inline mr-1" />Asaas: <span className="text-emerald-400">tempo real</span></span>
-          <span title="Dados da Ta Telecom sao sincronizados sob demanda"><Signal className="w-3 h-3 inline mr-1" />Tá Telecom: {lastSyncTa ? <span className="text-zinc-300">{formatDateTimeBR(lastSyncTa)}</span> : <span className="text-amber-400">nunca sincronizado</span>}</span>
+          <span title="Dados da Ta Telecom sao sincronizados sob demanda"><Signal className="w-3 h-3 inline mr-1" />Tá Telecom: {syncProgress ? <span className="text-amber-400">sync {syncProgress.processadas}/{syncProgress.total}...</span> : lastSyncTa ? <span className="text-zinc-300">{formatDateTimeBR(lastSyncTa)}</span> : <span className="text-amber-400">nunca sincronizado</span>}</span>
         </span>
       </div>
 

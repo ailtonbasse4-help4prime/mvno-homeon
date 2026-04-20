@@ -610,103 +610,159 @@ async def atualizar_custos_batch(data: CustosBatchUpdate, request: Request):
 
 
 # ==================== SINCRONIZACAO AUTOMATICA TA TELECOM ====================
+async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
+    """Executa sync com Ta Telecom em background e grava progresso em db.sync_jobs."""
+    db = _ctx["db"]
+    from services.operadora_service import operadora_service
+    import asyncio as _asyncio
+
+    job_id = f"tatelecom-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    await db.sync_jobs.insert_one({
+        "job_id": job_id,
+        "tipo": "tatelecom",
+        "status": "running",
+        "iniciado_em": datetime.now(timezone.utc),
+        "total": 0, "atualizadas": 0, "erros": 0,
+        "user_id": user_id,
+    })
+
+    try:
+        linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
+        chip_ids = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
+        chips_map = {}
+        if chip_ids:
+            chs = await db.chips.find({"_id": {"$in": [ObjectId(c) for c in chip_ids]}}).to_list(5000)
+            chips_map = {str(c["_id"]): c for c in chs}
+
+        await db.sync_jobs.update_one({"job_id": job_id}, {"$set": {"total": len(linhas)}})
+
+        atualizados = 0
+        erros_count = 0
+        erros_lista = []
+        nao_encontrados = 0
+
+        for idx, l in enumerate(linhas):
+            chip = chips_map.get(l.get("chip_id") or "")
+            if not chip or not chip.get("iccid"):
+                nao_encontrados += 1
+                continue
+            iccid = chip["iccid"]
+            if idx > 0 and idx % 10 == 0:
+                await _asyncio.sleep(2)
+            else:
+                await _asyncio.sleep(0.3)
+            try:
+                resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user_id, user_name=user_name)
+                if resp and not resp.success and "429" in str(getattr(resp, "message", "")):
+                    await _asyncio.sleep(5)
+                    resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user_id, user_name=user_name)
+                if not resp or not resp.success:
+                    erros_count += 1
+                    if len(erros_lista) < 30:
+                        erros_lista.append(f"{iccid}: {getattr(resp, 'message', '') or getattr(resp, 'status', '?')}")
+                    continue
+                data = resp.data if isinstance(resp.data, dict) else {}
+                inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                expirar = (
+                    inner.get("data_bloqueio") or inner.get("data_expiracao")
+                    or inner.get("dataExpiracao") or inner.get("validade")
+                    or inner.get("data_validade") or data.get("data_bloqueio")
+                )
+                expirar = _parse_data_br(expirar)
+                status_raw = str(
+                    inner.get("status") or inner.get("situacao") or data.get("status") or ""
+                ).upper().strip()
+                status_map = {
+                    "FUNCIONAL": "Ativo", "ATIVO": "Ativo", "FS": "Ativo",
+                    "NOVO": "Novo", "NP": "Novo",
+                    "BLOQUEADO_PARCIAL": "Bloq. Parcial",
+                    "BLOQUEADO_TOTAL": "Bloqueado", "BLOQUEADO": "Bloqueado",
+                    "CANCELADO": "Cancelado", "SUSPENSO": "Suspenso",
+                    "PENDENTE": "Pendente", "PENDING": "Pendente",
+                }
+                status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
+                update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
+                if expirar:
+                    update["expirar_dados"] = expirar
+                if status_chip_sigla:
+                    update["status_chip"] = status_chip_sigla
+                if len(update) > 1:
+                    await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
+                    atualizados += 1
+            except Exception as e:
+                erros_count += 1
+                if len(erros_lista) < 30:
+                    erros_lista.append(f"{iccid}: {str(e)[:100]}")
+
+            # Atualizar progresso a cada 5 linhas
+            if (idx + 1) % 5 == 0 or idx == len(linhas) - 1:
+                await db.sync_jobs.update_one({"job_id": job_id}, {"$set": {
+                    "processadas": idx + 1, "atualizadas": atualizados, "erros": erros_count,
+                }})
+
+        await db.sync_jobs.update_one({"job_id": job_id}, {"$set": {
+            "status": "completed",
+            "finalizado_em": datetime.now(timezone.utc),
+            "atualizadas": atualizados,
+            "sem_chip": nao_encontrados,
+            "erros": erros_count,
+            "erros_lista": erros_lista,
+        }})
+        await _ctx["create_log"]("operacional", f"Sync TaTelecom batch: {atualizados}/{len(linhas)} atualizadas", user_id, user_name)
+    except Exception as e:
+        await db.sync_jobs.update_one({"job_id": job_id}, {"$set": {
+            "status": "error",
+            "finalizado_em": datetime.now(timezone.utc),
+            "error_message": str(e)[:500],
+        }})
+
+
 @router.post("/sincronizar-tatelecom")
 async def sincronizar_tatelecom_batch(request: Request):
-    """Consulta Ta Telecom para TODAS as linhas ativas e atualiza expirar_dados + status_chip em cache local."""
+    """Dispara sync em background. Retorna imediatamente. Use GET /sync-status para acompanhar."""
     user = await _ctx["require_admin"](request)
-    db = _ctx["db"]
     from services.operadora_service import operadora_service
     if getattr(operadora_service, "use_mock", True):
         raise HTTPException(status_code=400, detail="Ta Telecom nao configurado (em modo mock)")
 
-    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
-    chip_ids = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
-    chips_map = {}
-    if chip_ids:
-        chs = await db.chips.find({"_id": {"$in": [ObjectId(c) for c in chip_ids]}}).to_list(5000)
-        chips_map = {str(c["_id"]): c for c in chs}
+    # Checar se ja tem um job rodando
+    db = _ctx["db"]
+    existing = await db.sync_jobs.find_one({"tipo": "tatelecom", "status": "running"})
+    if existing:
+        return {
+            "status": "already_running",
+            "message": "Ja existe uma sincronizacao em andamento",
+            "job_id": existing["job_id"],
+        }
 
-    atualizados = 0
-    erros = []
-    nao_encontrados = 0
     import asyncio as _asyncio
-    for idx, l in enumerate(linhas):
-        chip = chips_map.get(l.get("chip_id") or "")
-        if not chip or not chip.get("iccid"):
-            nao_encontrados += 1
-            continue
-        iccid = chip["iccid"]
-        # Delay entre chamadas pra evitar rate limit (429)
-        if idx > 0 and idx % 10 == 0:
-            await _asyncio.sleep(2)
-        else:
-            await _asyncio.sleep(0.3)
-        try:
-            resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
-            # Retry 1x em caso de rate limit
-            if resp and not resp.success and "429" in str(getattr(resp, "message", "")):
-                await _asyncio.sleep(5)
-                resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
-            if not resp or not resp.success:
-                erros.append(f"{iccid}: {getattr(resp, 'message', '') or getattr(resp, 'status', '?')}")
-                continue
-            data = resp.data if isinstance(resp.data, dict) else {}
-            # Ta Telecom pode aninhar dentro de "data" ou retornar direto
-            inner = data.get("data") if isinstance(data.get("data"), dict) else data
-            # Data de recarga: data_bloqueio eh a que a Ta Telecom usa (data que a linha vai bloquear sem recarga)
-            expirar = (
-                inner.get("data_bloqueio")
-                or inner.get("data_expiracao")
-                or inner.get("dataExpiracao")
-                or inner.get("expira_em")
-                or inner.get("validity")
-                or inner.get("data_validade")
-                or inner.get("validade")
-                or data.get("data_bloqueio")
-            )
-            expirar = _parse_data_br(expirar)
-            # Extrair status
-            status_raw = str(
-                inner.get("status")
-                or inner.get("situacao")
-                or data.get("status")
-                or data.get("situacao")
-                or ""
-            ).upper().strip()
-            status_map = {
-                "FUNCIONAL": "Ativo",
-                "ATIVO": "Ativo",
-                "FS": "Ativo",
-                "NOVO": "Novo",
-                "NP": "Novo",
-                "BLOQUEADO_PARCIAL": "Bloq. Parcial",
-                "BLOQUEADO_TOTAL": "Bloqueado",
-                "BLOQUEADO": "Bloqueado",
-                "CANCELADO": "Cancelado",
-                "SUSPENSO": "Suspenso",
-                "PENDENTE": "Pendente",
-                "PENDING": "Pendente",
-            }
-            status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
-
-            update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
-            if expirar:
-                update["expirar_dados"] = expirar
-            if status_chip_sigla:
-                update["status_chip"] = status_chip_sigla
-            if len(update) > 1:
-                await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
-                atualizados += 1
-        except Exception as e:
-            erros.append(f"{iccid}: {str(e)[:100]}")
-
-    await _ctx["create_log"]("operacional", f"Sync TaTelecom batch: {atualizados}/{len(linhas)} atualizadas", user["id"], user["name"])
+    _asyncio.create_task(_run_sync_tatelecom_bg(user["id"], user["name"]))
     return {
-        "total_linhas": len(linhas),
-        "atualizadas": atualizados,
-        "sem_chip": nao_encontrados,
-        "erros": erros[:30],
-        "total_erros": len(erros),
+        "status": "started",
+        "message": "Sincronizacao iniciada em background. Use GET /sync-status/tatelecom para acompanhar.",
+    }
+
+
+@router.get("/sync-status/tatelecom")
+async def sync_status_tatelecom(request: Request):
+    """Retorna status do ultimo job de sync da Ta Telecom."""
+    await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    job = await db.sync_jobs.find_one({"tipo": "tatelecom"}, sort=[("iniciado_em", -1)])
+    if not job:
+        return {"status": "never_run"}
+    return {
+        "job_id": job.get("job_id"),
+        "status": job.get("status"),
+        "total": job.get("total", 0),
+        "processadas": job.get("processadas", 0),
+        "atualizadas": job.get("atualizadas", 0),
+        "erros": job.get("erros", 0),
+        "sem_chip": job.get("sem_chip", 0),
+        "iniciado_em": job.get("iniciado_em").isoformat() if job.get("iniciado_em") else None,
+        "finalizado_em": job.get("finalizado_em").isoformat() if job.get("finalizado_em") else None,
+        "error_message": job.get("error_message"),
+        "erros_lista": job.get("erros_lista", [])[:10],
     }
 
 
