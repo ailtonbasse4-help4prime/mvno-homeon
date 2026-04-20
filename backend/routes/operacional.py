@@ -22,6 +22,23 @@ def init(db, get_current_user, require_admin, create_log):
     _ctx["create_log"] = create_log
 
 
+def _parse_tamanho_gb(nome: str, franquia: str = "") -> float:
+    """Extrai tamanho em GB do nome do plano/franquia. MB -> GB fracionado."""
+    text = f"{nome} {franquia}".upper()
+    m = re.search(r'(\d+(?:[\.,]\d+)?)\s*(GB|MB)', text)
+    if not m:
+        return 999999  # sem tamanho detectado vai pro final
+    n = float(m.group(1).replace(',', '.'))
+    return n if m.group(2) == 'GB' else n / 1024
+
+
+def _sort_key_plano(nome: str, franquia: str = ""):
+    """Ordena planos: M2M por ultimo, resto por GB crescente."""
+    text = f"{nome} {franquia}".upper()
+    is_m2m = 1 if 'M2M' in text else 0
+    return (is_m2m, _parse_tamanho_gb(nome, franquia))
+
+
 def _norm(s: str) -> str:
     if not s:
         return ""
@@ -508,7 +525,7 @@ async def ofertas_com_stats(request: Request):
             "lucro_total": round((valor - custo) * total_linhas, 2),
             "ativo": o.get("ativo", True),
         })
-    result.sort(key=lambda x: (-x["linhas_ativas"], x["nome"]))
+    result.sort(key=lambda x: _sort_key_plano(x["plano_nome"] or x["nome"] or "", x.get("franquia") or ""))
     return result
 
 
@@ -753,7 +770,7 @@ async def planos_com_stats(request: Request):
             "custo_base": custo_base,
             "custos_diferentes": len(custos) > 1,
         })
-    result.sort(key=lambda x: (-x["linhas_ativas"], x["nome"]))
+    result.sort(key=lambda x: _sort_key_plano(x["nome"] or "", x.get("franquia") or ""))
     return result
 
 
