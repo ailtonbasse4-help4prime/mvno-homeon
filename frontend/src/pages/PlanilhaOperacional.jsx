@@ -193,8 +193,25 @@ export default function PlanilhaOperacional() {
     if (!editingCell) return;
     const { id, field } = editingCell;
     try {
-      await axios.patch(`${API_URL}/api/operacional/linha/${id}`, { [field]: editValue }, { withCredentials: true });
-      setLinhas(prev => prev.map(l => l.linha_id === id ? { ...l, [mapField(field)]: editValue } : l));
+      let payloadValue = editValue;
+      if (field === 'desconto') {
+        const num = parseFloat(String(editValue).replace(',', '.'));
+        payloadValue = isNaN(num) || num < 0 ? 0 : num;
+      }
+      await axios.patch(`${API_URL}/api/operacional/linha/${id}`, { [field]: payloadValue }, { withCredentials: true });
+      setLinhas(prev => prev.map(l => {
+        if (l.linha_id !== id) return l;
+        const updated = { ...l, [mapField(field)]: payloadValue };
+        if (field === 'desconto') {
+          const val = Number(updated.valor || 0);
+          const desc = Number(payloadValue || 0);
+          const valLiq = Math.max(0, val - desc);
+          const cst = Number(updated.custo || 0);
+          updated.valor_liquido = +valLiq.toFixed(2);
+          updated.lucro = +(valLiq - cst).toFixed(2);
+        }
+        return updated;
+      }));
       toast.success('Atualizado');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao salvar');
@@ -264,12 +281,15 @@ export default function PlanilhaOperacional() {
   };
 
   const filteredResumo = useMemo(() => {
-    const receita = filtered.reduce((s, l) => s + (l.incluir_lucro ? (l.valor || 0) : 0), 0);
+    const receita = filtered.reduce((s, l) => s + (l.incluir_lucro ? (l.valor_liquido ?? l.valor ?? 0) : 0), 0);
     const custo = filtered.reduce((s, l) => s + (l.incluir_custo ? (l.custo || 0) : 0), 0);
     const lucro = receita - custo;
     const margem = receita > 0 ? (lucro / receita * 100) : 0;
-    return { receita, custo, lucro, margem };
-  }, [filtered]);
+    // custo_fixo vem do backend (soma dos custos fixos ativos do painel)
+    const custoFixo = resumo.custo_fixo || 0;
+    const custoTotal = custo + custoFixo;
+    return { receita, custo, custoFixo, custoTotal, lucro, margem };
+  }, [filtered, resumo.custo_fixo]);
 
   return (
     <div className="space-y-4" data-testid="planilha-operacional-page">
@@ -305,14 +325,20 @@ export default function PlanilhaOperacional() {
       </div>
 
       {/* Indicadores */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="rounded-lg border border-emerald-900/40 bg-gradient-to-br from-emerald-950/30 to-zinc-950 p-5" data-testid="stat-receita">
           <div className="flex items-center gap-2 text-zinc-400 text-sm"><DollarSign className="w-4 h-4 text-emerald-400" />Receita</div>
           <div className="mt-1.5 text-2xl font-bold text-emerald-400">{brl(filteredResumo.receita)}</div>
         </div>
-        <div className="rounded-lg border border-red-900/40 bg-gradient-to-br from-red-950/30 to-zinc-950 p-5" data-testid="stat-custo">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm"><Wallet className="w-4 h-4 text-red-400" />Custo</div>
+        <div className="rounded-lg border border-red-900/40 bg-gradient-to-br from-red-950/30 to-zinc-950 p-5" data-testid="stat-custo" title="Custos variaveis das linhas (soma do custo da oferta de cada linha marcada)">
+          <div className="flex items-center gap-2 text-zinc-400 text-sm"><Wallet className="w-4 h-4 text-red-400" />Custos</div>
           <div className="mt-1.5 text-2xl font-bold text-red-400">{brl(filteredResumo.custo)}</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Planilha (variavel)</div>
+        </div>
+        <div className="rounded-lg border border-orange-900/40 bg-gradient-to-br from-orange-950/30 to-zinc-950 p-5" data-testid="stat-custo-total" title="Custos da planilha + Custos Fixos do Painel (VPS, dominio, Asaas, etc)">
+          <div className="flex items-center gap-2 text-zinc-400 text-sm"><Wallet className="w-4 h-4 text-orange-400" />Custo Total</div>
+          <div className="mt-1.5 text-2xl font-bold text-orange-400">{brl(filteredResumo.custoTotal)}</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">+ {brl(filteredResumo.custoFixo)} fixos</div>
         </div>
         <div className="rounded-lg border border-blue-900/40 bg-gradient-to-br from-blue-950/30 to-zinc-950 p-5" data-testid="stat-lucro">
           <div className="flex items-center gap-2 text-zinc-400 text-sm"><TrendingUp className="w-4 h-4 text-blue-400" />Lucro</div>
@@ -376,6 +402,8 @@ export default function PlanilhaOperacional() {
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Canal</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Plano</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Valor</th>
+              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right" title="Desconto fixo em R$ aplicado a esta linha (ex: combo). Clique para editar.">Desc.</th>
+              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right" title="Valor apos desconto (cobrado de fato)">Val. Liq.</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right" title="Clique no checkbox para incluir ou excluir o custo desta linha do total">Custo</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right" title="Clique no checkbox para incluir ou excluir a receita desta linha do lucro">Lucro</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Obs</th>
@@ -383,14 +411,15 @@ export default function PlanilhaOperacional() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={13} className="text-center py-10 text-zinc-500">Carregando...</td></tr>
+              <tr><td colSpan={15} className="text-center py-10 text-zinc-500">Carregando...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={13} className="text-center py-10 text-zinc-500">Nenhuma linha encontrada</td></tr>
+              <tr><td colSpan={15} className="text-center py-10 text-zinc-500">Nenhuma linha encontrada</td></tr>
             ) : (
               filtered.map((l) => {
                 const isEditingObs = editingCell?.id === l.linha_id && editingCell?.field === 'observacoes';
                 const isEditingCanal = editingCell?.id === l.linha_id && editingCell?.field === 'canal';
                 const isEditingComplemento = editingCell?.id === l.linha_id && editingCell?.field === 'complemento';
+                const isEditingDesconto = editingCell?.id === l.linha_id && editingCell?.field === 'desconto';
                 return (
                   <tr key={l.linha_id} className="border-b border-zinc-800/60 hover:bg-zinc-900/60 transition-colors">
                     <td className="px-3 py-2.5 font-semibold text-zinc-100">{l.cliente_nome || '—'}</td>
@@ -443,6 +472,21 @@ export default function PlanilhaOperacional() {
                     </td>
                     <td className="px-3 py-2.5 text-zinc-200 font-medium">{l.plano_nome || l.franquia || '—'}</td>
                     <td className="px-3 py-2.5 text-right text-emerald-400 font-mono font-semibold">{brl(l.valor)}</td>
+                    <td className="px-3 py-2.5 text-right" onClick={() => isAdmin && startEdit(l.linha_id, 'desconto', l.desconto || '')}>
+                      {isEditingDesconto ? (
+                        <div className="flex gap-1 items-center justify-end">
+                          <input type="number" step="0.01" min="0" value={editValue} onChange={e => setEditValue(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm w-20 text-right" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} />
+                          <button onClick={saveEdit} className="text-emerald-400"><Save className="w-4 h-4" /></button>
+                        </div>
+                      ) : (
+                        <span className={`cursor-pointer hover:text-white font-mono text-sm ${Number(l.desconto) > 0 ? 'text-amber-400' : 'text-zinc-600'}`} title="Clique para editar desconto">
+                          {Number(l.desconto) > 0 ? `-${brl(l.desconto)}` : '—'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-emerald-300 font-mono font-semibold" title="Valor liquido (Valor - Desconto)">
+                      {brl(l.valor_liquido ?? l.valor)}
+                    </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {isAdmin && (
@@ -478,7 +522,7 @@ export default function PlanilhaOperacional() {
       </div>
 
       {isAdmin && (
-        <p className="text-xs text-zinc-500">Dica: clique nas celulas <strong>Complemento</strong>, <strong>Canal</strong> ou <strong>Obs</strong> para editar inline. Marque ou desmarque os checkbox em <strong>Custo</strong> e <strong>Lucro</strong> para incluir ou excluir a linha do calculo total.</p>
+        <p className="text-xs text-zinc-500">Dica: clique nas celulas <strong>Complemento</strong>, <strong>Canal</strong>, <strong>Desc.</strong> (desconto R$) ou <strong>Obs</strong> para editar inline. Marque ou desmarque os checkbox em <strong>Custo</strong> e <strong>Lucro</strong> para incluir ou excluir a linha do calculo total.</p>
       )}
     </div>
   );

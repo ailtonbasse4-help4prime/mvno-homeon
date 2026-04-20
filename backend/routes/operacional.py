@@ -67,6 +67,7 @@ class LinhaOperacionalUpdate(BaseModel):
     complemento: Optional[str] = None  # identificacao interna (ex: "filho Joao")
     incluir_custo: Optional[bool] = None  # se deve contar custo no total
     incluir_lucro: Optional[bool] = None  # se deve contar receita no lucro
+    desconto: Optional[float] = None  # desconto fixo em R$ sobre o valor do plano (ex: combo)
 
 
 class OfertaCustoUpdate(BaseModel):
@@ -174,8 +175,14 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
 
         valor = oferta.get("valor", 0.0) or 0.0
         custo = oferta.get("custo", 0.0) or 0.0
-        lucro = valor - custo
-        margem = (lucro / valor * 100) if valor > 0 else 0
+        desconto = float(l.get("desconto") or 0.0)
+        if desconto < 0:
+            desconto = 0.0
+        if desconto > valor:
+            desconto = valor
+        valor_liquido = valor - desconto
+        lucro = valor_liquido - custo
+        margem = (lucro / valor_liquido * 100) if valor_liquido > 0 else 0
 
         # Flags de inclusao em custo e lucro (default: ativo=True, resto=False)
         status_linha = l.get("status", "")
@@ -215,8 +222,10 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
             "plano_nome": plano.get("nome", ""),
             "franquia": plano.get("franquia", ""),
             "valor": valor,
+            "desconto": round(desconto, 2),
+            "valor_liquido": round(valor_liquido, 2),
             "custo": custo,
-            "lucro": lucro,
+            "lucro": round(lucro, 2),
             "margem_pct": round(margem, 2),
             "categoria": oferta.get("categoria", ""),
             # Cobranca
@@ -247,13 +256,18 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
     result.sort(key=lambda r: _norm(r["cliente_nome"]))
 
     # Resumo - considera flags incluir_custo e incluir_lucro
-    total_receita = sum(r["valor"] for r in result if r.get("incluir_lucro"))
+    total_receita = sum(r["valor_liquido"] for r in result if r.get("incluir_lucro"))
     total_custo = sum(r["custo"] for r in result if r.get("incluir_custo"))
     total_lucro = total_receita - total_custo
     margem_pct = round((total_lucro / total_receita * 100), 2) if total_receita > 0 else 0
     ativas = sum(1 for r in result if r["status_linha"] == "ativo")
     suspensas = sum(1 for r in result if r["status_linha"] == "suspenso")
     canceladas = sum(1 for r in result if r["status_linha"] == "cancelado")
+
+    # Custos Fixos do Painel (VPS, dominio, Asaas, etc) - somente ativos
+    custos_fixos_docs = await db.custos_fixos.find({"ativo": True}).to_list(100)
+    custo_fixo_total = sum(float(d.get("valor") or 0) for d in custos_fixos_docs)
+    custo_total_geral = total_custo + custo_fixo_total
 
     resumo = {
         "total_linhas": len(result),
@@ -262,6 +276,8 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
         "canceladas": canceladas,
         "receita": round(total_receita, 2),
         "custo": round(total_custo, 2),
+        "custo_fixo": round(custo_fixo_total, 2),
+        "custo_total": round(custo_total_geral, 2),
         "lucro": round(total_lucro, 2),
         "margem_pct": margem_pct,
     }
@@ -295,6 +311,9 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
         update_linha["incluir_custo"] = data.incluir_custo
     if data.incluir_lucro is not None:
         update_linha["incluir_lucro"] = data.incluir_lucro
+    if data.desconto is not None:
+        val = float(data.desconto)
+        update_linha["desconto"] = val if val >= 0 else 0.0
     if update_linha:
         await db.linhas.update_one({"_id": ObjectId(linha_id)}, {"$set": update_linha})
 
@@ -325,7 +344,7 @@ async def exportar_excel(request: Request):
         "ICCID", "Numero", "Status Linha", "Status Chip",
         "Recarga Ta", "Prox. Boleto",
         "Oferta", "Plano", "Franquia",
-        "Valor (R$)", "Custo (R$)", "Lucro (R$)", "Margem %",
+        "Valor (R$)", "Desconto (R$)", "Valor Liq. (R$)", "Custo (R$)", "Lucro (R$)", "Margem %",
         "Categoria",
         "Ultima Cobranca Venc", "Ultima Cobranca Status", "Tipo Boleto",
         "Cobrancas Total", "Pagas", "Pendentes",
@@ -346,7 +365,7 @@ async def exportar_excel(request: Request):
             r["iccid"], r["numero"], r["status_linha"], r["status_chip"],
             r.get("expirar_dados") or "", r.get("proxima_recarga") or "",
             r["oferta_nome"], r["plano_nome"], r["franquia"],
-            r["valor"], r["custo"], r["lucro"], r["margem_pct"],
+            r["valor"], r.get("desconto", 0), r.get("valor_liquido", r["valor"]), r["custo"], r["lucro"], r["margem_pct"],
             r["categoria"],
             r.get("ultima_cobranca_venc") or "", r.get("ultima_cobranca_status") or "", r.get("ultima_cobranca_tipo") or "",
             r["cobrancas_total"], r["cobrancas_pagas"], r["cobrancas_pendentes"],
@@ -367,7 +386,9 @@ async def exportar_excel(request: Request):
     ws2.append(["Suspensas", resumo["suspensas"]])
     ws2.append(["Canceladas", resumo["canceladas"]])
     ws2.append(["Receita (R$)", resumo["receita"]])
-    ws2.append(["Custo (R$)", resumo["custo"]])
+    ws2.append(["Custos - Variavel (R$)", resumo["custo"]])
+    ws2.append(["Custos - Fixos Painel (R$)", resumo.get("custo_fixo", 0)])
+    ws2.append(["Custo Total (R$)", resumo.get("custo_total", resumo["custo"])])
     ws2.append(["Lucro (R$)", resumo["lucro"]])
     ws2.append(["Margem %", resumo["margem_pct"]])
     for cell in ws2[1]:
