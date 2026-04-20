@@ -144,6 +144,16 @@ export default function PlanilhaOperacional() {
     return f;
   };
 
+  const toggleInclude = async (id, field, value) => {
+    if (!isAdmin) return;
+    try {
+      await axios.patch(`${API_URL}/api/operacional/linha/${id}`, { [field]: value }, { withCredentials: true });
+      setLinhas(prev => prev.map(l => l.linha_id === id ? { ...l, [field]: value } : l));
+    } catch (e) {
+      toast.error('Erro ao salvar');
+    }
+  };
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -190,8 +200,8 @@ export default function PlanilhaOperacional() {
   };
 
   const filteredResumo = useMemo(() => {
-    const receita = filtered.reduce((s, l) => s + (l.valor || 0), 0);
-    const custo = filtered.reduce((s, l) => s + (l.custo || 0), 0);
+    const receita = filtered.reduce((s, l) => s + (l.incluir_lucro ? (l.valor || 0) : 0), 0);
+    const custo = filtered.reduce((s, l) => s + (l.incluir_custo ? (l.custo || 0) : 0), 0);
     const lucro = receita - custo;
     const margem = receita > 0 ? (lucro / receita * 100) : 0;
     return { receita, custo, lucro, margem };
@@ -293,6 +303,7 @@ export default function PlanilhaOperacional() {
           <thead className="sticky top-0 bg-zinc-900 z-10 shadow-md">
             <tr className="text-left text-zinc-200 border-b-2 border-zinc-700">
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Cliente</th>
+              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Complemento</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Numero</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Status</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Chip</th>
@@ -301,24 +312,34 @@ export default function PlanilhaOperacional() {
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Canal</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Plano</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Valor</th>
-              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Custo</th>
-              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Lucro</th>
+              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right" title="Clique no checkbox para incluir ou excluir o custo desta linha do total">Custo</th>
+              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right" title="Clique no checkbox para incluir ou excluir a receita desta linha do lucro">Lucro</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Obs</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={12} className="text-center py-10 text-zinc-500">Carregando...</td></tr>
+              <tr><td colSpan={13} className="text-center py-10 text-zinc-500">Carregando...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={12} className="text-center py-10 text-zinc-500">Nenhuma linha encontrada</td></tr>
+              <tr><td colSpan={13} className="text-center py-10 text-zinc-500">Nenhuma linha encontrada</td></tr>
             ) : (
               filtered.map((l) => {
                 const isEditingObs = editingCell?.id === l.linha_id && editingCell?.field === 'observacoes';
                 const isEditingCanal = editingCell?.id === l.linha_id && editingCell?.field === 'canal';
-                const isEditingChip = editingCell?.id === l.linha_id && editingCell?.field === 'status_chip';
+                const isEditingComplemento = editingCell?.id === l.linha_id && editingCell?.field === 'complemento';
                 return (
                   <tr key={l.linha_id} className="border-b border-zinc-800/60 hover:bg-zinc-900/60 transition-colors">
                     <td className="px-3 py-2.5 font-semibold text-zinc-100">{l.cliente_nome || '—'}</td>
+                    <td className="px-3 py-2.5 text-zinc-300" onClick={() => startEdit(l.linha_id, 'complemento', l.complemento)}>
+                      {isEditingComplemento ? (
+                        <div className="flex gap-1 items-center">
+                          <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)} placeholder="Ex: filho Joao" className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm w-full min-w-[140px]" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} />
+                          <button onClick={saveEdit} className="text-emerald-400"><Save className="w-4 h-4" /></button>
+                        </div>
+                      ) : (
+                        <span className="cursor-pointer hover:text-white text-sm">{l.complemento || <span className="text-zinc-600">—</span>}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 font-mono text-zinc-300">{l.numero}</td>
                     <td className="px-3 py-2.5">
                       {l.status_linha && (
@@ -327,26 +348,13 @@ export default function PlanilhaOperacional() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5" onClick={() => startEdit(l.linha_id, 'status_chip', l.status_chip)}>
-                      {isEditingChip ? (
-                        <div className="flex gap-1 items-center">
-                          <select value={editValue} onChange={e => setEditValue(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm" autoFocus>
-                            <option value="">—</option>
-                            <option value="FS">FS</option>
-                            <option value="NP">NP</option>
-                            <option value="BLOQ.PARC">BLOQ.PARC</option>
-                            <option value="BLOQ.TOTAL">BLOQ.TOTAL</option>
-                            <option value="CANCELADO">CANCELADO</option>
-                          </select>
-                          <button onClick={saveEdit} className="text-emerald-400"><Save className="w-4 h-4" /></button>
-                          <button onClick={cancelEdit} className="text-zinc-400"><XIcon className="w-4 h-4" /></button>
-                        </div>
-                      ) : l.status_chip ? (
-                        <span className={`px-2 py-1 rounded text-xs font-semibold border ${statusChipColors[l.status_chip] || 'bg-zinc-700/30 text-zinc-400 border-zinc-700'} cursor-pointer hover:brightness-125 transition`}>
+                    <td className="px-3 py-2.5">
+                      {l.status_chip ? (
+                        <span className={`px-2 py-1 rounded text-xs font-semibold border ${statusChipColors[l.status_chip] || 'bg-zinc-700/30 text-zinc-400 border-zinc-700'}`}>
                           {l.status_chip}
                         </span>
                       ) : (
-                        <span className="text-zinc-600 cursor-pointer hover:text-zinc-300">—</span>
+                        <span className="text-zinc-600">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.expirar_dados)}</td>
@@ -371,8 +379,22 @@ export default function PlanilhaOperacional() {
                     </td>
                     <td className="px-3 py-2.5 text-zinc-200 font-medium">{l.plano_nome || l.franquia || '—'}</td>
                     <td className="px-3 py-2.5 text-right text-emerald-400 font-mono font-semibold">{brl(l.valor)}</td>
-                    <td className="px-3 py-2.5 text-right text-red-400 font-mono">{brl(l.custo)}</td>
-                    <td className="px-3 py-2.5 text-right text-blue-400 font-mono font-semibold">{brl(l.lucro)}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {isAdmin && (
+                          <input type="checkbox" checked={!!l.incluir_custo} onChange={(e) => toggleInclude(l.linha_id, 'incluir_custo', e.target.checked)} className="w-3.5 h-3.5 accent-red-500 cursor-pointer" title="Incluir este custo no total" />
+                        )}
+                        <span className={`font-mono ${l.incluir_custo ? 'text-red-400' : 'text-zinc-600 line-through'}`}>{brl(l.custo)}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {isAdmin && (
+                          <input type="checkbox" checked={!!l.incluir_lucro} onChange={(e) => toggleInclude(l.linha_id, 'incluir_lucro', e.target.checked)} className="w-3.5 h-3.5 accent-blue-500 cursor-pointer" title="Incluir esta receita no calculo do lucro" />
+                        )}
+                        <span className={`font-mono font-semibold ${l.incluir_lucro ? 'text-blue-400' : 'text-zinc-600 line-through'}`}>{brl(l.lucro)}</span>
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5 max-w-[240px]" onClick={() => startEdit(l.linha_id, 'observacoes', l.observacoes_linha)}>
                       {isEditingObs ? (
                         <div className="flex gap-1 items-center">
@@ -392,7 +414,7 @@ export default function PlanilhaOperacional() {
       </div>
 
       {isAdmin && (
-        <p className="text-xs text-zinc-500">Dica: clique nas celulas <strong>Chip</strong>, <strong>Prox.Recarga</strong>, <strong>Canal</strong> ou <strong>Obs</strong> para editar inline.</p>
+        <p className="text-xs text-zinc-500">Dica: clique nas celulas <strong>Complemento</strong>, <strong>Canal</strong> ou <strong>Obs</strong> para editar inline. Marque ou desmarque os checkbox em <strong>Custo</strong> e <strong>Lucro</strong> para incluir ou excluir a linha do calculo total.</p>
       )}
     </div>
   );

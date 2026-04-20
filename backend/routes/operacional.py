@@ -49,7 +49,10 @@ class LinhaOperacionalUpdate(BaseModel):
     observacoes: Optional[str] = None
     proxima_recarga: Optional[str] = None  # ISO date YYYY-MM-DD
     canal: Optional[str] = None  # atualizar no cliente
-    status_chip: Optional[str] = None  # FS, NP, BLOQ.PARC, BLOQ.TOTAL, CANCELADO (manual)
+    status_chip: Optional[str] = None  # texto livre
+    complemento: Optional[str] = None  # identificacao interna (ex: "filho Joao")
+    incluir_custo: Optional[bool] = None  # se deve contar custo no total
+    incluir_lucro: Optional[bool] = None  # se deve contar receita no lucro
 
 
 class OfertaCustoUpdate(BaseModel):
@@ -160,6 +163,16 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
         lucro = valor - custo
         margem = (lucro / valor * 100) if valor > 0 else 0
 
+        # Flags de inclusao em custo e lucro (default: ativo=True, resto=False)
+        status_linha = l.get("status", "")
+        default_incluir = status_linha == "ativo"
+        incluir_custo = l.get("incluir_custo")
+        incluir_lucro = l.get("incluir_lucro")
+        if incluir_custo is None:
+            incluir_custo = default_incluir
+        if incluir_lucro is None:
+            incluir_lucro = default_incluir
+
         row = {
             "linha_id": str(l["_id"]),
             "cliente_id": cid,
@@ -168,10 +181,13 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
             # Chip/Linha
             "iccid": chip.get("iccid", ""),
             "numero": l.get("numero") or l.get("msisdn") or chip.get("msisdn") or "",
-            "status_linha": l.get("status", ""),
-            "status_chip": l.get("status_chip") or chip.get("status", ""),  # FS/NP/BLOQ.PARC/BLOQ.TOTAL
-            "expirar_dados": l.get("expirar_dados"),  # data vinda da Ta Telecom (cache local)
-            "proxima_recarga": l.get("proxima_recarga"),  # editavel manualmente
+            "status_linha": status_linha,
+            "status_chip": l.get("status_chip") or chip.get("status", ""),
+            "expirar_dados": l.get("expirar_dados"),
+            "proxima_recarga": l.get("proxima_recarga"),
+            "complemento": l.get("complemento", ""),
+            "incluir_custo": incluir_custo,
+            "incluir_lucro": incluir_lucro,
             # Cliente
             "cliente_nome": cliente.get("nome", ""),
             "cpf": cliente.get("documento") or cliente.get("cpf", ""),
@@ -216,9 +232,9 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
     # Ordenar por nome
     result.sort(key=lambda r: _norm(r["cliente_nome"]))
 
-    # Resumo
-    total_receita = sum(r["valor"] for r in result)
-    total_custo = sum(r["custo"] for r in result)
+    # Resumo - considera flags incluir_custo e incluir_lucro
+    total_receita = sum(r["valor"] for r in result if r.get("incluir_lucro"))
+    total_custo = sum(r["custo"] for r in result if r.get("incluir_custo"))
     total_lucro = total_receita - total_custo
     margem_pct = round((total_lucro / total_receita * 100), 2) if total_receita > 0 else 0
     ativas = sum(1 for r in result if r["status_linha"] == "ativo")
@@ -259,6 +275,12 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
         update_linha["proxima_recarga"] = data.proxima_recarga
     if data.status_chip is not None:
         update_linha["status_chip"] = data.status_chip
+    if data.complemento is not None:
+        update_linha["complemento"] = data.complemento
+    if data.incluir_custo is not None:
+        update_linha["incluir_custo"] = data.incluir_custo
+    if data.incluir_lucro is not None:
+        update_linha["incluir_lucro"] = data.incluir_lucro
     if update_linha:
         await db.linhas.update_one({"_id": ObjectId(linha_id)}, {"$set": update_linha})
 
@@ -830,27 +852,40 @@ async def resumo_financeiro(request: Request):
     db = _ctx["db"]
     # Receita + custo variavel (reusa logica de ofertas-com-stats)
     ofertas = await db.ofertas.find({}).to_list(1000)
-    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
-    count_por_oferta = {}
-    count_por_plano = {}
-    for l in linhas:
-        oid = l.get("oferta_id")
-        if oid:
-            count_por_oferta[oid] = count_por_oferta.get(oid, 0) + 1
-        else:
-            pid = l.get("plano_id")
-            if pid:
-                count_por_plano[pid] = count_por_plano.get(pid, 0) + 1
+    # Pega TODAS as linhas ativas+suspensas+bloqueadas (pois podem ter flag custom)
+    linhas = await db.linhas.find({}).to_list(5000)
+    # Mapeamento oferta_id -> oferta para acesso rapido
+    ofertas_map = {str(o["_id"]): o for o in ofertas}
+
+    # Indice plano_id -> primeira oferta ativa (fallback quando linha nao tem oferta_id)
+    oferta_por_plano = {}
+    for o in ofertas:
+        pid = o.get("plano_id")
+        if pid and pid not in oferta_por_plano and o.get("ativo", True):
+            oferta_por_plano[pid] = o
 
     receita = 0.0
     custo_variavel = 0.0
-    for o in ofertas:
-        oid = str(o["_id"])
-        direct = count_por_oferta.get(oid, 0)
-        indirect = count_por_plano.get(o.get("plano_id"), 0) if direct == 0 else 0
-        total = direct + indirect
-        receita += (o.get("valor", 0) or 0) * total
-        custo_variavel += (o.get("custo", 0) or 0) * total
+    for l in linhas:
+        status = l.get("status", "")
+        default_incluir = status == "ativo"
+        incluir_custo = l.get("incluir_custo")
+        incluir_lucro = l.get("incluir_lucro")
+        if incluir_custo is None:
+            incluir_custo = default_incluir
+        if incluir_lucro is None:
+            incluir_lucro = default_incluir
+
+        oferta = ofertas_map.get(l.get("oferta_id") or "")
+        if not oferta and l.get("plano_id"):
+            oferta = oferta_por_plano.get(l["plano_id"])
+        if not oferta:
+            continue
+
+        if incluir_lucro:
+            receita += oferta.get("valor", 0) or 0
+        if incluir_custo:
+            custo_variavel += oferta.get("custo", 0) or 0
 
     # Custos fixos
     custos_fixos_docs = await db.custos_fixos.find({"ativo": True}).to_list(100)
