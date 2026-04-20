@@ -22,6 +22,20 @@ def init(db, get_current_user, require_admin, create_log):
     _ctx["create_log"] = create_log
 
 
+def _parse_data_br(s):
+    """Converte DD-MM-YYYY ou DD/MM/YYYY em YYYY-MM-DD. Aceita ISO tb."""
+    if not s:
+        return None
+    s = str(s).strip()[:10]
+    import re as _re
+    m = _re.match(r'^(\d{2})[-/](\d{2})[-/](\d{4})$', s)
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    if _re.match(r'^\d{4}-\d{2}-\d{2}$', s):
+        return s
+    return s
+
+
 def _parse_tamanho_gb(nome: str, franquia: str = "") -> float:
     """Extrai tamanho em GB do nome do plano/franquia. MB -> GB fracionado."""
     text = f"{nome} {franquia}".upper()
@@ -471,23 +485,26 @@ async def atualizar_expirar_dados(iccid: str, request: Request):
     # Import local para nao criar import circular
     from services.operadora_service import operadora_service
     try:
-        req, resp = await operadora_service.consultar_linha(iccid)
-        if resp.status != 200 or not resp.body:
-            raise HTTPException(status_code=502, detail=f"Falha Ta Telecom: {resp.status}")
-        body = resp.body if isinstance(resp.body, dict) else {}
-        # Tentar extrair data de expiracao (campo pode variar)
+        resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
+        if not resp or not resp.success:
+            raise HTTPException(status_code=502, detail=f"Falha Ta Telecom: {getattr(resp, 'message', '') or getattr(resp, 'status', '?')}")
+        data = resp.data if isinstance(resp.data, dict) else {}
+        inner = data.get("data") if isinstance(data.get("data"), dict) else data
         expirar = (
-            body.get("data_expiracao")
-            or body.get("dataExpiracao")
-            or body.get("expira_em")
-            or body.get("validity")
-            or (body.get("data") or {}).get("data_expiracao")
+            inner.get("data_bloqueio")
+            or inner.get("data_expiracao")
+            or inner.get("dataExpiracao")
+            or inner.get("expira_em")
+            or inner.get("validity")
+            or inner.get("data_validade")
+            or inner.get("validade")
         )
+        expirar = _parse_data_br(expirar)
         chip = await db.chips.find_one({"iccid": iccid})
         if chip:
             await db.linhas.update_many({"chip_id": str(chip["_id"])}, {"$set": {"expirar_dados": expirar, "expirar_dados_updated_at": datetime.now(timezone.utc)}})
         await _ctx["create_log"]("operacional", f"Expirar dados atualizado via TaTelecom: ICCID {iccid}", user["id"], user["name"])
-        return {"iccid": iccid, "expirar_dados": expirar, "raw": body}
+        return {"iccid": iccid, "expirar_dados": expirar, "raw": inner}
     except HTTPException:
         raise
     except Exception as e:
@@ -599,11 +616,10 @@ async def sincronizar_tatelecom_batch(request: Request):
     user = await _ctx["require_admin"](request)
     db = _ctx["db"]
     from services.operadora_service import operadora_service
-    if not operadora_service.is_configured:
-        raise HTTPException(status_code=400, detail="Ta Telecom nao configurado")
+    if getattr(operadora_service, "use_mock", True):
+        raise HTTPException(status_code=400, detail="Ta Telecom nao configurado (em modo mock)")
 
     linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
-    # Precisamos do ICCID (vem do chip)
     chip_ids = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
     chips_map = {}
     if chip_ids:
@@ -613,41 +629,65 @@ async def sincronizar_tatelecom_batch(request: Request):
     atualizados = 0
     erros = []
     nao_encontrados = 0
-    for l in linhas:
+    import asyncio as _asyncio
+    for idx, l in enumerate(linhas):
         chip = chips_map.get(l.get("chip_id") or "")
         if not chip or not chip.get("iccid"):
             nao_encontrados += 1
             continue
         iccid = chip["iccid"]
+        # Delay entre chamadas pra evitar rate limit (429)
+        if idx > 0 and idx % 10 == 0:
+            await _asyncio.sleep(2)
+        else:
+            await _asyncio.sleep(0.3)
         try:
-            req, resp = await operadora_service.consultar_linha(iccid)
-            if resp.status != 200 or not resp.body:
-                erros.append(f"{iccid}: status {resp.status}")
+            resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
+            # Retry 1x em caso de rate limit
+            if resp and not resp.success and "429" in str(getattr(resp, "message", "")):
+                await _asyncio.sleep(5)
+                resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
+            if not resp or not resp.success:
+                erros.append(f"{iccid}: {getattr(resp, 'message', '') or getattr(resp, 'status', '?')}")
                 continue
-            body = resp.body if isinstance(resp.body, dict) else {}
-            # Extrair data expiracao
+            data = resp.data if isinstance(resp.data, dict) else {}
+            # Ta Telecom pode aninhar dentro de "data" ou retornar direto
+            inner = data.get("data") if isinstance(data.get("data"), dict) else data
+            # Data de recarga: data_bloqueio eh a que a Ta Telecom usa (data que a linha vai bloquear sem recarga)
             expirar = (
-                body.get("data_expiracao")
-                or body.get("dataExpiracao")
-                or body.get("expira_em")
-                or body.get("validity")
-                or (body.get("data") or {}).get("data_expiracao")
+                inner.get("data_bloqueio")
+                or inner.get("data_expiracao")
+                or inner.get("dataExpiracao")
+                or inner.get("expira_em")
+                or inner.get("validity")
+                or inner.get("data_validade")
+                or inner.get("validade")
+                or data.get("data_bloqueio")
             )
-            # Extrair status do chip bruto (mapear para siglas)
-            status_raw = (body.get("status") or body.get("situacao") or (body.get("data") or {}).get("status") or "").upper()
-            # Mapeamento simples
+            expirar = _parse_data_br(expirar)
+            # Extrair status
+            status_raw = str(
+                inner.get("status")
+                or inner.get("situacao")
+                or data.get("status")
+                or data.get("situacao")
+                or ""
+            ).upper().strip()
             status_map = {
-                "FUNCIONAL": "FS",
-                "ATIVO": "FS",
-                "NOVO": "NP",
-                "NAO_PORTADO": "NP",
-                "BLOQUEADO_PARCIAL": "BLOQ.PARC",
-                "BLOQUEADO_TOTAL": "BLOQ.TOTAL",
-                "BLOQUEADO": "BLOQ.TOTAL",
-                "CANCELADO": "CANCELADO",
-                "SUSPENSO": "BLOQ.PARC",
+                "FUNCIONAL": "Ativo",
+                "ATIVO": "Ativo",
+                "FS": "Ativo",
+                "NOVO": "Novo",
+                "NP": "Novo",
+                "BLOQUEADO_PARCIAL": "Bloq. Parcial",
+                "BLOQUEADO_TOTAL": "Bloqueado",
+                "BLOQUEADO": "Bloqueado",
+                "CANCELADO": "Cancelado",
+                "SUSPENSO": "Suspenso",
+                "PENDENTE": "Pendente",
+                "PENDING": "Pendente",
             }
-            status_chip_sigla = status_map.get(status_raw, status_raw[:10] if status_raw else None)
+            status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
 
             update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
             if expirar:
