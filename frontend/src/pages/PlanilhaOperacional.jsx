@@ -3,9 +3,9 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Search, Download, Upload, RefreshCw, DollarSign, TrendingUp, Wallet, Percent, Save, X as XIcon } from 'lucide-react';
+import { Search, Download, Upload, RefreshCw, DollarSign, TrendingUp, Wallet, Percent, Save, X as XIcon, Signal, Receipt } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { formatDateBR } from '../lib/formatters';
+import { formatDateBR, formatDateTimeBR } from '../lib/formatters';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -40,6 +40,11 @@ export default function PlanilhaOperacional() {
   const [editValue, setEditValue] = useState('');
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [syncingTa, setSyncingTa] = useState(false);
+  const [syncingAsaas, setSyncingAsaas] = useState(false);
+  const [lastSyncTa, setLastSyncTa] = useState(() => {
+    try { return localStorage.getItem('last_sync_tatelecom'); } catch { return null; }
+  });
   const fileInputRef = useRef(null);
 
   const fetchData = async () => {
@@ -52,6 +57,36 @@ export default function PlanilhaOperacional() {
       toast.error('Erro ao carregar planilha');
     }
     setLoading(false);
+  };
+
+  const syncTaTelecom = async () => {
+    if (!window.confirm('Sincronizar dados de TODAS as linhas ativas com a Ta Telecom? Pode demorar 1-3 minutos.')) return;
+    setSyncingTa(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/operacional/sincronizar-tatelecom`, {}, { withCredentials: true, timeout: 600000 });
+      const { atualizadas, total_linhas, sem_chip, total_erros } = r.data;
+      toast.success(`${atualizadas}/${total_linhas} linhas atualizadas${sem_chip ? ` · ${sem_chip} sem chip` : ''}${total_erros ? ` · ${total_erros} erros` : ''}`);
+      const now = new Date().toISOString();
+      setLastSyncTa(now);
+      try { localStorage.setItem('last_sync_tatelecom', now); } catch {}
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao sincronizar Ta Telecom');
+    }
+    setSyncingTa(false);
+  };
+
+  const syncAsaas = async () => {
+    setSyncingAsaas(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/carteira/sincronizar-asaas`, {}, { withCredentials: true, timeout: 180000 });
+      const { imported, total_asaas } = r.data;
+      toast.success(`${imported} cobranca(s) importada(s) de ${total_asaas} no Asaas`);
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao importar do Asaas');
+    }
+    setSyncingAsaas(false);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -170,10 +205,18 @@ export default function PlanilhaOperacional() {
           <p className="text-sm text-zinc-400">Visao consolidada: cliente, linha, plano, financeiro e margem</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button onClick={fetchData} variant="outline" size="sm" disabled={loading} className="border-zinc-700" data-testid="refresh-btn">
+          <Button onClick={syncTaTelecom} disabled={syncingTa} variant="outline" size="sm" className="border-emerald-700 text-emerald-400 hover:bg-emerald-900/20" data-testid="sync-tatelecom-btn" title="Consulta a Ta Telecom para atualizar Recarga Ta e status dos chips">
+            <Signal className={`w-4 h-4 mr-1.5 ${syncingTa ? 'animate-pulse' : ''}`} />{syncingTa ? 'Sincronizando...' : 'Sincronizar Tá Telecom'}
+          </Button>
+          {isAdmin && (
+            <Button onClick={syncAsaas} disabled={syncingAsaas} variant="outline" size="sm" className="border-amber-700 text-amber-400 hover:bg-amber-900/20" data-testid="sync-asaas-btn" title="Importa cobrancas do Asaas para o sistema local">
+              <Receipt className={`w-4 h-4 mr-1.5 ${syncingAsaas ? 'animate-pulse' : ''}`} />{syncingAsaas ? 'Importando...' : 'Importar Asaas'}
+            </Button>
+          )}
+          <Button onClick={fetchData} variant="outline" size="sm" disabled={loading} className="border-zinc-700" data-testid="refresh-btn" title="Recarrega a tela">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={handleExport} disabled={exporting} variant="outline" size="sm" className="border-emerald-700 text-emerald-400 hover:bg-emerald-900/20" data-testid="export-excel-btn">
+          <Button onClick={handleExport} disabled={exporting} variant="outline" size="sm" className="border-blue-700 text-blue-400 hover:bg-blue-900/20" data-testid="export-excel-btn">
             <Download className="w-4 h-4 mr-1.5" />{exporting ? 'Exportando...' : 'Exportar Excel'}
           </Button>
           {isAdmin && (
@@ -207,8 +250,12 @@ export default function PlanilhaOperacional() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-sm text-zinc-400 px-1">
+      <div className="flex items-center justify-between text-sm text-zinc-400 px-1 gap-3 flex-wrap">
         <span><strong className="text-zinc-200">{filtered.length}</strong> de {linhas.length} linhas · <span className="text-emerald-400">{resumo.ativas || 0}</span> ativas · <span className="text-amber-400">{resumo.suspensas || 0}</span> suspensas · <span className="text-zinc-500">{resumo.canceladas || 0}</span> canceladas</span>
+        <span className="text-xs text-zinc-500 flex items-center gap-3">
+          <span title="Cobrancas Asaas sao atualizadas automaticamente via webhook em tempo real"><Receipt className="w-3 h-3 inline mr-1" />Asaas: <span className="text-emerald-400">tempo real</span></span>
+          <span title="Dados da Ta Telecom sao sincronizados sob demanda"><Signal className="w-3 h-3 inline mr-1" />Tá Telecom: {lastSyncTa ? <span className="text-zinc-300">{formatDateTimeBR(lastSyncTa)}</span> : <span className="text-amber-400">nunca sincronizado</span>}</span>
+        </span>
       </div>
 
       {/* Filtros */}
@@ -250,25 +297,23 @@ export default function PlanilhaOperacional() {
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Status</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Chip</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Recarga Tá</th>
-              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Prox. Boleto</th>
+              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Venc. Boleto</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Canal</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Plano</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Valor</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Custo</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide text-right">Lucro</th>
-              <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Venc. Boleto</th>
               <th className="px-3 py-3 font-bold uppercase text-xs tracking-wide">Obs</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={13} className="text-center py-10 text-zinc-500">Carregando...</td></tr>
+              <tr><td colSpan={12} className="text-center py-10 text-zinc-500">Carregando...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={13} className="text-center py-10 text-zinc-500">Nenhuma linha encontrada</td></tr>
+              <tr><td colSpan={12} className="text-center py-10 text-zinc-500">Nenhuma linha encontrada</td></tr>
             ) : (
               filtered.map((l) => {
                 const isEditingObs = editingCell?.id === l.linha_id && editingCell?.field === 'observacoes';
-                const isEditingRecarga = editingCell?.id === l.linha_id && editingCell?.field === 'proxima_recarga';
                 const isEditingCanal = editingCell?.id === l.linha_id && editingCell?.field === 'canal';
                 const isEditingChip = editingCell?.id === l.linha_id && editingCell?.field === 'status_chip';
                 return (
@@ -305,17 +350,7 @@ export default function PlanilhaOperacional() {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.expirar_dados)}</td>
-                    <td className="px-3 py-2.5" onClick={() => startEdit(l.linha_id, 'proxima_recarga', l.proxima_recarga)}>
-                      {isEditingRecarga ? (
-                        <div className="flex gap-1 items-center">
-                          <input type="date" value={editValue} onChange={e => setEditValue(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm" autoFocus />
-                          <button onClick={saveEdit} className="text-emerald-400"><Save className="w-4 h-4" /></button>
-                          <button onClick={cancelEdit} className="text-zinc-400"><XIcon className="w-4 h-4" /></button>
-                        </div>
-                      ) : (
-                        <span className="cursor-pointer hover:text-white whitespace-nowrap">{formatDateBR(l.proxima_recarga)}</span>
-                      )}
-                    </td>
+                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.ultima_cobranca_venc)}</td>
                     <td className="px-3 py-2.5 text-zinc-300" onClick={() => startEdit(l.linha_id, 'canal', l.canal)}>
                       {isEditingCanal ? (
                         <div className="flex gap-1 items-center">
@@ -338,7 +373,6 @@ export default function PlanilhaOperacional() {
                     <td className="px-3 py-2.5 text-right text-emerald-400 font-mono font-semibold">{brl(l.valor)}</td>
                     <td className="px-3 py-2.5 text-right text-red-400 font-mono">{brl(l.custo)}</td>
                     <td className="px-3 py-2.5 text-right text-blue-400 font-mono font-semibold">{brl(l.lucro)}</td>
-                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.ultima_cobranca_venc)}</td>
                     <td className="px-3 py-2.5 max-w-[240px]" onClick={() => startEdit(l.linha_id, 'observacoes', l.observacoes_linha)}>
                       {isEditingObs ? (
                         <div className="flex gap-1 items-center">
