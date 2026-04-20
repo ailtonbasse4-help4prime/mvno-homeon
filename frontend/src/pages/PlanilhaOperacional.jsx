@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Search, Download, Upload, RefreshCw, DollarSign, TrendingUp, Wallet, Percent, Save, X as XIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { formatDateBR } from '../lib/formatters';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -303,7 +304,7 @@ export default function PlanilhaOperacional() {
                         <span className="text-zinc-600 cursor-pointer hover:text-zinc-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{l.expirar_dados || '—'}</td>
+                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.expirar_dados)}</td>
                     <td className="px-3 py-2.5" onClick={() => startEdit(l.linha_id, 'proxima_recarga', l.proxima_recarga)}>
                       {isEditingRecarga ? (
                         <div className="flex gap-1 items-center">
@@ -312,7 +313,7 @@ export default function PlanilhaOperacional() {
                           <button onClick={cancelEdit} className="text-zinc-400"><XIcon className="w-4 h-4" /></button>
                         </div>
                       ) : (
-                        <span className="cursor-pointer hover:text-white whitespace-nowrap">{l.proxima_recarga || '—'}</span>
+                        <span className="cursor-pointer hover:text-white whitespace-nowrap">{formatDateBR(l.proxima_recarga)}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-zinc-300" onClick={() => startEdit(l.linha_id, 'canal', l.canal)}>
@@ -337,7 +338,7 @@ export default function PlanilhaOperacional() {
                     <td className="px-3 py-2.5 text-right text-emerald-400 font-mono font-semibold">{brl(l.valor)}</td>
                     <td className="px-3 py-2.5 text-right text-red-400 font-mono">{brl(l.custo)}</td>
                     <td className="px-3 py-2.5 text-right text-blue-400 font-mono font-semibold">{brl(l.lucro)}</td>
-                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{l.ultima_cobranca_venc || '—'}</td>
+                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.ultima_cobranca_venc)}</td>
                     <td className="px-3 py-2.5 max-w-[240px]" onClick={() => startEdit(l.linha_id, 'observacoes', l.observacoes_linha)}>
                       {isEditingObs ? (
                         <div className="flex gap-1 items-center">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { safeArray, safeObject } from '../lib/api';
+import { formatDateBR } from '../lib/formatters';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -236,7 +237,7 @@ export function GestaoCobrancas() {
 
   const handleShareWhatsApp = (c) => {
     if (!window.confirm(`Enviar cobranca por WhatsApp para ${c.cliente_nome}?`)) return;
-    let msg = `*Cobranca MVNO*\nCliente: ${c.cliente_nome}\nValor: R$ ${c.valor.toFixed(2)}\nVencimento: ${c.vencimento}\nTipo: ${c.billing_type}`;
+    let msg = `*Cobranca MVNO*\nCliente: ${c.cliente_nome}\nValor: R$ ${c.valor.toFixed(2)}\nVencimento: ${formatDateBR(c.vencimento)}\nTipo: ${c.billing_type}`;
     if (c.asaas_invoice_url) msg += `\n\nLink para pagamento:\n${c.asaas_invoice_url}`;
     if (c.barcode) msg += `\n\nCodigo de barras:\n${c.barcode}`;
     if (c.asaas_pix_code) msg += `\n\nPix Copia e Cola:\n${c.asaas_pix_code}`;
@@ -608,7 +609,7 @@ export function GestaoCobrancas() {
                   </span>
                 </td>
                 <td className="p-3 font-medium whitespace-nowrap">R$ {c.valor.toFixed(2)}</td>
-                <td className="p-3 text-zinc-400 whitespace-nowrap">{c.vencimento}</td>
+                <td className="p-3 text-zinc-400 whitespace-nowrap">{formatDateBR(c.vencimento)}</td>
                 <td className="p-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBg(c.status)}`}>
                     {statusLabel(c.status)}
@@ -670,7 +671,7 @@ export function GestaoCobrancas() {
                 <div><span className="text-zinc-400">Linha</span><div className="font-medium">{sc.msisdn || '—'}</div></div>
                 <div><span className="text-zinc-400">Tipo</span><div className="font-medium">{sc.billing_type}</div></div>
                 <div><span className="text-zinc-400">Status</span><div className={`font-medium ${statusColor(sc.status)}`}>{statusLabel(sc.status)}</div></div>
-                <div><span className="text-zinc-400">Vencimento</span><div className="font-medium">{sc.vencimento}</div></div>
+                <div><span className="text-zinc-400">Vencimento</span><div className="font-medium">{formatDateBR(sc.vencimento)}</div></div>
                 <div><span className="text-zinc-400">Valor</span><div className="font-bold text-lg">R$ {sc.valor.toFixed(2)}</div></div>
               </div>
               {sc.descricao && <div className="text-sm"><span className="text-zinc-400">Descricao: </span>{sc.descricao}</div>}
@@ -1076,7 +1077,7 @@ export function GestaoCobrancas() {
                   <div key={c.id} className="flex items-center justify-between gap-2 p-2.5 bg-zinc-900 rounded border border-zinc-800">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <span className="text-zinc-500 text-xs font-mono w-8">{c.parcela_num ? `${c.parcela_num}/${c.parcela_total}` : `#${i+1}`}</span>
-                      <span className="text-zinc-300 text-sm">{c.vencimento.split('-').reverse().join('/')}</span>
+                      <span className="text-zinc-300 text-sm">{formatDateBR(c.vencimento)}</span>
                       <span className="text-white text-sm font-medium">R$ {c.valor.toFixed(2)}</span>
                       <span className={`px-1.5 py-0.5 rounded text-xs ${statusBg(c.status)}`}>{statusLabel(c.status)}</span>
                     </div>
