@@ -43,6 +43,22 @@ class CustosBatchUpdate(BaseModel):
     custos: dict  # {"oferta_id": custo_float}
 
 
+class PlanoCustoUpdate(BaseModel):
+    custo: float  # aplica a TODAS as ofertas desse plano
+
+
+class CustoFixoCreate(BaseModel):
+    nome: str
+    valor: float
+    ativo: bool = True
+
+
+class CustoFixoUpdate(BaseModel):
+    nome: Optional[str] = None
+    valor: Optional[float] = None
+    ativo: Optional[bool] = None
+
+
 @router.get("/planilha")
 async def planilha_consolidada(request: Request, search: Optional[str] = None, status: Optional[str] = None,
                                 canal: Optional[str] = None, bloqueio: Optional[str] = None):
@@ -694,4 +710,147 @@ async def auto_proxima_recarga(request: Request):
 
     await _ctx["create_log"]("operacional", f"Auto proxima recarga: {updated} linhas atualizadas", user["id"], user["name"])
     return {"updated": updated, "total_linhas": len(linhas)}
+
+
+# ==================== CUSTO POR PLANO (aplica em todas ofertas) ====================
+@router.patch("/plano/{plano_id}/custo")
+async def atualizar_custo_plano(plano_id: str, data: PlanoCustoUpdate, request: Request):
+    """Aplica o mesmo custo a TODAS as ofertas do plano informado."""
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    if not ObjectId.is_valid(plano_id):
+        raise HTTPException(status_code=400, detail="ID invalido")
+    plano = await db.planos.find_one({"_id": ObjectId(plano_id)})
+    if not plano:
+        raise HTTPException(status_code=404, detail="Plano nao encontrado")
+    if data.custo < 0:
+        raise HTTPException(status_code=400, detail="Custo nao pode ser negativo")
+    r = await db.ofertas.update_many({"plano_id": plano_id}, {"$set": {"custo": data.custo}})
+    await _ctx["create_log"]("operacional", f"Custo do plano '{plano['nome']}' aplicado a {r.modified_count} ofertas: R$ {data.custo:.2f}", user["id"], user["name"])
+    return {"success": True, "plano_id": plano_id, "ofertas_atualizadas": r.modified_count, "custo": data.custo}
+
+
+@router.get("/planos-com-stats")
+async def planos_com_stats(request: Request):
+    """Lista planos com resumo de ofertas e custo base."""
+    await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    planos = await db.planos.find({}).to_list(500)
+    result = []
+    for p in planos:
+        pid = str(p["_id"])
+        ofertas = await db.ofertas.find({"plano_id": pid}).to_list(100)
+        linhas = await db.linhas.count_documents({"plano_id": pid, "status": {"$in": ["ativo", "suspenso"]}})
+        # Se ofertas tem custos diferentes, usa o do primeiro; se iguais, usa
+        custos = list({o.get("custo", 0) for o in ofertas})
+        custo_base = custos[0] if len(custos) == 1 else (ofertas[0].get("custo", 0) if ofertas else 0)
+        result.append({
+            "id": pid,
+            "nome": p["nome"],
+            "franquia": p.get("franquia", ""),
+            "ofertas_count": len(ofertas),
+            "linhas_ativas": linhas,
+            "custo_base": custo_base,
+            "custos_diferentes": len(custos) > 1,
+        })
+    result.sort(key=lambda x: (-x["linhas_ativas"], x["nome"]))
+    return result
+
+
+# ==================== CUSTOS FIXOS (painel, VPS, etc) ====================
+@router.get("/custos-fixos")
+async def listar_custos_fixos(request: Request):
+    await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    docs = await db.custos_fixos.find({}).sort("nome", 1).to_list(100)
+    return [{"id": str(d["_id"]), "nome": d["nome"], "valor": d.get("valor", 0), "ativo": d.get("ativo", True)} for d in docs]
+
+
+@router.post("/custos-fixos")
+async def criar_custo_fixo(data: CustoFixoCreate, request: Request):
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    if data.valor < 0:
+        raise HTTPException(status_code=400, detail="Valor nao pode ser negativo")
+    doc = {"nome": data.nome, "valor": data.valor, "ativo": data.ativo, "created_at": datetime.now(timezone.utc)}
+    r = await db.custos_fixos.insert_one(doc)
+    await _ctx["create_log"]("operacional", f"Custo fixo criado: {data.nome} R$ {data.valor:.2f}", user["id"], user["name"])
+    return {"id": str(r.inserted_id), "nome": data.nome, "valor": data.valor, "ativo": data.ativo}
+
+
+@router.patch("/custos-fixos/{custo_id}")
+async def atualizar_custo_fixo(custo_id: str, data: CustoFixoUpdate, request: Request):
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    if not ObjectId.is_valid(custo_id):
+        raise HTTPException(status_code=400, detail="ID invalido")
+    update = {k: v for k, v in data.dict(exclude_none=True).items()}
+    if "valor" in update and update["valor"] < 0:
+        raise HTTPException(status_code=400, detail="Valor nao pode ser negativo")
+    if not update:
+        return {"success": True}
+    await db.custos_fixos.update_one({"_id": ObjectId(custo_id)}, {"$set": update})
+    await _ctx["create_log"]("operacional", f"Custo fixo {custo_id} atualizado", user["id"], user["name"])
+    return {"success": True}
+
+
+@router.delete("/custos-fixos/{custo_id}")
+async def deletar_custo_fixo(custo_id: str, request: Request):
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    if not ObjectId.is_valid(custo_id):
+        raise HTTPException(status_code=400, detail="ID invalido")
+    await db.custos_fixos.delete_one({"_id": ObjectId(custo_id)})
+    await _ctx["create_log"]("operacional", f"Custo fixo {custo_id} removido", user["id"], user["name"])
+    return {"success": True}
+
+
+# ==================== RESUMO FINANCEIRO COMPLETO ====================
+@router.get("/resumo-financeiro")
+async def resumo_financeiro(request: Request):
+    """Calcula receita total, custo variavel (ofertas*linhas), custo fixo (painel) e lucro final."""
+    await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    # Receita + custo variavel (reusa logica de ofertas-com-stats)
+    ofertas = await db.ofertas.find({}).to_list(1000)
+    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
+    count_por_oferta = {}
+    count_por_plano = {}
+    for l in linhas:
+        oid = l.get("oferta_id")
+        if oid:
+            count_por_oferta[oid] = count_por_oferta.get(oid, 0) + 1
+        else:
+            pid = l.get("plano_id")
+            if pid:
+                count_por_plano[pid] = count_por_plano.get(pid, 0) + 1
+
+    receita = 0.0
+    custo_variavel = 0.0
+    for o in ofertas:
+        oid = str(o["_id"])
+        direct = count_por_oferta.get(oid, 0)
+        indirect = count_por_plano.get(o.get("plano_id"), 0) if direct == 0 else 0
+        total = direct + indirect
+        receita += (o.get("valor", 0) or 0) * total
+        custo_variavel += (o.get("custo", 0) or 0) * total
+
+    # Custos fixos
+    custos_fixos_docs = await db.custos_fixos.find({"ativo": True}).to_list(100)
+    custo_fixo = sum(d.get("valor", 0) for d in custos_fixos_docs)
+
+    custo_total = custo_variavel + custo_fixo
+    lucro = receita - custo_total
+    margem = (lucro / receita * 100) if receita > 0 else 0
+
+    return {
+        "receita": round(receita, 2),
+        "custo_variavel": round(custo_variavel, 2),
+        "custo_fixo": round(custo_fixo, 2),
+        "custo_total": round(custo_total, 2),
+        "lucro": round(lucro, 2),
+        "margem_pct": round(margem, 2),
+        "total_linhas": len(linhas),
+        "total_custos_fixos": len(custos_fixos_docs),
+    }
 
