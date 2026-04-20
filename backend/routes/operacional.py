@@ -287,7 +287,7 @@ async def exportar_excel(request: Request):
     headers = [
         "Cliente", "CPF", "Telefone", "Email", "Canal",
         "ICCID", "Numero", "Status Linha", "Status Chip",
-        "Expirar Dados", "Proxima Recarga",
+        "Recarga Ta", "Prox. Boleto",
         "Oferta", "Plano", "Franquia",
         "Valor (R$)", "Custo (R$)", "Lucro (R$)", "Margem %",
         "Categoria",
