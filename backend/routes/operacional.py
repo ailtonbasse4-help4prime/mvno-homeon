@@ -36,6 +36,32 @@ def _parse_data_br(s):
     return s
 
 
+def _calc_proxima_recarga(data_ativacao_iso, data_bloqueio_iso):
+    """Calcula a data da PROXIMA RECARGA do chip na Ta Telecom.
+
+    A API da Ta Telecom retorna `data_ativacao` e `data_bloqueio`. Quando o
+    chip nunca foi bloqueado, `data_bloqueio` vem igual a `data_ativacao` (o
+    que nao representa proxima recarga). Logica:
+      - Se data_bloqueio > data_ativacao: chip esta/foi bloqueado naquela
+        data -> proxima recarga = data_bloqueio (cliente deve recarregar ate la).
+      - Caso contrario (ou ambas iguais): proxima recarga = data_ativacao + 30 dias.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    def _pd(s):
+        if not s: return None
+        try:
+            return _dt.strptime(s[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+    at = _pd(data_ativacao_iso)
+    bl = _pd(data_bloqueio_iso)
+    if bl and at and bl > at:
+        return bl.strftime("%Y-%m-%d")
+    if at:
+        return (at + _td(days=30)).strftime("%Y-%m-%d")
+    return data_bloqueio_iso or data_ativacao_iso
+
+
 def _parse_tamanho_gb(nome: str, franquia: str = "") -> float:
     """Extrai tamanho em GB do nome do plano/franquia. MB -> GB fracionado."""
     text = f"{nome} {franquia}".upper()
@@ -139,8 +165,8 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
         pls = await db.planos.find({"_id": {"$in": [ObjectId(p) for p in all_plano_ids if ObjectId.is_valid(p)]}}).to_list(500)
         planos_map = {str(p["_id"]): p for p in pls}
 
-    # Ultima cobranca PENDENTE por cliente (ou mais recente)
-    cobs = await db.cobrancas.find({}).sort("vencimento", -1).to_list(10000)
+    # Ordenar cobrancas ASC (mais antigas primeiro) para facilitar selecao da "vencida mais antiga" e "proxima a vencer"
+    cobs = await db.cobrancas.find({}).sort("vencimento", 1).to_list(10000)
     cobs_by_cliente = {}
     for c in cobs:
         cid = c.get("cliente_id")
@@ -149,6 +175,9 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
         if cid not in cobs_by_cliente:
             cobs_by_cliente[cid] = []
         cobs_by_cliente[cid].append(c)
+
+    hoje_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    PAID_STATUSES = ("RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH", "REFUNDED")
 
     result = []
     for l in linhas:
@@ -161,9 +190,18 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
             oferta = oferta_por_plano.get(l["plano_id"], {})
         plano = planos_map.get(oferta.get("plano_id") or l.get("plano_id") or "", {})
         cobs_cli = cobs_by_cliente.get(cid, [])
-        # ultima cobranca pendente
-        cobs_pend = [c for c in cobs_cli if c.get("status") not in ("RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH", "REFUNDED")]
-        ultima_cob = cobs_pend[0] if cobs_pend else (cobs_cli[0] if cobs_cli else {})
+        # Cobrancas nao pagas ordenadas ASC por vencimento
+        cobs_pend = [c for c in cobs_cli if c.get("status") not in PAID_STATUSES]
+        # 1. Vencidas (vencimento < hoje) - mostra a MAIS ANTIGA (maior atraso)
+        vencidas = [c for c in cobs_pend if (c.get("vencimento") or "") < hoje_iso]
+        # 2. Futuras (vencimento >= hoje) - proxima a vencer
+        futuras = [c for c in cobs_pend if (c.get("vencimento") or "") >= hoje_iso]
+        if vencidas:
+            ultima_cob = vencidas[0]  # mais antiga vencida (maior atraso)
+        elif futuras:
+            ultima_cob = futuras[0]  # proxima a vencer
+        else:
+            ultima_cob = cobs_cli[-1] if cobs_cli else {}  # sem pendentes: ultima paga
         total_cobs = len(cobs_cli)
         total_pagas = sum(1 for c in cobs_cli if c.get("status") in ("RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"))
         total_pendentes = total_cobs - total_pagas
@@ -511,16 +549,14 @@ async def atualizar_expirar_dados(iccid: str, request: Request):
             raise HTTPException(status_code=502, detail=f"Falha Ta Telecom: {getattr(resp, 'message', '') or getattr(resp, 'status', '?')}")
         data = resp.data if isinstance(resp.data, dict) else {}
         inner = data.get("data") if isinstance(data.get("data"), dict) else data
-        expirar = (
-            inner.get("data_bloqueio")
-            or inner.get("data_expiracao")
-            or inner.get("dataExpiracao")
-            or inner.get("expira_em")
-            or inner.get("validity")
-            or inner.get("data_validade")
-            or inner.get("validade")
+        data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
+        data_bl_raw = _parse_data_br(inner.get("data_bloqueio") or data.get("data_bloqueio"))
+        expirar_direto = _parse_data_br(
+            inner.get("data_expiracao") or inner.get("dataExpiracao")
+            or inner.get("expira_em") or inner.get("validity")
+            or inner.get("data_validade") or inner.get("validade")
         )
-        expirar = _parse_data_br(expirar)
+        expirar = expirar_direto or _calc_proxima_recarga(data_at, data_bl_raw)
         chip = await db.chips.find_one({"iccid": iccid})
         if chip:
             await db.linhas.update_many({"chip_id": str(chip["_id"])}, {"$set": {"expirar_dados": expirar, "expirar_dados_updated_at": datetime.now(timezone.utc)}})
@@ -684,12 +720,17 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
                     continue
                 data = resp.data if isinstance(resp.data, dict) else {}
                 inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                expirar = (
-                    inner.get("data_bloqueio") or inner.get("data_expiracao")
-                    or inner.get("dataExpiracao") or inner.get("validade")
-                    or inner.get("data_validade") or data.get("data_bloqueio")
+                # Ta Telecom retorna data_ativacao e data_bloqueio. Quando o chip nunca
+                # foi bloqueado, data_bloqueio == data_ativacao. Para "Proxima Recarga"
+                # correta, usamos _calc_proxima_recarga que trata esse caso.
+                data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
+                data_bl_raw = _parse_data_br(inner.get("data_bloqueio") or data.get("data_bloqueio"))
+                expirar_direto = _parse_data_br(
+                    inner.get("data_expiracao") or inner.get("dataExpiracao")
+                    or inner.get("validade") or inner.get("data_validade")
                 )
-                expirar = _parse_data_br(expirar)
+                # Preferencia: data_expiracao explicita > calculo ativacao+30 / data_bloqueio
+                expirar = expirar_direto or _calc_proxima_recarga(data_at, data_bl_raw)
                 status_raw = str(
                     inner.get("status") or inner.get("situacao") or data.get("status") or ""
                 ).upper().strip()
