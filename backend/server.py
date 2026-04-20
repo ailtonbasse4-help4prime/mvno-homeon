@@ -456,6 +456,7 @@ class AssinaturaResponse(BaseModel):
     status: str
     asaas_subscription_id: Optional[str] = None
     asaas_customer_id: Optional[str] = None
+    invoice_url: Optional[str] = None
     created_at: Optional[datetime] = None
 
 # ==================== PASSWORD UTILS ====================
@@ -2751,6 +2752,7 @@ async def _build_assinatura_response(doc: dict) -> AssinaturaResponse:
         status=doc.get("status", "ACTIVE"),
         asaas_subscription_id=doc.get("asaas_subscription_id"),
         asaas_customer_id=doc.get("asaas_customer_id"),
+        invoice_url=doc.get("invoice_url"),
         created_at=doc.get("created_at", datetime.now(timezone.utc)),
     )
 
@@ -3722,6 +3724,15 @@ async def create_assinatura(data: AssinaturaCreate, request: Request):
             )
             doc["asaas_subscription_id"] = result.get("id")
             doc["status"] = result.get("status", "ACTIVE")
+            # Para CREDIT_CARD: buscar a URL da primeira cobranca (onde o cliente cadastra o cartao)
+            if data.billing_type == BillingType.credit_card and doc["asaas_subscription_id"]:
+                try:
+                    payments = await asaas_service.list_subscription_payments(doc["asaas_subscription_id"])
+                    first = (payments.get("data") or [None])[0]
+                    if first:
+                        doc["invoice_url"] = first.get("invoiceUrl")
+                except AsaasApiError as e:
+                    logger.warning(f"Nao foi possivel obter invoice_url da assinatura: {e}")
         except (AsaasNotConfiguredError, AsaasApiError) as e:
             logger.warning(f"Asaas API error ao criar assinatura: {e}")
 

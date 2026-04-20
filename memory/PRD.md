@@ -68,20 +68,19 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] **Automação 2**: POST /api/operacional/auto-canal — preenche "Revendedor" se chip tem revendedor_id, "Próprio" se veio de self-service
 - [x] **Automação 3**: POST /api/operacional/auto-proxima-recarga — calcula próxima recarga = último boleto pago + 30 dias
 
-### Custos por Plano + Custos Fixos + Lucro Total (19-20/04/2026)
-- [x] PATCH /api/operacional/plano/{id}/custo — aplica mesmo custo a TODAS as ofertas do plano (um clique)
-- [x] CRUD completo de Custos Fixos (GET/POST/PATCH/DELETE /api/operacional/custos-fixos) — VPS, domínio, Asaas, etc.
-- [x] GET /api/operacional/resumo-financeiro retorna receita + custo_variavel + custo_fixo + custo_total + lucro + margem
-- [x] Frontend `/custos` reestruturado: 5 cards (Receita, Custo Variável, Custo Fixo, Custo Total, Lucro Líquido + Margem)
-- [x] Seção "Custos por Plano" (edita custo uma vez, propaga em todas ofertas do plano)
-- [x] Seção "Custos Fixos do Painel" com CRUD inline (adicionar, editar, ativar/desativar, remover)
-- [x] Totais recalculam em tempo real conforme o admin edita
-- [x] Fix deploy VPS: removido `emergentintegrations`/`openai`/`anthropic`/`google-genai`/`stripe` do requirements.txt (libs internas/não usadas que quebravam o pip install externo)
+### Cobranca Recorrente no Cartao (20/04/2026)
+- [x] Endpoint POST /api/carteira/assinaturas com billing_type=CREDIT_CARD retorna invoice_url (link do Asaas onde o cliente cadastra o cartao 1 vez)
+- [x] Campo invoice_url adicionado em AssinaturaResponse
+- [x] Botao "Cartao Recorrente" em /cobrancas (data-testid="cartao-recorrente-btn")
+- [x] Modal com formulario (cliente, valor mensal, 1 vencimento, descricao)
+- [x] Dialog resultado com link copiavel, botao Abrir e botao WhatsApp
+- [x] Cliente cadastra cartao 1 vez e Asaas cobra automaticamente todo mes (cycle MONTHLY)
 
 ## Backlog
 
 ### P1 - Alta Prioridade
 - [ ] Desmembrar server.py (5300+ linhas) em roteadores separados
+- [ ] Geracao automatica de cobrancas mensais (regra de negocio pendente)
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)

@@ -44,6 +44,12 @@ export function GestaoCobrancas() {
   const [diagLoading, setDiagLoading] = useState(false);
   const [disablingNotifs, setDisablingNotifs] = useState(false);
 
+  // Cartao recorrente (assinatura CREDIT_CARD no Asaas)
+  const [cartaoDialogOpen, setCartaoDialogOpen] = useState(false);
+  const [cartaoForm, setCartaoForm] = useState({ cliente_id: '', valor: '', proximo_vencimento: '', descricao: '' });
+  const [cartaoSubmitting, setCartaoSubmitting] = useState(false);
+  const [cartaoResult, setCartaoResult] = useState(null);
+
   const [form, setForm] = useState({
     cliente_id: '', linha_id: '', billing_type: 'BOLETO',
     valor: '', vencimento: '', descricao: '',
@@ -314,6 +320,47 @@ export function GestaoCobrancas() {
     setLoadingCarnePdf(false);
   };
 
+  const handleCartaoSubmit = async (e) => {
+    e.preventDefault();
+    if (!cartaoForm.cliente_id || !cartaoForm.valor || !cartaoForm.proximo_vencimento) {
+      toast.error('Selecione cliente, valor e 1 vencimento'); return;
+    }
+    setCartaoSubmitting(true);
+    try {
+      const payload = {
+        cliente_id: cartaoForm.cliente_id,
+        billing_type: 'CREDIT_CARD',
+        valor: parseFloat(cartaoForm.valor),
+        proximo_vencimento: cartaoForm.proximo_vencimento,
+        ciclo: 'MONTHLY',
+        descricao: cartaoForm.descricao || '',
+      };
+      const res = await axios.post(`${API_URL}/api/carteira/assinaturas`, payload, { withCredentials: true });
+      const data = res.data;
+      if (!data.invoice_url) {
+        toast.warning('Assinatura criada, mas o link do cartao nao foi gerado pelo Asaas. Verifique a chave de API.');
+      } else {
+        toast.success('Link de cartao recorrente criado!');
+      }
+      const cliente = clientes.find(c => c.id === cartaoForm.cliente_id);
+      setCartaoResult({ ...data, cliente_nome: cliente?.nome || '', cliente_telefone: cliente?.telefone || '' });
+      setCartaoDialogOpen(false);
+      setCartaoForm({ cliente_id: '', valor: '', proximo_vencimento: '', descricao: '' });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao criar assinatura no cartao');
+    }
+    setCartaoSubmitting(false);
+  };
+
+  const handleCartaoShareWhats = () => {
+    if (!cartaoResult?.invoice_url) return;
+    const valor = Number(cartaoResult.valor || 0).toFixed(2);
+    const msg = `Ola ${cartaoResult.cliente_nome || ''}! Segue o link para cadastrar seu cartao e ativar a cobranca automatica mensal de R$ ${valor}:\n\n${cartaoResult.invoice_url}\n\nApos cadastrar, a cobranca sera debitada automaticamente todo mes. Qualquer duvida, estamos a disposicao.`;
+    const tel = (cartaoResult.cliente_telefone || '').replace(/\D/g, '');
+    const base = tel ? `https://wa.me/55${tel}` : 'https://wa.me/';
+    window.open(`${base}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   const handleLoteSubmit = async (e) => {
     e.preventDefault();
     if (!loteForm.cliente_ids.length || !loteForm.valor || !loteForm.vencimento) {
@@ -513,6 +560,9 @@ export function GestaoCobrancas() {
             </Button>
             <Button onClick={() => setLoteDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="lote-cobranca-btn">
               <CreditCard className="w-3.5 h-3.5" /><span className="hidden sm:inline">Em Lote</span><span className="sm:hidden">Lote</span>
+            </Button>
+            <Button onClick={() => setCartaoDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-purple-700 text-purple-300 hover:bg-purple-900/20 text-xs sm:text-sm" data-testid="cartao-recorrente-btn" title="Criar assinatura recorrente no cartao de credito do cliente">
+              <CreditCard className="w-3.5 h-3.5" /><span className="hidden sm:inline">Cartao Recorrente</span><span className="sm:hidden">Cartao</span>
             </Button>
             {cobrancas.length > 0 && (
               <Button onClick={() => setCarneFilterOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="carne-btn">
@@ -1115,6 +1165,115 @@ export function GestaoCobrancas() {
         </DialogContent>
       </Dialog>
       <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
+
+      {/* Dialog: criar assinatura cartao recorrente */}
+      <Dialog open={cartaoDialogOpen} onOpenChange={setCartaoDialogOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-purple-400" /> Cobranca Recorrente no Cartao
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCartaoSubmit} className="space-y-3" data-testid="cartao-recorrente-form">
+            <p className="text-xs text-zinc-400">
+              Gera um link do Asaas onde o cliente cadastra o cartao 1 vez. Depois, o Asaas cobra automaticamente todo mes no mesmo dia.
+            </p>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Cliente</label>
+              <SearchableSelect
+                value={cartaoForm.cliente_id}
+                onValueChange={(v) => setCartaoForm({ ...cartaoForm, cliente_id: v })}
+                options={clientes.map(c => ({ value: c.id, label: `${c.nome}${c.telefone ? ' - ' + c.telefone : ''}` }))}
+                placeholder="Selecione o cliente"
+                testId="cartao-cliente-select"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Valor mensal (R$)</label>
+                <Input type="number" step="0.01" min="0.01" value={cartaoForm.valor}
+                  onChange={e => setCartaoForm({ ...cartaoForm, valor: e.target.value })}
+                  className="bg-zinc-900 border-zinc-700" placeholder="0,00" data-testid="cartao-valor-input" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">1 vencimento</label>
+                <Input type="date" value={cartaoForm.proximo_vencimento}
+                  onChange={e => setCartaoForm({ ...cartaoForm, proximo_vencimento: e.target.value })}
+                  className="bg-zinc-900 border-zinc-700" data-testid="cartao-vencimento-input" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Descricao (opcional)</label>
+              <Input value={cartaoForm.descricao}
+                onChange={e => setCartaoForm({ ...cartaoForm, descricao: e.target.value })}
+                className="bg-zinc-900 border-zinc-700" placeholder="Ex: Plano movel mensal" data-testid="cartao-descricao-input" />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button type="button" variant="outline" className="flex-1 border-zinc-700" onClick={() => setCartaoDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={cartaoSubmitting} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white" data-testid="cartao-submit-btn">
+                {cartaoSubmitting ? 'Criando...' : 'Gerar link'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: resultado do link do cartao */}
+      <Dialog open={!!cartaoResult} onOpenChange={(o) => { if (!o) { setCartaoResult(null); fetchAll(); } }}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md" data-testid="cartao-resultado-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-emerald-400" /> Assinatura criada no Asaas
+            </DialogTitle>
+          </DialogHeader>
+          {cartaoResult && (
+            <div className="space-y-3">
+              <div className="bg-zinc-900 border border-zinc-800 rounded p-3 text-sm space-y-1">
+                <div className="text-zinc-400">Cliente: <span className="text-white">{cartaoResult.cliente_nome || '—'}</span></div>
+                <div className="text-zinc-400">Valor mensal: <span className="text-white">R$ {Number(cartaoResult.valor || 0).toFixed(2)}</span></div>
+                <div className="text-zinc-400">1 vencimento: <span className="text-white">{formatDateBR(cartaoResult.proximo_vencimento)}</span></div>
+                <div className="text-zinc-400">ID Asaas: <span className="text-white text-xs font-mono">{cartaoResult.asaas_subscription_id || '—'}</span></div>
+              </div>
+              {cartaoResult.invoice_url ? (
+                <>
+                  <div>
+                    <label className="text-xs text-zinc-400 mb-1 block">Link para o cliente cadastrar o cartao:</label>
+                    <div className="flex gap-2">
+                      <Input readOnly value={cartaoResult.invoice_url} className="bg-zinc-900 border-zinc-700 text-xs" data-testid="cartao-link-input" />
+                      <Button type="button" variant="outline" className="border-zinc-700"
+                        onClick={() => handleCopy(cartaoResult.invoice_url, 'Link')} data-testid="cartao-copy-btn" title="Copiar link">
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button type="button" variant="outline" className="border-emerald-700 text-emerald-400 hover:bg-emerald-900/20"
+                      onClick={() => window.open(cartaoResult.invoice_url, '_blank')} data-testid="cartao-open-btn">
+                      <ExternalLink className="w-4 h-4 mr-1.5" /> Abrir
+                    </Button>
+                    <Button type="button" variant="outline" className="border-green-700 text-green-400 hover:bg-green-900/20"
+                      onClick={handleCartaoShareWhats} data-testid="cartao-whats-btn">
+                      <Share2 className="w-4 h-4 mr-1.5" /> WhatsApp
+                    </Button>
+                  </div>
+                  <p className="text-xs text-zinc-500">
+                    Depois que o cliente cadastrar o cartao, o Asaas cobra automaticamente todo mes. Para cancelar, va em <strong>Assinaturas</strong> e cancele a recorrencia.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-amber-400">
+                  Link nao foi gerado. Verifique se a chave de API do Asaas esta em producao e se o cliente tem CPF/nome validos.
+                </p>
+              )}
+              <Button type="button" className="w-full" onClick={() => { setCartaoResult(null); fetchAll(); }}>
+                Fechar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
