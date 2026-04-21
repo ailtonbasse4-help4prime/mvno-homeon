@@ -87,7 +87,8 @@ export function getDemoData() {
 
     const ativadoHaDias = rand(180) + 5;
     const proxRecarga = status === 'ativo' ? daysAhead(rand(30)) : daysAgo(rand(15));
-    const descontoCombo = Math.random() < 0.12 ? (Math.random() < 0.5 ? 5 : 10) : 0;
+    // Sem desconto por padrao (venda pelo preco sugerido da Ta = margem 30%)
+    const descontoCombo = 0;
 
     linhas.push({
       linha_id: `demo-lin-${i}`,
