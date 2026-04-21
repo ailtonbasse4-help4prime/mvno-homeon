@@ -116,7 +116,10 @@ function PlanoCard({ plano, onClickContratar }) {
           ))}
         </ul>
 
-        <button
+        <a
+          href={plano.shopee}
+          target="_blank"
+          rel="noopener noreferrer"
           onClick={() => onClickContratar(plano)}
           className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${
             isDestaque
@@ -126,7 +129,7 @@ function PlanoCard({ plano, onClickContratar }) {
           data-testid={`btn-contratar-${plano.id}`}
         >
           <ShoppingBag className="w-4 h-4" /> Assinar pela Shopee
-        </button>
+        </a>
       </div>
     </div>
   );
@@ -146,7 +149,7 @@ export default function Homeon() {
 
   const contratar = (plano) => {
     trackClick(plano.id, 'card');
-    window.open(plano.shopee, '_blank', 'noopener,noreferrer');
+    // navegacao e feita pelo <a href target="_blank"> nativo — sem popup blocker
   };
 
   const scrollToPlanos = () => {
