@@ -131,7 +131,7 @@ export default function DemoCustos() {
             <div key={p.qtd} className="p-5 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-400">Com</span>
-                <span className="text-2xl font-bold text-white">{p.qtd} linhas</span>
+                <span className="text-2xl font-bold text-white">{p.qtd} clientes</span>
               </div>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between"><span className="text-zinc-500">Receita</span><span className="font-mono text-emerald-400 font-semibold">{brl(p.receita)}</span></div>
