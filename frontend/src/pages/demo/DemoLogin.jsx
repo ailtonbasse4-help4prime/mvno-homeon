@@ -80,7 +80,7 @@ export default function DemoLogin() {
         </div>
 
         <div className="text-center mt-6 text-xs text-zinc-600">
-          Quer conhecer mais? <a href="https://wa.me/5583999999999" className="text-emerald-400 hover:underline">Fale com a gente no WhatsApp</a>
+          Quer conhecer mais? <a href="https://wa.me/5511915322526" className="text-emerald-400 hover:underline">Fale com a gente no WhatsApp (11) 91532-2526</a>
         </div>
       </div>
     </div>

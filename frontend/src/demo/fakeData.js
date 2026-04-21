@@ -200,4 +200,7 @@ export function getDemoData() {
   return CACHE;
 }
 
-export function brl(n) { return `R$ ${Number(n || 0).toFixed(2).replace('.',',')}`; }
+export function brl(n) {
+  const num = Number(n || 0);
+  return 'R$ ' + num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}

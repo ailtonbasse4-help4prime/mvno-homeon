@@ -54,18 +54,23 @@ export default function DemoComingSoon({ title, description, features = [], high
           </div>
           <div className="flex-1 min-w-[260px]">
             <h3 className="text-base font-semibold text-white mb-1">Visualizacao indisponivel no modo demo</h3>
-            <p className="text-zinc-400 text-sm">
+            <p className="text-zinc-400 text-sm leading-relaxed">
               Esta funcionalidade esta 100% implementada e disponivel no sistema real.
-              No modo demo apresentamos apenas uma amostra resumida — para ver funcionando na pratica com seus dados, agende uma demonstracao ao vivo.
+              No modo demo apresentamos apenas uma amostra resumida.
+              <br/><br/>
+              <strong className="text-amber-300">Apos o pre-contrato</strong>, voce recebe uma demonstracao pratica ao vivo com seus proprios dados
+              — assim evitamos desgaste de ambas as partes e focamos em quem realmente quer avancar.
+              <br/><br/>
+              📱 Contato: <a href="https://wa.me/5511915322526" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">(11) 91532-2526</a>
             </p>
           </div>
           <a
-            href="https://wa.me/5583999999999?text=Ol%C3%A1!%20Gostaria%20de%20agendar%20uma%20demo%20ao%20vivo%20do%20HELP4PRIME%20MVNO"
+            href="https://wa.me/5511915322526?text=Ol%C3%A1!%20Vi%20a%20demo%20do%20HELP4PRIME%20MVNO%20e%20tenho%20interesse%20real%20em%20avan%C3%A7ar%20para%20pre-contrato"
             target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-emerald-500/20"
             data-testid="demo-cta-whats"
           >
-            <MessageCircle className="w-4 h-4" /> Agendar demo ao vivo
+            <MessageCircle className="w-4 h-4" /> Falar no WhatsApp
           </a>
         </div>
       </div>

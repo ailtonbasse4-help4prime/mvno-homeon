@@ -29,3 +29,15 @@ export const parseDateBR = (brDate) => {
   if (!m) return brDate;
   return `${m[3]}-${m[2]}-${m[1]}`;
 };
+
+// Formata valor monetario em padrao BR: "R$ 1.234,56"
+export const brl = (n) => {
+  const num = Number(n || 0);
+  return 'R$ ' + num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// Formata numero sem simbolo: "1.234,56"
+export const fmtNum = (n, digits = 2) => {
+  const num = Number(n || 0);
+  return num.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+};

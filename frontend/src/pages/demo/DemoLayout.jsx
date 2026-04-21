@@ -139,7 +139,7 @@ export default function DemoLayout() {
         </nav>
 
         <div className="p-3 border-t border-zinc-800 space-y-2 shrink-0 bg-zinc-900">
-          <a href="https://wa.me/5583999999999?text=Ol%C3%A1!%20Vi%20a%20demo%20do%20HELP4PRIME%20MVNO%20e%20gostaria%20de%20saber%20mais"
+          <a href="https://wa.me/5511915322526?text=Ol%C3%A1!%20Vi%20a%20demo%20do%20HELP4PRIME%20MVNO%20e%20tenho%20interesse%20em%20avan%C3%A7ar%20para%20pre-contrato"
              target="_blank" rel="noopener noreferrer"
              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white transition text-sm font-semibold shadow-lg shadow-emerald-500/20"
              data-testid="demo-whats-btn">
