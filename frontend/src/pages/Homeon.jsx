@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
+import axios from 'axios';
 import {
   Check, ShoppingBag, MessageCircle, Signal, MapPin, Phone,
   Wifi, Globe, Repeat, Smartphone, Star, Zap,
 } from 'lucide-react';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 /**
  * Portfolio publico /homeon — acesso livre, sem login.
@@ -136,7 +139,13 @@ export default function Homeon() {
     document.title = 'HomeOn Internet — Planos Móveis com WhatsApp Ilimitado';
   }, []);
 
+  const trackClick = (planoId, source) => {
+    // fire-and-forget — nao bloqueia a abertura da Shopee
+    axios.post(`${API_URL}/api/homeon/click`, { plano: planoId, source }).catch(() => {});
+  };
+
   const contratar = (plano) => {
+    trackClick(plano.id, 'card');
     window.open(plano.shopee, '_blank', 'noopener,noreferrer');
   };
 
@@ -236,6 +245,7 @@ export default function Homeon() {
               </div>
               <a
                 href="https://br.shp.ee/YDasjNFN" target="_blank" rel="noopener noreferrer"
+                onClick={() => trackClick('hero', 'hero')}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-bold shadow-xl shadow-orange-500/30 transition"
                 data-testid="hero-card-shopee"
               >

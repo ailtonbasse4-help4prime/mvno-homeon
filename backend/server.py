@@ -5324,6 +5324,17 @@ app.include_router(api_router_demo)
 async def demo_admin_stats(current_user: dict = Depends(require_admin)):
     return await demo_get_stats()
 
+# Portfolio publico HomeOn — rastreamento de cliques
+from routes.homeon import router as homeon_router, init as init_homeon, get_stats_data as homeon_get_stats
+init_homeon(db=db, require_admin=require_admin)
+api_router_homeon = APIRouter(prefix="/api")
+api_router_homeon.include_router(homeon_router)
+app.include_router(api_router_homeon)
+
+@app.get("/api/homeon-admin/stats")
+async def homeon_admin_stats(current_user: dict = Depends(require_admin)):
+    return await homeon_get_stats()
+
 # Download endpoint for VPS deploy package
 @app.get("/download/deploy-package")
 async def download_deploy_package():

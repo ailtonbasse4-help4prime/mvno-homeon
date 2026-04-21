@@ -97,6 +97,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Secao "Por que HomeOn" explicando dupla cobertura + rodape com endereco de Santa Rita do Passa Quatro/SP
 - [x] Logo HomeOn em container branco para contraste com fundo navy
 
+### Rastreamento de Cliques HomeOn (21/04/2026)
+- [x] `POST /api/homeon/click` (publico) grava cada clique em "Assinar pela Shopee" na colecao `homeon_clicks` (plano, source, IP, UA, referrer, timestamp)
+- [x] `GET /api/homeon-admin/stats` (admin) retorna total, unicos, 24h/7d/30d, ranking por plano, cliques por dia, ultimos 30 cliques
+- [x] Frontend `/homeon` dispara fire-and-forget antes de abrir Shopee (nao bloqueia)
+- [x] Painel admin `/demo-acessos` ganhou secao "Portfolio HomeOn — Cliques pra Shopee" com 5 stat cards, ranking por plano (com %), cliques por dia e tabela dos ultimos 30 cliques
+- [x] Botao "Abrir HomeOn" adicionado no header admin
+- [x] Testado via UI: cliques disparados no SMART/POWER/Hero sao registrados e aparecem no painel com % de conversao correto
+
 ## Backlog
 
 ### P1 - Alta Prioridade
