@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Users, CreditCard, Package, Tag, Zap,
   Phone, FileText, LogOut, Wifi, WifiOff, UserCog, KeyRound,
   Wallet, RefreshCw, X, Receipt, Store, Smartphone, Share2,
-  Table2, ChevronDown, ChevronRight, Activity, DollarSign, Settings, Radio,
+  Table2, ChevronDown, ChevronRight, Activity, DollarSign, Settings, Radio, Eye,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -67,6 +67,7 @@ const navGroups = [
       { path: '/revendedores', icon: Store, label: 'Revendedores', roles: ['admin'] },
       { path: '/ativacoes-selfservice', icon: Smartphone, label: 'Self-Service', roles: ['admin'] },
       { path: '/divulgacao', icon: Share2, label: 'Divulgacao', roles: ['admin'] },
+      { path: '/demo-acessos', icon: Eye, label: 'Acessos Demo', roles: ['admin'] },
     ],
   },
   {

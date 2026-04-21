@@ -5312,6 +5312,18 @@ api_router_v2 = APIRouter(prefix="/api")
 api_router_v2.include_router(operacional_router)
 app.include_router(api_router_v2)
 
+# Registrar router Demo (rastreamento publico de acessos)
+from routes.demo import router as demo_router, init as init_demo, get_stats_data as demo_get_stats
+init_demo(db=db, require_admin=require_admin)
+api_router_demo = APIRouter(prefix="/api")
+api_router_demo.include_router(demo_router)
+app.include_router(api_router_demo)
+
+# Endpoint admin protegido para ver estatisticas da demo
+@app.get("/api/demo-admin/stats")
+async def demo_admin_stats(current_user: dict = Depends(require_admin)):
+    return await demo_get_stats()
+
 # Download endpoint for VPS deploy package
 @app.get("/download/deploy-package")
 async def download_deploy_package():

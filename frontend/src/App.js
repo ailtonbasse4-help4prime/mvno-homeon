@@ -25,6 +25,13 @@ import Divulgacao from "./pages/Divulgacao";
 import LandingPage from "./pages/LandingPage";
 import PlanilhaOperacional from "./pages/PlanilhaOperacional";
 import Custos from "./pages/Custos";
+import DemoAcessos from "./pages/DemoAcessos";
+import DemoLogin from "./pages/demo/DemoLogin";
+import DemoLayout from "./pages/demo/DemoLayout";
+import DemoDashboard from "./pages/demo/DemoDashboard";
+import DemoPlanilha from "./pages/demo/DemoPlanilha";
+import DemoCobrancas from "./pages/demo/DemoCobrancas";
+import DemoCustos from "./pages/demo/DemoCustos";
 
 function AppRoutes() {
   const location = useLocation();
@@ -35,6 +42,14 @@ function AppRoutes() {
       <Route path="/ativar" element={<ErrorBoundary resetKey={location.pathname}><AtivarSelfService /></ErrorBoundary>} />
       <Route path="/portal" element={<ErrorBoundary resetKey={location.pathname}><PortalLogin /></ErrorBoundary>} />
       <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />
+      {/* Demo publica (sem auth) */}
+      <Route path="/demo" element={<ErrorBoundary resetKey={location.pathname}><DemoLogin /></ErrorBoundary>} />
+      <Route element={<DemoLayout />}>
+        <Route path="/demo/dashboard" element={<DemoDashboard />} />
+        <Route path="/demo/operacional" element={<DemoPlanilha />} />
+        <Route path="/demo/cobrancas" element={<DemoCobrancas />} />
+        <Route path="/demo/custos" element={<DemoCustos />} />
+      </Route>
       <Route element={<MainLayout />}>
         <Route path="/" element={<ErrorBoundary resetKey={location.pathname}><Dashboard /></ErrorBoundary>} />
         <Route path="/operacional" element={<ErrorBoundary resetKey={location.pathname}><PlanilhaOperacional /></ErrorBoundary>} />
@@ -53,6 +68,7 @@ function AppRoutes() {
         <Route path="/divulgacao" element={<ErrorBoundary resetKey={location.pathname}><Divulgacao /></ErrorBoundary>} />
         <Route path="/usuarios" element={<ErrorBoundary resetKey={location.pathname}><Usuarios /></ErrorBoundary>} />
         <Route path="/logs" element={<ErrorBoundary resetKey={location.pathname}><Logs /></ErrorBoundary>} />
+        <Route path="/demo-acessos" element={<ErrorBoundary resetKey={location.pathname}><DemoAcessos /></ErrorBoundary>} />
       </Route>
     </Routes>
   );
