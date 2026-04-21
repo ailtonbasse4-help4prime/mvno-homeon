@@ -76,6 +76,16 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Dialog resultado com link copiavel, botao Abrir e botao WhatsApp
 - [x] Cliente cadastra cartao 1 vez e Asaas cobra automaticamente todo mes (cycle MONTHLY)
 
+### Ambiente Demo /demo + Captura de Leads (21/04/2026)
+- [x] Rota `/demo` agora aberta (sem senha) para reduzir friccao comercial
+- [x] DemoLogin redireciona direto pro dashboard da demo
+- [x] Dados 100% ficticios em `fakeData.js` com margens reais da Ta Telecom (30%)
+- [x] Componente `LeadCaptureModal` dispara automaticamente 1.2s apos carregar paginas com "Diferencial Exclusivo" (Ativacoes, Linhas, Self-Service), so 1x por sessao
+- [x] Backend `POST /api/demo/lead` salva nome, WhatsApp, interesse, IP, user-agent, referrer em colecao `demo_leads`
+- [x] Pagina admin `/demo-acessos` agora mostra card "Leads capturados" + tabela com nome, WhatsApp, interesse (tag) e botao de WhatsApp direto
+- [x] Endpoint `GET /api/demo-admin/stats` retorna `total_leads` e `leads[]` alem das estatisticas de acesso
+- [x] Testado: curl (POST valido/invalido + GET admin) + screenshots modal aparece + leads aparecem no painel
+
 ## Backlog
 
 ### P1 - Alta Prioridade

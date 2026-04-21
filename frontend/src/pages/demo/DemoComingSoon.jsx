@@ -8,6 +8,12 @@ import LeadCaptureModal from './LeadCaptureModal';
 export default function DemoComingSoon({ title, description, features = [], highlight, leadInteresse }) {
   return (
     <div className="space-y-4 sm:space-y-6">
+      {leadInteresse && (
+        <LeadCaptureModal
+          interesse={leadInteresse}
+          titulo={highlight?.title ? `Quer ver "${highlight.title}" funcionando ao vivo?` : 'Quer uma demonstração ao vivo?'}
+        />
+      )}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-white">{title}</h1>
         {description && <p className="text-zinc-400 text-xs sm:text-sm mt-1">{description}</p>}

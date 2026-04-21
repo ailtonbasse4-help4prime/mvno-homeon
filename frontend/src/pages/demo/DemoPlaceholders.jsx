@@ -5,6 +5,7 @@ export const DemoAtivacoes = () => (
   <DemoComingSoon
     title="Ativações"
     description="Histórico e gerenciamento de ativações de linhas"
+    leadInteresse="ativacoes"
     highlight={{
       title: 'Ativação 100% automática via API Tá Telecom',
       description: 'Ao cadastrar uma nova linha, o sistema chama a API da Tá Telecom, ativa o chip instantaneamente, cria o cliente no Asaas e emite a primeira cobrança — tudo em menos de 10 segundos, sem intervenção humana.',
@@ -23,6 +24,7 @@ export const DemoLinhas = () => (
   <DemoComingSoon
     title="Linhas"
     description="Gerenciamento completo das linhas ativas"
+    leadInteresse="linhas"
     highlight={{
       title: 'Bloqueio e desbloqueio automático por inadimplência',
       description: 'Cliente não pagou o boleto? O sistema bloqueia a linha automaticamente via API da Tá Telecom na data de vencimento. Pagou o atrasado? Desbloqueia na hora. Zero gestão manual.',
@@ -139,6 +141,7 @@ export const DemoSelfService = () => (
   <DemoComingSoon
     title="Ativação Self-Service"
     description="Cliente ativa o chip sozinho em minutos"
+    leadInteresse="self-service"
     highlight={{
       title: 'Ativação por QR Code — sem envolvimento manual',
       description: 'O cliente lê o QR Code do chip, preenche o CPF (o sistema puxa os dados automaticamente via CPFHub), escolhe o plano, paga via PIX ou cartão e o chip é ativado instantaneamente na Tá Telecom. Você acompanha tudo em tempo real, sem precisar intervir.',
