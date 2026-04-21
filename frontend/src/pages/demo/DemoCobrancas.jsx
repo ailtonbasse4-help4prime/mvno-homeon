@@ -32,10 +32,10 @@ export default function DemoCobrancas() {
   const { resumoCobrancas } = data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Gestão de Cobranças</h1>
-        <p className="text-zinc-400 text-sm mt-1">Cobranças integradas com Asaas — boleto, PIX e cartão recorrente</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">Gestão de Cobranças</h1>
+        <p className="text-zinc-400 text-xs sm:text-sm mt-1">Cobranças integradas com Asaas — boleto, PIX e cartão recorrente</p>
       </div>
 
       {/* Cards */}

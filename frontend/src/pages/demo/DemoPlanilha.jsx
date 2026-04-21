@@ -40,10 +40,10 @@ export default function DemoPlanilha() {
   }, [linhasFiltradas, data.resumo.custo_fixo]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Planilha Operacional</h1>
-        <p className="text-zinc-400 text-sm mt-1">Visão tipo Excel — edição inline por célula, checkbox para incluir/excluir do cálculo</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">Planilha Operacional</h1>
+        <p className="text-zinc-400 text-xs sm:text-sm mt-1">Visão tipo Excel — edição inline por célula, checkbox para incluir/excluir do cálculo</p>
       </div>
 
       {/* Indicadores */}

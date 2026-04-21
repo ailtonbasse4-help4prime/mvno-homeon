@@ -69,19 +69,19 @@ export function StatCard({ icon: Icon, label, value, sub, color = 'blue', testId
   const c = COLOR_MAP[color] || COLOR_MAP.blue;
   return (
     <div
-      className={`group relative rounded-lg border ${c.border} bg-gradient-to-br ${c.bg} p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${c.glow} ${details ? 'cursor-help' : 'cursor-default'}`}
+      className={`group relative rounded-lg border ${c.border} bg-gradient-to-br ${c.bg} p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${c.glow} ${details ? 'cursor-help' : 'cursor-default'}`}
       data-testid={testId}
       title={title}
     >
-      <div className="flex items-center gap-2 text-zinc-300 text-sm font-medium">
-        {Icon && <Icon className={`w-4 h-4 ${c.icon} transition-transform duration-300 group-hover:scale-110`} />}
-        <span>{label}</span>
+      <div className="flex items-center gap-2 text-zinc-300 text-[11px] sm:text-sm font-medium">
+        {Icon && <Icon className={`w-4 h-4 ${c.icon} shrink-0 transition-transform duration-300 group-hover:scale-110`} />}
+        <span className="truncate">{label}</span>
         {details && details.length > 0 && (
-          <span className={`ml-auto text-[10px] ${c.icon} opacity-60`}>ⓘ</span>
+          <span className={`ml-auto text-[10px] ${c.icon} opacity-60 shrink-0`}>ⓘ</span>
         )}
       </div>
-      <div className={`mt-1.5 text-2xl font-bold ${c.value} ${valueClassName}`}>{value}</div>
-      {sub && <div className="text-[11px] text-zinc-400 mt-1">{sub}</div>}
+      <div className={`mt-1.5 text-lg sm:text-2xl font-bold ${c.value} ${valueClassName} break-words`}>{value}</div>
+      {sub && <div className="text-[10px] sm:text-[11px] text-zinc-400 mt-1">{sub}</div>}
 
       {/* Tooltip com detalhamento dos itens */}
       {details && details.length > 0 && (

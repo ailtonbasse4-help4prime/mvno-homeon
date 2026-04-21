@@ -20,10 +20,10 @@ export default function DemoCustos() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Custos e Lucro</h1>
-        <p className="text-zinc-400 text-sm mt-1">Financeiro consolidado — receita, custos variáveis e fixos, lucro líquido por plano</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">Custos e Lucro</h1>
+        <p className="text-zinc-400 text-xs sm:text-sm mt-1">Financeiro consolidado — receita, custos variáveis e fixos, lucro líquido por plano</p>
       </div>
 
       {/* Cards principais */}

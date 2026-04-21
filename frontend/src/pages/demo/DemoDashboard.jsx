@@ -8,10 +8,10 @@ export default function DemoDashboard() {
   const { linhas, clientes, resumo } = data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <p className="text-zinc-400 text-sm mt-1">Visão geral da operação — 150 linhas fictícias com valores reais da Tá</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">Dashboard</h1>
+        <p className="text-zinc-400 text-xs sm:text-sm mt-1">Visão geral da operação — 150 linhas fictícias com valores reais da Tá</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -30,9 +30,9 @@ export default function DemoDashboard() {
       </div>
 
       {/* Distribuicao por plano */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 sm:p-5">
         <h3 className="text-sm font-semibold text-white mb-4">Distribuição por plano</h3>
-        <div className="grid grid-cols-3 lg:grid-cols-9 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
           {data.planos.map(p => {
             const qtd = linhas.filter(l => l.plano_nome === p.nome).length;
             return (
@@ -47,8 +47,8 @@ export default function DemoDashboard() {
       </div>
 
       {/* Highlights */}
-      <div className="bg-gradient-to-br from-emerald-950/30 to-zinc-950 border border-emerald-900/40 rounded-lg p-6">
-        <h3 className="text-lg font-bold text-emerald-400 mb-2">Por que o HELP4PRIME MVNO?</h3>
+      <div className="bg-gradient-to-br from-emerald-950/30 to-zinc-950 border border-emerald-900/40 rounded-lg p-5 sm:p-6">
+        <h3 className="text-base sm:text-lg font-bold text-emerald-400 mb-2">Por que o HELP4PRIME MVNO?</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
           <div>
             <div className="font-semibold text-white">🎯 Ativação em segundos</div>
