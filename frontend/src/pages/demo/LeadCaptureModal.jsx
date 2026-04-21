@@ -79,7 +79,7 @@ export default function LeadCaptureModal({ interesse, titulo = 'Quer conhecer es
                 <CheckCircle className="w-7 h-7 text-emerald-400" />
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Recebemos seu contato!</h3>
-              <p className="text-zinc-400 text-sm mb-4">Em breve retornaremos via WhatsApp para apresentar essa funcionalidade de modo prático.</p>
+              <p className="text-zinc-400 text-sm mb-4">Em breve retornaremos via WhatsApp para apresentar essa funcionalidade.</p>
               <button onClick={skip} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-semibold rounded-lg transition">
                 Continuar explorando
               </button>
@@ -91,7 +91,7 @@ export default function LeadCaptureModal({ interesse, titulo = 'Quer conhecer es
               </div>
               <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 leading-tight">{titulo}</h3>
               <p className="text-zinc-400 text-sm mb-5 leading-relaxed">
-                Deixe seu contato e nossa equipe retorna via WhatsApp para apresentar essa funcionalidade de modo prático.
+                Deixe seu contato e nossa equipe retorna via WhatsApp para apresentar essa funcionalidade.
               </p>
 
               <form onSubmit={submit} className="space-y-3">

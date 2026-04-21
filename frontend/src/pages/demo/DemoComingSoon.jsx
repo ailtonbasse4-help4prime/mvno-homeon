@@ -3,7 +3,7 @@ import LeadCaptureModal from './LeadCaptureModal';
 
 /**
  * Pagina generica para funcionalidades sem implementacao visual no modo demo.
- * Explica o recurso e convida o visitante a agendar uma demo ao vivo.
+ * Explica o recurso e convida o visitante a deixar contato.
  */
 export default function DemoComingSoon({ title, description, features = [], highlight, leadInteresse }) {
   return (
@@ -65,7 +65,7 @@ export default function DemoComingSoon({ title, description, features = [], high
               Esta funcionalidade está 100% implementada e disponível no sistema real.
               No modo demo apresentamos apenas uma amostra resumida.
               <br/><br/>
-              Após o <strong className="text-amber-300">pré-contrato</strong>, nossa equipe entra em contato para apresentar o recurso de modo prático.
+              Deixe seu contato para receber mais informações sobre essa funcionalidade.
             </p>
           </div>
           <a
