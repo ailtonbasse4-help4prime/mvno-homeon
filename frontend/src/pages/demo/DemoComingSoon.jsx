@@ -11,7 +11,7 @@ export default function DemoComingSoon({ title, description, features = [], high
       {leadInteresse && (
         <LeadCaptureModal
           interesse={leadInteresse}
-          titulo={highlight?.title ? `Quer ver "${highlight.title}" funcionando ao vivo?` : 'Quer uma demonstração ao vivo?'}
+          titulo={highlight?.title ? `Quer conhecer "${highlight.title}" na prática?` : 'Quer conhecer essa funcionalidade?'}
         />
       )}
       <div>
@@ -65,7 +65,7 @@ export default function DemoComingSoon({ title, description, features = [], high
               Esta funcionalidade está 100% implementada e disponível no sistema real.
               No modo demo apresentamos apenas uma amostra resumida.
               <br/><br/>
-              Após o <strong className="text-amber-300">pré-contrato</strong>, você recebe uma demonstração prática ao vivo com seus próprios dados.
+              Após o <strong className="text-amber-300">pré-contrato</strong>, nossa equipe entra em contato para apresentar o recurso de modo prático.
             </p>
           </div>
           <a

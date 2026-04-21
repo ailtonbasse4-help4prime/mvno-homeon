@@ -11,7 +11,7 @@ const LEAD_SENT_KEY = 'demo_lead_sent_v1';
  *
  * @param {string} interesse - nome do diferencial (ex: "ativacoes", "linhas", "self-service")
  */
-export default function LeadCaptureModal({ interesse, titulo = 'Quer uma demonstração ao vivo?' }) {
+export default function LeadCaptureModal({ interesse, titulo = 'Quer conhecer essa funcionalidade?' }) {
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState('');
   const [whats, setWhats] = useState('');
@@ -79,7 +79,7 @@ export default function LeadCaptureModal({ interesse, titulo = 'Quer uma demonst
                 <CheckCircle className="w-7 h-7 text-emerald-400" />
               </div>
               <h3 className="text-xl font-bold text-white mb-2">Recebemos seu contato!</h3>
-              <p className="text-zinc-400 text-sm mb-4">Em breve retornaremos via WhatsApp para agendar sua demonstração ao vivo.</p>
+              <p className="text-zinc-400 text-sm mb-4">Em breve retornaremos via WhatsApp para apresentar essa funcionalidade de modo prático.</p>
               <button onClick={skip} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-semibold rounded-lg transition">
                 Continuar explorando
               </button>
@@ -87,11 +87,11 @@ export default function LeadCaptureModal({ interesse, titulo = 'Quer uma demonst
           ) : (
             <>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold tracking-widest mb-3">
-                <Sparkles className="w-3 h-3" /> DEMONSTRAÇÃO AO VIVO
+                <Sparkles className="w-3 h-3" /> CONHEÇA NA PRÁTICA
               </div>
               <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 leading-tight">{titulo}</h3>
               <p className="text-zinc-400 text-sm mb-5 leading-relaxed">
-                Deixe seu contato e nossa equipe retorna via WhatsApp para apresentar essa funcionalidade com seus próprios dados, sem compromisso.
+                Deixe seu contato e nossa equipe retorna via WhatsApp para apresentar essa funcionalidade de modo prático.
               </p>
 
               <form onSubmit={submit} className="space-y-3">
