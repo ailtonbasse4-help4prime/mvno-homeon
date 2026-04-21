@@ -12,8 +12,8 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
  * Vende planos moveis HOMEON via Shopee. Identidade: azul marinho + laranja.
  */
 
-const PHONE_DISPLAY = '(19) 97005-1397';
-const PHONE_DIGITS = '5519970051397';
+const PHONE_DISPLAY = '(19) 92005-1397';
+const PHONE_DIGITS = '5519920051397';
 const WHATS_MSG = 'Olá! Tenho interesse nos planos HomeOn Internet Móvel. Pode me ajudar?';
 const ENDERECO = 'Av. José Ribeiro de Oliveira, 2450 — Jardim Alvorada, Santa Rita do Passa Quatro/SP';
 
@@ -62,7 +62,7 @@ const BENEFICIOS = [
   { icon: MapPin, label: 'Waze e GPS ilimitados' },
   { icon: Repeat, label: 'Uber ilimitado' },
   { icon: Phone, label: '1.000 minutos de ligações' },
-  { icon: Wifi, label: '300 SMS' },
+  { icon: Wifi, label: '100 SMS' },
   { icon: Globe, label: 'Cobertura nacional' },
   { icon: Zap, label: 'Portabilidade gratuita' },
   { icon: Smartphone, label: 'Portal do Cliente exclusivo' },
@@ -109,7 +109,7 @@ function PlanoCard({ plano, onClickContratar }) {
         </div>
 
         <ul className="space-y-2 mb-6 text-sm">
-          {['Dupla cobertura TIM + VIVO', 'WhatsApp ilimitado', 'Waze e Uber ilimitados', '1000 min + 300 SMS', 'Sem fidelidade'].map((f, i) => (
+          {['Dupla cobertura TIM + VIVO', 'WhatsApp ilimitado', 'Waze e Uber ilimitados', '1000 min + 100 SMS', 'Sem fidelidade'].map((f, i) => (
             <li key={i} className="flex items-start gap-2 text-white/80">
               <Check className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" /> {f}
             </li>
@@ -166,9 +166,7 @@ export default function Homeon() {
       <header className="relative z-20 border-b border-white/5 backdrop-blur-md bg-[#0a1a3a]/50 sticky top-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-white rounded-lg px-3 py-2 shadow-lg">
-              <img src="/homeon-assets/logo-tight.png" alt="HomeOn Internet" className="h-7 sm:h-9 w-auto" />
-            </div>
+            <img src="/homeon-assets/logo-white.png" alt="HomeOn Internet" className="h-9 sm:h-11 w-auto drop-shadow-lg" />
           </div>
           <button
             onClick={scrollToPlanos}
@@ -240,7 +238,7 @@ export default function Homeon() {
                 <span className="text-white/60 ml-2 self-end mb-3">/mês</span>
               </div>
               <div className="grid grid-cols-2 gap-3 mb-6">
-                {['10GB de internet', '1000 min ligações', '300 SMS', 'WhatsApp ilimitado', 'Waze ilimitado', 'Uber ilimitado'].map((b, i) => (
+                {['10GB de internet', '1000 min ligações', '100 SMS', 'WhatsApp ilimitado', 'Waze ilimitado', 'Uber ilimitado'].map((b, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm text-white/80">
                     <Check className="w-4 h-4 text-orange-400 shrink-0" /> {b}
                   </div>
@@ -338,7 +336,7 @@ export default function Homeon() {
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mb-4">
             Ainda com dúvidas? <span className="text-orange-400">Fale com a gente.</span>
           </h2>
-          <p className="text-white/60 text-sm mb-6">Atendimento humano via WhatsApp, sem robô.</p>
+          <p className="text-white/60 text-sm mb-6">Atendimento via WhatsApp, de segunda a sexta.</p>
           <a
             href={`https://wa.me/${PHONE_DIGITS}?text=${encodeURIComponent(WHATS_MSG)}`}
             target="_blank" rel="noopener noreferrer"
@@ -354,8 +352,8 @@ export default function Homeon() {
       <footer className="relative z-10 border-t border-white/5 bg-black/30 backdrop-blur-sm mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid md:grid-cols-3 gap-6 text-sm">
           <div>
-            <div className="inline-block bg-white rounded-lg px-3 py-2 mb-3 shadow-lg">
-              <img src="/homeon-assets/logo-tight.png" alt="HomeOn" className="h-8 w-auto" />
+            <div className="inline-block mb-3">
+              <img src="/homeon-assets/logo-white.png" alt="HomeOn" className="h-10 w-auto drop-shadow-lg" />
             </div>
             <p className="text-white/50 text-xs leading-relaxed mt-2">
               Internet do seu jeito. Planos móveis com dupla cobertura TIM + VIVO, sem fidelidade.
