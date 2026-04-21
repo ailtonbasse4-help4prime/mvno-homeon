@@ -336,7 +336,7 @@ export default function Homeon() {
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mb-4">
             Ainda com dúvidas? <span className="text-orange-400">Fale com a gente.</span>
           </h2>
-          <p className="text-white/60 text-sm mb-6">Atendimento via WhatsApp, de segunda a sexta.</p>
+          <p className="text-white/60 text-sm mb-6">Atendimento via WhatsApp.</p>
           <a
             href={`https://wa.me/${PHONE_DIGITS}?text=${encodeURIComponent(WHATS_MSG)}`}
             target="_blank" rel="noopener noreferrer"
