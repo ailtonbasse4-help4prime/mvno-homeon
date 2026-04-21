@@ -26,6 +26,7 @@ import LandingPage from "./pages/LandingPage";
 import PlanilhaOperacional from "./pages/PlanilhaOperacional";
 import Custos from "./pages/Custos";
 import DemoAcessos from "./pages/DemoAcessos";
+import Homeon from "./pages/Homeon";
 import DemoLogin from "./pages/demo/DemoLogin";
 import DemoLayout from "./pages/demo/DemoLayout";
 import DemoDashboard from "./pages/demo/DemoDashboard";
@@ -44,6 +45,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/saas" element={<LandingPage />} />
+      <Route path="/homeon" element={<ErrorBoundary resetKey={location.pathname}><Homeon /></ErrorBoundary>} />
       <Route path="/ativar" element={<ErrorBoundary resetKey={location.pathname}><AtivarSelfService /></ErrorBoundary>} />
       <Route path="/portal" element={<ErrorBoundary resetKey={location.pathname}><PortalLogin /></ErrorBoundary>} />
       <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />

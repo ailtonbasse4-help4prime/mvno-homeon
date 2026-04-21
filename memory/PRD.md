@@ -84,7 +84,18 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Backend `POST /api/demo/lead` salva nome, WhatsApp, interesse, IP, user-agent, referrer em colecao `demo_leads`
 - [x] Pagina admin `/demo-acessos` agora mostra card "Leads capturados" + tabela com nome, WhatsApp, interesse (tag) e botao de WhatsApp direto
 - [x] Endpoint `GET /api/demo-admin/stats` retorna `total_leads` e `leads[]` alem das estatisticas de acesso
+- [x] Textos ajustados: removidas promessas de "demo ao vivo com dados do cliente" — modal so coleta contato, sem promessa de simulacao
 - [x] Testado: curl (POST valido/invalido + GET admin) + screenshots modal aparece + leads aparecem no painel
+
+### Portfolio Publico HomeOn /homeon (21/04/2026)
+- [x] Rota publica `/homeon` (acesso livre, sem login) com identidade HomeOn Internet (navy + laranja)
+- [x] Hero com card de destaque do plano de entrada (10GB por R$ 39,99)
+- [x] Grid de 9 beneficios (TIM+VIVO, WhatsApp, Waze, Uber, 1000min, 300 SMS, cobertura nacional, portabilidade, portal)
+- [x] 6 planos HomeOn (START/PLUS/SMART/POWER/ULTRA/MAX) com link Shopee especifico por plano; SMART (20GB) destacado como "Mais vendido"
+- [x] Botao "Assinar pela Shopee" abre link Shopee em nova aba (target=_blank rel=noopener)
+- [x] FAB flutuante WhatsApp + CTA final com numero (19) 97005-1397
+- [x] Secao "Por que HomeOn" explicando dupla cobertura + rodape com endereco de Santa Rita do Passa Quatro/SP
+- [x] Logo HomeOn em container branco para contraste com fundo navy
 
 ## Backlog
 
