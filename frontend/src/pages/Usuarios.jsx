@@ -11,8 +11,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, UserCog, Edit, Trash2, Shield, ShieldCheck } from 'lucide-react';
+import { Plus, UserCog, Edit, Trash2, Shield, ShieldCheck, Users } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
+import { StatCard } from '../components/StatCard';
 import { useSecureAction } from '../hooks/useSecureAction';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -103,18 +104,9 @@ export function Usuarios() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-zinc-900/80 border border-zinc-500/60 rounded-sm p-4">
-          <p className="text-2xl font-bold text-white font-mono">{usuarios.length}</p>
-          <p className="text-xs text-zinc-300">Total</p>
-        </div>
-        <div className="bg-violet-500/5 border border-violet-500/20 rounded-sm p-4">
-          <p className="text-2xl font-bold text-violet-400 font-mono">{usuarios.filter(u => u.role === 'admin').length}</p>
-          <p className="text-xs text-zinc-300">Administradores</p>
-        </div>
-        <div className="bg-blue-500/15 border border-blue-500/40 rounded-sm p-4">
-          <p className="text-2xl font-bold text-blue-400 font-mono">{usuarios.filter(u => u.role === 'atendente').length}</p>
-          <p className="text-xs text-zinc-300">Atendentes</p>
-        </div>
+        <StatCard icon={Users} label="Total" value={usuarios.length} color="blue" testId="stat-total-usuarios" />
+        <StatCard icon={ShieldCheck} label="Administradores" value={usuarios.filter(u => u.role === 'admin').length} color="violet" testId="stat-admins" />
+        <StatCard icon={UserCog} label="Atendentes" value={usuarios.filter(u => u.role === 'atendente').length} color="emerald" testId="stat-atendentes" />
       </div>
 
       {/* Table */}

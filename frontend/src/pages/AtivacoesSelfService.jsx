@@ -10,8 +10,9 @@ import {
 } from '../components/ui/select';
 import {
   Search, CheckCircle, Clock, AlertCircle, XCircle,
-  RefreshCw, Zap, CreditCard, RotateCw, Timer, ChevronDown, ChevronUp,
+  RefreshCw, Zap, CreditCard, RotateCw, Timer, ChevronDown, ChevronUp, Hash,
 } from 'lucide-react';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -178,36 +179,11 @@ export function AtivacoesSelfService() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <Card className="bg-zinc-900 border-zinc-500/60">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-white font-mono">{counts.total}</p>
-            <p className="text-xs text-zinc-400">Total</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-500/60">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-amber-400 font-mono">{counts.aguardando}</p>
-            <p className="text-xs text-zinc-400">Aguardando</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-500/60">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-emerald-400 font-mono">{counts.ativos}</p>
-            <p className="text-xs text-zinc-400">Ativados</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-orange-500/40">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-orange-400 font-mono" data-testid="retry-pendente-count">{counts.retryPendente}</p>
-            <p className="text-xs text-zinc-400">Retry Pendente</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-500/60">
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-400 font-mono">{counts.erros}</p>
-            <p className="text-xs text-zinc-400">Erros</p>
-          </CardContent>
-        </Card>
+        <StatCard icon={Hash} label="Total" value={counts.total} color="blue" testId="stat-total" />
+        <StatCard icon={Clock} label="Aguardando" value={counts.aguardando} color="amber" testId="stat-aguardando" />
+        <StatCard icon={CheckCircle} label="Ativados" value={counts.ativos} color="emerald" testId="stat-ativos" />
+        <StatCard icon={RotateCw} label="Retry Pendente" value={counts.retryPendente} color="orange" testId="retry-pendente-count" />
+        <StatCard icon={XCircle} label="Erros" value={counts.erros} color="red" testId="stat-erros" />
       </div>
 
       {/* Retry worker info */}

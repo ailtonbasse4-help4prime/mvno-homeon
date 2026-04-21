@@ -21,6 +21,7 @@ import {
   FileText, Filter, Zap, AlertCircle, Lock, Unlock, LogIn, LogOut, 
   UserPlus, Eye, Server, Clock, CheckCircle, XCircle, RefreshCw 
 } from 'lucide-react';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -169,28 +170,10 @@ export function Logs() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-900/80 border border-zinc-500/60 rounded-sm p-4">
-          <p className="text-2xl font-bold text-white font-mono">{logs.length}</p>
-          <p className="text-xs text-zinc-300">Total de Logs</p>
-        </div>
-        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-sm p-4">
-          <p className="text-2xl font-bold text-emerald-400 font-mono">
-            {logs.filter(l => l.action === 'ativacao').length}
-          </p>
-          <p className="text-xs text-zinc-300">Ativações</p>
-        </div>
-        <div className="bg-red-500/15 border border-red-500/40 rounded-sm p-4">
-          <p className="text-2xl font-bold text-red-400 font-mono">
-            {logs.filter(l => l.action === 'erro').length}
-          </p>
-          <p className="text-xs text-zinc-300">Erros</p>
-        </div>
-        <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-sm p-4">
-          <p className="text-2xl font-bold text-cyan-400 font-mono">
-            {logs.filter(l => l.api_request).length}
-          </p>
-          <p className="text-xs text-zinc-300">Chamadas API</p>
-        </div>
+        <StatCard icon={FileText} label="Total de Logs" value={logs.length} color="blue" testId="stat-total-logs" />
+        <StatCard icon={Zap} label="Ativações" value={logs.filter(l => l.action === 'ativacao').length} color="emerald" testId="stat-ativacoes" />
+        <StatCard icon={AlertCircle} label="Erros" value={logs.filter(l => l.action === 'erro').length} color="red" testId="stat-erros" />
+        <StatCard icon={Server} label="Chamadas API" value={logs.filter(l => l.api_request).length} color="violet" testId="stat-api" />
       </div>
 
       {/* Logs List */}

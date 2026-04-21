@@ -10,7 +10,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle, Hash, CheckCircle, Clock, ShieldOff } from 'lucide-react';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -226,10 +227,10 @@ export function Linhas() {
         return (
           <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-zinc-900/80 border border-zinc-500/60 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-white font-mono">{displayLinhas.length}</p><p className="text-xs text-zinc-300">Total</p></div>
-        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">{displayLinhas.filter(l => l.status === 'ativo').length}</p><p className="text-xs text-zinc-300">Ativas</p></div>
-        <div className="bg-amber-500/15 border border-amber-500/40 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-amber-400 font-mono">{displayLinhas.filter(l => l.status === 'pendente').length}</p><p className="text-xs text-zinc-300">Pendentes</p></div>
-        <div className="bg-red-500/15 border border-red-500/40 rounded-sm p-3 sm:p-4"><p className="text-xl sm:text-2xl font-bold text-red-400 font-mono">{displayLinhas.filter(l => l.status === 'bloqueado').length}</p><p className="text-xs text-zinc-300">Bloqueadas</p></div>
+        <StatCard icon={Hash} label="Total" value={displayLinhas.length} color="blue" testId="stat-total-linhas" />
+        <StatCard icon={CheckCircle} label="Ativas" value={displayLinhas.filter(l => l.status === 'ativo').length} color="emerald" testId="stat-ativas" />
+        <StatCard icon={Clock} label="Pendentes" value={displayLinhas.filter(l => l.status === 'pendente').length} color="amber" testId="stat-pendentes" />
+        <StatCard icon={ShieldOff} label="Bloqueadas" value={displayLinhas.filter(l => l.status === 'bloqueado').length} color="red" testId="stat-bloqueadas" />
       </div>
 
       {/* Table */}

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -195,53 +196,10 @@ export function CarteiraMovel() {
       {/* Summary Cards */}
       {resumo && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" data-testid="carteira-resumo">
-          <div className="dashboard-card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-emerald-500/15 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-300">Receita Total</p>
-                <p className="text-xl font-bold font-mono text-emerald-400">{formatCurrency(resumo.financeiro.receita_total)}</p>
-              </div>
-            </div>
-          </div>
-          <div className="dashboard-card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-amber-500/15 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-300">Pendente</p>
-                <p className="text-xl font-bold font-mono text-amber-400">{formatCurrency(resumo.financeiro.pendente_total)}</p>
-                <p className="text-xs text-zinc-600">{resumo.cobrancas.pendentes} cobrancas</p>
-              </div>
-            </div>
-          </div>
-          <div className="dashboard-card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-red-500/15 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-300">Vencido</p>
-                <p className="text-xl font-bold font-mono text-red-400">{formatCurrency(resumo.financeiro.vencido_total)}</p>
-                <p className="text-xs text-zinc-600">{resumo.cobrancas.vencidas} cobrancas</p>
-              </div>
-            </div>
-          </div>
-          <div className="dashboard-card">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-sm bg-blue-500/15 flex items-center justify-center">
-                <Receipt className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-300">Assinaturas Ativas</p>
-                <p className="text-xl font-bold font-mono text-blue-400">{resumo.assinaturas.ativas}</p>
-                <p className="text-xs text-zinc-600">{resumo.assinaturas.total} total</p>
-              </div>
-            </div>
-          </div>
+          <StatCard icon={TrendingUp} label="Receita Total" value={formatCurrency(resumo.financeiro.receita_total)} color="emerald" testId="stat-receita" />
+          <StatCard icon={Clock} label="Pendente" value={formatCurrency(resumo.financeiro.pendente_total)} color="amber" sub={`${resumo.cobrancas.pendentes} cobrancas`} testId="stat-pendente" />
+          <StatCard icon={AlertTriangle} label="Vencido" value={formatCurrency(resumo.financeiro.vencido_total)} color="red" sub={`${resumo.cobrancas.vencidas} cobrancas`} testId="stat-vencido" />
+          <StatCard icon={Receipt} label="Assinaturas Ativas" value={resumo.assinaturas.ativas} color="blue" sub={`${resumo.assinaturas.total} total`} testId="stat-assinaturas" />
         </div>
       )}
 

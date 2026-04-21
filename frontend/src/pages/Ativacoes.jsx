@@ -7,7 +7,8 @@ import { Label } from '../components/ui/label';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { IccidInput } from '../components/IccidInput';
 import { toast } from 'sonner';
-import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package, ExternalLink, ArrowRightLeft } from 'lucide-react';
+import { Zap, CheckCircle, Clock, AlertCircle, CreditCard, Tag, Package, ExternalLink, ArrowRightLeft, Users } from 'lucide-react';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -502,14 +503,8 @@ export function Ativacoes() {
 
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-zinc-900/80 border border-zinc-500/60 rounded-sm p-3 text-center">
-              <p className="text-xl font-bold text-white font-mono">{clientes.length}</p>
-              <p className="text-xs text-zinc-300">Clientes Ativos</p>
-            </div>
-            <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-sm p-3 text-center">
-              <p className="text-xl font-bold text-emerald-400 font-mono">{chipsDisponiveis.length}</p>
-              <p className="text-xs text-zinc-300">Chips Disponiveis</p>
-            </div>
+            <StatCard icon={Users} label="Clientes Ativos" value={clientes.length} color="blue" testId="stat-clientes-ativos" />
+            <StatCard icon={CreditCard} label="Chips Disponiveis" value={chipsDisponiveis.length} color="emerald" testId="stat-chips-disponiveis" />
           </div>
         </div>
       </div>
