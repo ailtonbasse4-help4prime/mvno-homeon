@@ -73,15 +73,16 @@ export function getDemoData() {
   // 150 linhas distribuidas entre 120 clientes
   for (let i = 0; i < 150; i++) {
     const cliente = clientes[i < 120 ? i : rand(120)];
-    // Distribuir planos com peso - mais planos medios/grandes (mais rentaveis) pra mostrar operacao saudavel
-    const pesoPlanos = [0, 0, 1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8]; // indices com peso
+    // Distribui mais linhas nos planos mais rentaveis (15-30GB tem ~29-30% margem)
+    // Indices: 0=1GB 1=2GB 2=6GB 3=10GB 4=15GB 5=20GB 6=30GB 7=40GB 8=50GB
+    const pesoPlanos = [2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 8];
     const plano = DEMO_PLANOS[pesoPlanos[rand(pesoPlanos.length)]];
-    // 76% ativas, 13% bloqueadas/vencidas, 7% pendentes, 4% canceladas
+    // 90% ativas, 5% bloqueadas/vencidas, 3% pendentes, 2% canceladas
     const r = Math.random();
     let status, statusChip;
-    if (r < 0.76) { status = 'ativo'; statusChip = 'Ativo'; }
-    else if (r < 0.89) { status = 'bloqueado'; statusChip = 'Bloqueado - vencimento'; }
-    else if (r < 0.96) { status = 'pendente'; statusChip = 'Pendente'; }
+    if (r < 0.90) { status = 'ativo'; statusChip = 'Ativo'; }
+    else if (r < 0.95) { status = 'bloqueado'; statusChip = 'Bloqueado - vencimento'; }
+    else if (r < 0.98) { status = 'pendente'; statusChip = 'Pendente'; }
     else { status = 'cancelado'; statusChip = 'Cancelado'; }
 
     const ativadoHaDias = rand(180) + 5;

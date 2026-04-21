@@ -32,6 +32,11 @@ import DemoDashboard from "./pages/demo/DemoDashboard";
 import DemoPlanilha from "./pages/demo/DemoPlanilha";
 import DemoCobrancas from "./pages/demo/DemoCobrancas";
 import DemoCustos from "./pages/demo/DemoCustos";
+import {
+  DemoAtivacoes, DemoLinhas, DemoClientes, DemoChips, DemoCarteira, DemoAssinaturas,
+  DemoPlanos, DemoOfertas, DemoRevendedores, DemoSelfService, DemoDivulgacao,
+  DemoUsuarios, DemoLogs,
+} from "./pages/demo/DemoPlaceholders";
 
 function AppRoutes() {
   const location = useLocation();
@@ -49,6 +54,20 @@ function AppRoutes() {
         <Route path="/demo/operacional" element={<DemoPlanilha />} />
         <Route path="/demo/cobrancas" element={<DemoCobrancas />} />
         <Route path="/demo/custos" element={<DemoCustos />} />
+        {/* Placeholders com destaque de diferenciais */}
+        <Route path="/demo/ativacoes" element={<DemoAtivacoes />} />
+        <Route path="/demo/linhas" element={<DemoLinhas />} />
+        <Route path="/demo/clientes" element={<DemoClientes />} />
+        <Route path="/demo/chips" element={<DemoChips />} />
+        <Route path="/demo/carteira" element={<DemoCarteira />} />
+        <Route path="/demo/assinaturas" element={<DemoAssinaturas />} />
+        <Route path="/demo/planos" element={<DemoPlanos />} />
+        <Route path="/demo/ofertas" element={<DemoOfertas />} />
+        <Route path="/demo/revendedores" element={<DemoRevendedores />} />
+        <Route path="/demo/self-service" element={<DemoSelfService />} />
+        <Route path="/demo/divulgacao" element={<DemoDivulgacao />} />
+        <Route path="/demo/usuarios" element={<DemoUsuarios />} />
+        <Route path="/demo/logs" element={<DemoLogs />} />
       </Route>
       <Route element={<MainLayout />}>
         <Route path="/" element={<ErrorBoundary resetKey={location.pathname}><Dashboard /></ErrorBoundary>} />
