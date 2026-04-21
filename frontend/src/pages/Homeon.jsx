@@ -166,7 +166,7 @@ export default function Homeon() {
       <header className="relative z-20 border-b border-white/5 backdrop-blur-md bg-[#0a1a3a]/50 sticky top-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/homeon-assets/logo-white.png" alt="HomeOn Internet" className="h-9 sm:h-11 w-auto drop-shadow-lg" />
+            <img src="/homeon-assets/logo-white.png" alt="HomeOn Internet" className="h-14 sm:h-16 w-auto drop-shadow-lg" />
           </div>
           <button
             onClick={scrollToPlanos}
@@ -353,7 +353,7 @@ export default function Homeon() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid md:grid-cols-3 gap-6 text-sm">
           <div>
             <div className="inline-block mb-3">
-              <img src="/homeon-assets/logo-white.png" alt="HomeOn" className="h-10 w-auto drop-shadow-lg" />
+              <img src="/homeon-assets/logo-white.png" alt="HomeOn" className="h-14 w-auto drop-shadow-lg" />
             </div>
             <p className="text-white/50 text-xs leading-relaxed mt-2">
               Internet do seu jeito. Planos móveis com dupla cobertura TIM + VIVO, sem fidelidade.
