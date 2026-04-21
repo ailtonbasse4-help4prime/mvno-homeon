@@ -1,10 +1,11 @@
 import { Zap, MessageCircle, Sparkles, CheckCircle } from 'lucide-react';
+import LeadCaptureModal from './LeadCaptureModal';
 
 /**
  * Pagina generica para funcionalidades sem implementacao visual no modo demo.
  * Explica o recurso e convida o visitante a agendar uma demo ao vivo.
  */
-export default function DemoComingSoon({ title, description, features = [], highlight }) {
+export default function DemoComingSoon({ title, description, features = [], highlight, leadInteresse }) {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>

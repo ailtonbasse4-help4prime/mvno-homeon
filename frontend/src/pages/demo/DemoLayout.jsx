@@ -78,9 +78,8 @@ export default function DemoLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem(DEMO_AUTH_KEY) !== 'yes') {
-      nav('/demo', { replace: true }); return;
-    }
+    // Marca sessao autorizada (acesso livre agora)
+    sessionStorage.setItem(DEMO_AUTH_KEY, 'yes');
     axios.post(`${API_URL}/api/demo/access`, { path: loc.pathname }).catch(() => {});
     // fecha sidebar ao mudar de rota (mobile)
     setSidebarOpen(false);
@@ -91,7 +90,6 @@ export default function DemoLayout() {
   };
 
   const logout = () => {
-    sessionStorage.removeItem(DEMO_AUTH_KEY);
     nav('/demo');
   };
 

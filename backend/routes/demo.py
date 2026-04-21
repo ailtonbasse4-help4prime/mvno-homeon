@@ -113,6 +113,13 @@ async def get_stats_data():
     ]).to_list(30)
     by_day = [{"date": d["_id"], "count": d["count"], "unique": len(d["unique"])} for d in by_day_raw]
 
+    # Leads capturados
+    leads = await _db.demo_leads.find({}, {"_id": 0}).sort("timestamp", -1).to_list(200)
+    for ld in leads:
+        if isinstance(ld.get("timestamp"), datetime):
+            ld["timestamp"] = ld["timestamp"].isoformat()
+    total_leads = len(leads)
+
     return {
         "total": total,
         "unique_visitors": unique,
@@ -122,4 +129,32 @@ async def get_stats_data():
         "ultimos": ultimos,
         "top_pages": top_pages,
         "by_day": by_day,
+        "total_leads": total_leads,
+        "leads": leads,
     }
+
+
+class LeadPayload(BaseModel):
+    nome: str
+    whatsapp: str
+    interesse: Optional[str] = None  # qual diferencial acionou o modal (ex: "self-service")
+
+
+@router.post("/lead")
+async def register_lead(payload: LeadPayload, request: Request):
+    """Registra um lead (pessoa interessada em contrato) sem exigir auth."""
+    nome = (payload.nome or "").strip()[:120]
+    whatsapp = "".join(ch for ch in (payload.whatsapp or "") if ch.isdigit())[:15]
+    if not nome or len(whatsapp) < 10:
+        raise HTTPException(status_code=400, detail="Nome e WhatsApp validos sao obrigatorios")
+    doc = {
+        "nome": nome,
+        "whatsapp": whatsapp,
+        "interesse": (payload.interesse or "")[:40],
+        "ip": _client_ip(request),
+        "user_agent": request.headers.get("user-agent", "")[:300],
+        "referrer": request.headers.get("referer", "")[:300],
+        "timestamp": datetime.now(timezone.utc),
+    }
+    await _db.demo_leads.insert_one(doc)
+    return {"ok": True}
