@@ -55,7 +55,7 @@ export default function DemoCustos() {
               No exemplo ao lado: <strong className="text-emerald-400">{brl(resumo.receita)}</strong> de receita ×
               <strong className="text-orange-400"> 70% = {brl(resumo.custo)}</strong> de repasse para a Tá,
               sobrando <strong className="text-blue-400">{brl(resumo.receita - resumo.custo)}</strong> de lucro bruto.
-              Descontando os custos fixos (<strong className="text-red-400">{brl(totalFixos)}</strong> em VPS, domínio e Asaas),
+              Descontando os custos fixos (<strong className="text-red-400">{brl(totalFixos)}</strong> — Painel Tá, Painel HELP4PRIME e Conta PJ Asaas),
               você fica com <strong className="text-emerald-400">{brl(resumo.lucro_liquido)}</strong> líquido ({resumo.margem_pct.toFixed(1)}% de margem real).
               Conforme o número de linhas cresce, os custos fixos se diluem e a margem real sobe.
             </p>

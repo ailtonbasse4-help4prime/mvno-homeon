@@ -140,14 +140,11 @@ export function getDemoData() {
     }
   }
 
-  // Custos fixos
+  // Custos fixos (os que o provedor realmente paga para operar)
   const custosFixos = [
-    { id: 'cf1', nome: 'VPS (Linode 8GB)', valor: 180.00, ativo: true },
-    { id: 'cf2', nome: 'Dominio .com.br', valor: 40.00, ativo: true },
-    { id: 'cf3', nome: 'Taxa Asaas mensal', valor: 49.90, ativo: true },
-    { id: 'cf4', nome: 'Email Marketing', valor: 80.00, ativo: true },
-    { id: 'cf5', nome: 'Painel Ta', valor: 395.00, ativo: true },
-    { id: 'cf6', nome: 'Painel Help4prime', valor: 490.00, ativo: true },
+    { id: 'cf1', nome: 'Painel Tá Telecom', valor: 395.00, ativo: true },
+    { id: 'cf2', nome: 'Painel HELP4PRIME', valor: 490.00, ativo: true },
+    { id: 'cf3', nome: 'Conta PJ Asaas', valor: 49.90, ativo: true },
   ];
 
   // Resumo Planilha
