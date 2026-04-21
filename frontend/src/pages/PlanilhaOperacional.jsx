@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Search, Download, Upload, RefreshCw, DollarSign, TrendingUp, Wallet, Percent, Save, X as XIcon, Signal, Receipt } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR, formatDateTimeBR } from '../lib/formatters';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -326,28 +327,11 @@ export default function PlanilhaOperacional() {
 
       {/* Indicadores */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="rounded-lg border border-emerald-900/40 bg-gradient-to-br from-emerald-950/30 to-zinc-950 p-5" data-testid="stat-receita">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm"><DollarSign className="w-4 h-4 text-emerald-400" />Receita</div>
-          <div className="mt-1.5 text-2xl font-bold text-emerald-400">{brl(filteredResumo.receita)}</div>
-        </div>
-        <div className="rounded-lg border border-red-900/40 bg-gradient-to-br from-red-950/30 to-zinc-950 p-5" data-testid="stat-custo" title="Custos variaveis das linhas (soma do custo da oferta de cada linha marcada)">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm"><Wallet className="w-4 h-4 text-red-400" />Custos</div>
-          <div className="mt-1.5 text-2xl font-bold text-red-400">{brl(filteredResumo.custo)}</div>
-          <div className="text-[10px] text-zinc-500 mt-0.5">Planilha (variavel)</div>
-        </div>
-        <div className="rounded-lg border border-orange-900/40 bg-gradient-to-br from-orange-950/30 to-zinc-950 p-5" data-testid="stat-custo-total" title="Custos da planilha + Custos Fixos do Painel (VPS, dominio, Asaas, etc)">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm"><Wallet className="w-4 h-4 text-orange-400" />Custo Total</div>
-          <div className="mt-1.5 text-2xl font-bold text-orange-400">{brl(filteredResumo.custoTotal)}</div>
-          <div className="text-[10px] text-zinc-500 mt-0.5">+ {brl(filteredResumo.custoFixo)} fixos</div>
-        </div>
-        <div className="rounded-lg border border-blue-900/40 bg-gradient-to-br from-blue-950/30 to-zinc-950 p-5" data-testid="stat-lucro">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm"><TrendingUp className="w-4 h-4 text-blue-400" />Lucro</div>
-          <div className="mt-1.5 text-2xl font-bold text-blue-400">{brl(filteredResumo.lucro)}</div>
-        </div>
-        <div className="rounded-lg border border-violet-900/40 bg-gradient-to-br from-violet-950/30 to-zinc-950 p-5" data-testid="stat-margem">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm"><Percent className="w-4 h-4 text-violet-400" />Margem</div>
-          <div className="mt-1.5 text-2xl font-bold text-violet-400">{filteredResumo.margem.toFixed(1)}%</div>
-        </div>
+        <StatCard icon={DollarSign} label="Receita" value={brl(filteredResumo.receita)} color="emerald" testId="stat-receita" />
+        <StatCard icon={Wallet} label="Custos" value={brl(filteredResumo.custo)} color="red" testId="stat-custo" sub="Planilha (variavel)" title="Custos variaveis das linhas (soma do custo da oferta de cada linha marcada)" />
+        <StatCard icon={Wallet} label="Custo Total" value={brl(filteredResumo.custoTotal)} color="orange" testId="stat-custo-total" sub={`+ ${brl(filteredResumo.custoFixo)} fixos`} title="Custos da planilha + Custos Fixos do Painel (VPS, dominio, Asaas, etc)" />
+        <StatCard icon={TrendingUp} label="Lucro" value={brl(filteredResumo.lucro)} color="blue" testId="stat-lucro" />
+        <StatCard icon={Percent} label="Margem" value={`${filteredResumo.margem.toFixed(1)}%`} color="violet" testId="stat-margem" />
       </div>
 
       <div className="flex items-center justify-between text-sm text-zinc-400 px-1 gap-3 flex-wrap">

@@ -3,7 +3,8 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { DollarSign, Save, TrendingUp, Zap, RefreshCw, Wand2, Plus, Trash2, Package, Layers, Building2 } from 'lucide-react';
+import { DollarSign, Save, TrendingUp, Zap, RefreshCw, Wand2, Plus, Trash2, Package, Layers, Building2, Wallet, Percent } from 'lucide-react';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -177,27 +178,18 @@ export default function Custos() {
 
       {/* Indicadores: 5 cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="rounded-sm border border-zinc-800 bg-zinc-950 p-4" data-testid="total-receita">
-          <div className="text-xs text-zinc-400">Receita mensal</div>
-          <div className="mt-1 text-xl font-bold text-emerald-400">{brl(totais.receita)}</div>
-        </div>
-        <div className="rounded-sm border border-zinc-800 bg-zinc-950 p-4" data-testid="total-custo-variavel">
-          <div className="text-xs text-zinc-400">Custo Variavel (linhas)</div>
-          <div className="mt-1 text-xl font-bold text-orange-400">{brl(totais.custoVariavel)}</div>
-        </div>
-        <div className="rounded-sm border border-zinc-800 bg-zinc-950 p-4" data-testid="total-custo-fixo">
-          <div className="text-xs text-zinc-400">Custo Fixo (painel)</div>
-          <div className="mt-1 text-xl font-bold text-red-400">{brl(totais.custoFixo)}</div>
-        </div>
-        <div className="rounded-sm border border-zinc-800 bg-zinc-950 p-4" data-testid="total-custo">
-          <div className="text-xs text-zinc-400">Custo Total</div>
-          <div className="mt-1 text-xl font-bold text-red-500">{brl(totais.custoTotal)}</div>
-        </div>
-        <div className="rounded-sm border border-zinc-800 bg-zinc-950 p-4" data-testid="total-lucro">
-          <div className="text-xs text-zinc-400">Lucro Liquido Total</div>
-          <div className={`mt-1 text-xl font-bold ${totais.lucro >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{brl(totais.lucro)}</div>
-          <div className="text-xs text-zinc-500 mt-0.5">Margem: <span className={totais.margem >= 30 ? 'text-emerald-400' : totais.margem >= 10 ? 'text-amber-400' : 'text-red-400'}>{totais.margem.toFixed(1)}%</span></div>
-        </div>
+        <StatCard icon={DollarSign} label="Receita mensal" value={brl(totais.receita)} color="emerald" testId="total-receita" />
+        <StatCard icon={Wallet} label="Custo Variavel" value={brl(totais.custoVariavel)} color="orange" testId="total-custo-variavel" sub="Linhas (oferta)" />
+        <StatCard icon={Building2} label="Custo Fixo" value={brl(totais.custoFixo)} color="red" testId="total-custo-fixo" sub="Painel (VPS, Asaas...)" />
+        <StatCard icon={Wallet} label="Custo Total" value={brl(totais.custoTotal)} color="red" testId="total-custo" sub="Variavel + Fixo" />
+        <StatCard
+          icon={TrendingUp}
+          label="Lucro Liquido"
+          value={brl(totais.lucro)}
+          color={totais.lucro >= 0 ? 'emerald' : 'red'}
+          testId="total-lucro"
+          sub={`Margem: ${totais.margem.toFixed(1)}%`}
+        />
       </div>
 
       {/* Automacoes */}

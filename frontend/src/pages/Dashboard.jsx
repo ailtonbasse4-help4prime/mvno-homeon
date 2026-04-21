@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { safeObject } from '../lib/api';
 import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock, Wifi, WifiOff } from 'lucide-react';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -46,21 +47,15 @@ export function Dashboard() {
     );
   }
 
-  const StatCard = ({ icon: Icon, label, value, subValue, color = 'blue' }) => (
-    <div className="stat-card animate-fade-in" data-testid={`stat-${label.toLowerCase().replace(/\s/g, '-')}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="stat-value">{value}</p>
-          <p className="stat-label">{label}</p>
-          {subValue && (
-            <p className="text-xs text-zinc-400 mt-1">{subValue}</p>
-          )}
-        </div>
-        <div className={`w-10 h-10 rounded-sm bg-${color}-500/10 flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 text-${color}-500`} />
-        </div>
-      </div>
-    </div>
+  const DashStatCard = ({ icon, label, value, subValue, color = 'blue' }) => (
+    <StatCard
+      icon={icon}
+      label={label}
+      value={value}
+      sub={subValue}
+      color={color}
+      testId={`stat-${label.toLowerCase().replace(/\s/g, '-')}`}
+    />
   );
 
   return (
@@ -91,34 +86,34 @@ export function Dashboard() {
 
       {/* Main Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-        <StatCard
+        <DashStatCard
           icon={Users}
           label="Total de Clientes"
           value={stats?.clientes?.total || 0}
           subValue={`${stats?.clientes?.ativos || 0} ativos | ${stats?.clientes?.bloqueados || 0} bloqueados`}
           color="blue"
         />
-        <StatCard
+        <DashStatCard
           icon={CreditCard}
           label="Total de Chips"
           value={stats?.chips?.total || 0}
-          subValue={`${stats?.chips?.disponiveis || 0} disponíveis`}
+          subValue={`${stats?.chips?.disponiveis || 0} disponiveis`}
           color="emerald"
         />
-        <StatCard
+        <DashStatCard
           icon={Phone}
           label="Linhas Ativas"
           value={stats?.linhas?.ativas || 0}
           subValue={`${stats?.linhas?.total || 0} total | ${stats?.linhas?.bloqueadas || 0} bloqueadas`}
           color="purple"
         />
-        <StatCard
+        <DashStatCard
           icon={Package}
           label="Planos"
           value={stats?.planos?.total || 0}
           color="amber"
         />
-        <StatCard
+        <DashStatCard
           icon={Tag}
           label="Ofertas Ativas"
           value={stats?.ofertas?.ativas || 0}

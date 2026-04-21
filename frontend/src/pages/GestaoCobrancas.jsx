@@ -16,6 +16,7 @@ import {
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
 import { SearchableSelect } from '../components/SearchableSelect';
+import { StatCard } from '../components/StatCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -578,26 +579,10 @@ export function GestaoCobrancas() {
 
       {/* Cards Resumo */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
-          <DollarSign className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-          <div className="text-lg font-bold text-emerald-400">R$ {(fin.receita_total || 0).toFixed(2)}</div>
-          <div className="text-xs text-zinc-400">Receita</div>
-        </CardContent></Card>
-        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
-          <Clock className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
-          <div className="text-lg font-bold text-yellow-400">R$ {(fin.pendente_total || 0).toFixed(2)}</div>
-          <div className="text-xs text-zinc-400">Pendente</div>
-        </CardContent></Card>
-        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
-          <AlertCircle className="w-5 h-5 text-red-400 mx-auto mb-1" />
-          <div className="text-lg font-bold text-red-400">R$ {(fin.vencido_total || 0).toFixed(2)}</div>
-          <div className="text-xs text-zinc-400">Vencido</div>
-        </CardContent></Card>
-        <Card className="bg-zinc-900 border-zinc-500/60"><CardContent className="p-4 text-center">
-          <FileText className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-          <div className="text-lg font-bold">{cobs.total || 0}</div>
-          <div className="text-xs text-zinc-400">{cobs.pagas || 0} pagas | {cobs.pendentes || 0} pendentes</div>
-        </CardContent></Card>
+        <StatCard icon={DollarSign} label="Receita" value={`R$ ${(fin.receita_total || 0).toFixed(2)}`} color="emerald" testId="stat-receita" />
+        <StatCard icon={Clock} label="Pendente" value={`R$ ${(fin.pendente_total || 0).toFixed(2)}`} color="yellow" testId="stat-pendente" />
+        <StatCard icon={AlertCircle} label="Vencido" value={`R$ ${(fin.vencido_total || 0).toFixed(2)}`} color="red" testId="stat-vencido" />
+        <StatCard icon={FileText} label={`${cobs.total || 0} cobrancas`} value={`${cobs.pagas || 0} pagas`} color="blue" sub={`${cobs.pendentes || 0} pendentes`} testId="stat-cobrancas" />
       </div>
 
       {/* Filtros */}
