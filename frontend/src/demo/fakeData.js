@@ -140,7 +140,18 @@ export function getDemoData() {
     }
   }
 
+  // Custos fixos
+  const custosFixos = [
+    { id: 'cf1', nome: 'VPS (Linode 8GB)', valor: 180.00, ativo: true },
+    { id: 'cf2', nome: 'Dominio .com.br', valor: 40.00, ativo: true },
+    { id: 'cf3', nome: 'Taxa Asaas mensal', valor: 49.90, ativo: true },
+    { id: 'cf4', nome: 'Email Marketing', valor: 80.00, ativo: true },
+    { id: 'cf5', nome: 'Painel Ta', valor: 395.00, ativo: true },
+    { id: 'cf6', nome: 'Painel Help4prime', valor: 490.00, ativo: true },
+  ];
+
   // Resumo Planilha
+  const custoFixoTotal = custosFixos.filter(f => f.ativo).reduce((s,f) => s + f.valor, 0);
   const resumo = {
     total_linhas: linhas.length,
     ativas: linhas.filter(l => l.status_linha === 'ativo').length,
@@ -148,7 +159,7 @@ export function getDemoData() {
     canceladas: linhas.filter(l => l.status_linha === 'cancelado').length,
     receita: +linhas.filter(l => l.incluir_lucro).reduce((s,l) => s + l.valor_liquido, 0).toFixed(2),
     custo: +linhas.filter(l => l.incluir_custo).reduce((s,l) => s + l.custo, 0).toFixed(2),
-    custo_fixo: 350.0, // VPS + dominio + Asaas + email
+    custo_fixo: +custoFixoTotal.toFixed(2),
   };
   resumo.custo_total = +(resumo.custo + resumo.custo_fixo).toFixed(2);
   resumo.lucro = +(resumo.receita - resumo.custo).toFixed(2);
@@ -184,14 +195,6 @@ export function getDemoData() {
       lucro: +(receita - custoTotal).toFixed(2),
     };
   });
-
-  // Custos fixos
-  const custosFixos = [
-    { id: 'cf1', nome: 'VPS (Linode 8GB)', valor: 180.00, ativo: true },
-    { id: 'cf2', nome: 'Dominio .com.br', valor: 40.00, ativo: true },
-    { id: 'cf3', nome: 'Taxa Asaas mensal', valor: 49.90, ativo: true },
-    { id: 'cf4', nome: 'Email Marketing', valor: 80.00, ativo: true },
-  ];
 
   CACHE = {
     clientes, linhas, cobrancas, resumo, resumoCobrancas,
