@@ -30,7 +30,14 @@ export default function DemoCustos() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={DollarSign} label="Receita mensal" value={brl(resumo.receita)} color="emerald" />
         <StatCard icon={Wallet} label="Custo Variável" value={brl(resumo.custo)} color="orange" sub="Repasse Tá (70%)" />
-        <StatCard icon={Building2} label="Custo Fixo" value={brl(totalFixos)} color="red" sub="Painel (VPS, Asaas, etc.)" />
+        <StatCard
+          icon={Building2}
+          label="Custo Fixo"
+          value={brl(totalFixos)}
+          color="red"
+          sub="Passe o mouse para detalhes"
+          details={custosFixos.filter(f => f.ativo).map(f => ({ label: f.nome, value: brl(f.valor) }))}
+        />
         <StatCard icon={Wallet} label="Custo Total" value={brl(resumo.custo_total)} color="red" sub="Variável + Fixo" />
         <StatCard icon={TrendingUp} label="Lucro Líquido" value={brl(resumo.lucro_liquido)} color={resumo.lucro_liquido >= 0 ? 'emerald' : 'red'} sub={`Margem: ${resumo.margem_pct.toFixed(1)}%`} />
       </div>

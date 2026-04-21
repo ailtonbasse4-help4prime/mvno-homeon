@@ -51,7 +51,7 @@ export default function DemoPlanilha() {
         <StatCard icon={DollarSign} label="Receita" value={brl(resumoFiltrado.receita)} color="emerald" />
         <StatCard icon={Wallet} label="Custos" value={brl(resumoFiltrado.custo)} color="red" sub="Planilha (variável)" />
         <StatCard icon={Wallet} label="Custo Total" value={brl(resumoFiltrado.custoTotal)} color="orange" sub={`+ ${brl(resumoFiltrado.custoFixo)} fixos`} />
-        <StatCard icon={TrendingUp} label="Lucro" value={brl(resumoFiltrado.lucro)} color="blue" />
+        <StatCard icon={TrendingUp} label="Lucro Bruto" value={brl(resumoFiltrado.lucro)} color="blue" />
         <StatCard icon={Percent} label="Margem" value={`${resumoFiltrado.margem.toFixed(1)}%`} color="violet" />
       </div>
 

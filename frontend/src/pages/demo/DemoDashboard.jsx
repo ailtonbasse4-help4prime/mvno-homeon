@@ -25,7 +25,7 @@ export default function DemoDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={DollarSign} label="Receita mensal" value={brl(resumo.receita)} color="emerald" />
         <StatCard icon={Wallet} label="Custo Total" value={brl(resumo.custo_total)} color="orange" sub={`+ ${brl(resumo.custo_fixo)} fixos`} />
-        <StatCard icon={TrendingUp} label="Lucro Líquido" value={brl(resumo.lucro_liquido)} color="blue" />
+        <StatCard icon={TrendingUp} label="Lucro Líquido" value={brl(resumo.lucro_liquido)} color="blue" sub="Após custos fixos" />
         <StatCard icon={TrendingUp} label="Margem" value={`${resumo.margem_pct.toFixed(1)}%`} color="violet" />
       </div>
 
