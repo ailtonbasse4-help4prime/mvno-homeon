@@ -43,13 +43,13 @@ export default function DemoPlanilha() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-white">Planilha Operacional</h1>
-        <p className="text-zinc-400 text-sm mt-1">Visao tipo Excel — clique nas celulas para editar inline, marque checkbox pra incluir/excluir do calculo</p>
+        <p className="text-zinc-400 text-sm mt-1">Visão tipo Excel — edição inline por célula, checkbox para incluir/excluir do cálculo</p>
       </div>
 
       {/* Indicadores */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={DollarSign} label="Receita" value={brl(resumoFiltrado.receita)} color="emerald" />
-        <StatCard icon={Wallet} label="Custos" value={brl(resumoFiltrado.custo)} color="red" sub="Planilha (variavel)" />
+        <StatCard icon={Wallet} label="Custos" value={brl(resumoFiltrado.custo)} color="red" sub="Planilha (variável)" />
         <StatCard icon={Wallet} label="Custo Total" value={brl(resumoFiltrado.custoTotal)} color="orange" sub={`+ ${brl(resumoFiltrado.custoFixo)} fixos`} />
         <StatCard icon={TrendingUp} label="Lucro" value={brl(resumoFiltrado.lucro)} color="blue" />
         <StatCard icon={Percent} label="Margem" value={`${resumoFiltrado.margem.toFixed(1)}%`} color="violet" />
@@ -60,12 +60,12 @@ export default function DemoPlanilha() {
         <div className="relative flex-1 min-w-[240px]">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input value={busca} onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar por nome, numero ou plano..."
+            placeholder="Buscar por nome, número ou plano..."
             className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none" />
         </div>
         <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
           className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none">
-          <option value="todos">Todos status</option>
+          <option value="todos">Todos os status</option>
           <option value="ativo">Ativas</option>
           <option value="bloqueado">Bloqueadas</option>
           <option value="pendente">Pendentes</option>
@@ -80,14 +80,14 @@ export default function DemoPlanilha() {
             <thead className="bg-zinc-950 sticky top-0 z-10">
               <tr className="text-zinc-400 text-left">
                 <th className="px-3 py-3 font-bold uppercase text-xs">Cliente</th>
-                <th className="px-3 py-3 font-bold uppercase text-xs">Numero</th>
+                <th className="px-3 py-3 font-bold uppercase text-xs">Número</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs">Plano</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs">Canal</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs">Status</th>
-                <th className="px-3 py-3 font-bold uppercase text-xs">Recarga Ta</th>
+                <th className="px-3 py-3 font-bold uppercase text-xs">Recarga Tá</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Valor</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Desc.</th>
-                <th className="px-3 py-3 font-bold uppercase text-xs text-right">V.Liq</th>
+                <th className="px-3 py-3 font-bold uppercase text-xs text-right">V. Líq.</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Custo</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Lucro</th>
               </tr>
@@ -124,7 +124,7 @@ export default function DemoPlanilha() {
       </div>
 
       <p className="text-xs text-zinc-500">
-        💡 No sistema real, todas as celulas sao editaveis inline, voce sincroniza status com a Ta Telecom em 1 clique e exporta tudo pra Excel.
+        💡 No sistema real, todas as células são editáveis inline, você sincroniza o status com a Tá Telecom em 1 clique e exporta tudo para Excel.
       </p>
     </div>
   );

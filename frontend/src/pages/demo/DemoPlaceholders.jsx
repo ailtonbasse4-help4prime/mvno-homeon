@@ -1,19 +1,19 @@
 import DemoComingSoon from './DemoComingSoon';
 
-// Ativacoes - DIFERENCIAL!
+// Ativações - DIFERENCIAL!
 export const DemoAtivacoes = () => (
   <DemoComingSoon
-    title="Ativacoes"
-    description="Historico e gerenciamento de ativacoes de linhas"
+    title="Ativações"
+    description="Histórico e gerenciamento de ativações de linhas"
     highlight={{
-      title: 'Ativacao 100% automatica via API Ta Telecom',
-      description: 'Ao cadastrar uma nova linha, o sistema chama a API da Ta Telecom, ativa o chip instantaneamente, cria o cliente no Asaas e emite a primeira cobranca — tudo em menos de 10 segundos, sem intervencao humana.',
+      title: 'Ativação 100% automática via API Tá Telecom',
+      description: 'Ao cadastrar uma nova linha, o sistema chama a API da Tá Telecom, ativa o chip instantaneamente, cria o cliente no Asaas e emite a primeira cobrança — tudo em menos de 10 segundos, sem intervenção humana.',
     }}
     features={[
-      { title: 'Ativacao instantanea', desc: 'Novo chip ativo em segundos apos a confirmacao do pagamento' },
-      { title: 'Retry automatico', desc: 'Se a API da Ta falhar, o sistema tenta novamente ate 5 vezes com backoff progressivo' },
-      { title: 'Troca de oferta automatizada', desc: 'Cliente muda de plano pelo portal e o sistema ajusta na Ta Telecom e no Asaas' },
-      { title: 'Portabilidade integrada', desc: 'Inicia processo de portabilidade direto do sistema com a Ta Telecom' },
+      { title: 'Ativação instantânea', desc: 'Novo chip ativo em segundos após a confirmação do pagamento' },
+      { title: 'Retry automático', desc: 'Se a API da Tá falhar, o sistema tenta novamente até 5 vezes com backoff progressivo' },
+      { title: 'Troca de oferta automatizada', desc: 'Cliente muda de plano pelo portal e o sistema ajusta na Tá Telecom e no Asaas' },
+      { title: 'Portabilidade integrada', desc: 'Inicia o processo de portabilidade direto do sistema com a Tá Telecom' },
     ]}
   />
 );
@@ -24,16 +24,16 @@ export const DemoLinhas = () => (
     title="Linhas"
     description="Gerenciamento completo das linhas ativas"
     highlight={{
-      title: 'Bloqueio e desbloqueio automatico por inadimplencia',
-      description: 'Cliente nao pagou o boleto? O sistema bloqueia a linha automaticamente via API da Ta Telecom na data de vencimento. Pagou o atrasado? Desbloqueia na hora. Zero gestao manual.',
+      title: 'Bloqueio e desbloqueio automático por inadimplência',
+      description: 'Cliente não pagou o boleto? O sistema bloqueia a linha automaticamente via API da Tá Telecom na data de vencimento. Pagou o atrasado? Desbloqueia na hora. Zero gestão manual.',
     }}
     features={[
-      { title: 'Bloqueio automatico', desc: 'Linha bloqueada na Ta Telecom assim que o Asaas confirma vencimento' },
-      { title: 'Desbloqueio instantaneo', desc: 'Pagamento confirmado = linha liberada automaticamente' },
-      { title: 'Sincronizacao em lote', desc: 'Sincroniza status de todas linhas com a Ta em 1 clique' },
-      { title: 'Historico completo', desc: 'Log de cada bloqueio/desbloqueio, recarga e mudanca de status' },
-      { title: 'Transferencia entre clientes', desc: 'Muda a linha de um cliente para outro sem trocar o chip' },
-      { title: 'Alertas automaticos', desc: 'WhatsApp/Email para cliente antes do bloqueio' },
+      { title: 'Bloqueio automático', desc: 'Linha bloqueada na Tá Telecom assim que o Asaas confirma o vencimento' },
+      { title: 'Desbloqueio instantâneo', desc: 'Pagamento confirmado = linha liberada automaticamente' },
+      { title: 'Sincronização em lote', desc: 'Sincroniza o status de todas as linhas com a Tá em 1 clique' },
+      { title: 'Histórico completo', desc: 'Log de cada bloqueio/desbloqueio, recarga e mudança de status' },
+      { title: 'Transferência entre clientes', desc: 'Muda a linha de um cliente para outro sem trocar o chip' },
+      { title: 'Alertas automáticos', desc: 'WhatsApp e e-mail para o cliente antes do bloqueio' },
     ]}
   />
 );
@@ -42,12 +42,12 @@ export const DemoLinhas = () => (
 export const DemoClientes = () => (
   <DemoComingSoon
     title="Clientes"
-    description="Cadastro e gestao de clientes"
+    description="Cadastro e gestão de clientes"
     features={[
-      { title: 'Preenchimento automatico por CPF', desc: 'Integracao CPFHub puxa nome, endereco e dados do cliente na hora' },
-      { title: 'Sincronizacao Asaas', desc: 'Cliente criado no sistema ja vai pro Asaas automaticamente' },
-      { title: 'Historico completo', desc: 'Linhas, cobrancas, assinaturas e observacoes em um so lugar' },
-      { title: 'Importacao em lote', desc: 'Suba uma planilha Excel e importe 500 clientes em segundos' },
+      { title: 'Preenchimento automático por CPF', desc: 'Integração com CPFHub puxa nome, endereço e dados do cliente na hora' },
+      { title: 'Sincronização com Asaas', desc: 'Cliente criado no sistema já vai para o Asaas automaticamente' },
+      { title: 'Histórico completo', desc: 'Linhas, cobranças, assinaturas e observações em um só lugar' },
+      { title: 'Importação em lote', desc: 'Envie uma planilha Excel e importe 500 clientes em segundos' },
     ]}
   />
 );
@@ -58,10 +58,10 @@ export const DemoChips = () => (
     title="Chips em Estoque"
     description="Controle de estoque de chips"
     features={[
-      { title: 'Cadastro por codigo de barras', desc: 'Leia o ICCID direto da caixa do chip com a camera' },
-      { title: 'QR Code embutido', desc: 'Cada chip tem QR Code para ativacao self-service pelo cliente' },
-      { title: 'Status em tempo real', desc: 'Disponivel, Reservado, Ativado, Bloqueado — sempre sincronizado' },
-      { title: 'Alertas de estoque baixo', desc: 'Notificacao quando restam menos de N chips disponiveis' },
+      { title: 'Cadastro por código de barras', desc: 'Leia o ICCID direto da caixa do chip com a câmera do celular' },
+      { title: 'QR Code embutido', desc: 'Cada chip possui QR Code próprio para ativação self-service pelo cliente' },
+      { title: 'Status em tempo real', desc: 'Disponível, Reservado, Ativado ou Bloqueado — sempre sincronizado' },
+      { title: 'Alertas de estoque baixo', desc: 'Notificação quando restam menos chips disponíveis' },
     ]}
   />
 );
@@ -69,13 +69,13 @@ export const DemoChips = () => (
 // Carteira
 export const DemoCarteira = () => (
   <DemoComingSoon
-    title="Carteira Movel"
-    description="Gestao financeira exclusiva para planos moveis"
+    title="Carteira Móvel"
+    description="Gestão financeira exclusiva para planos móveis"
     features={[
-      { title: 'Cobrancas recorrentes Asaas', desc: 'Boleto, PIX e cartao de credito automatico' },
-      { title: 'Cartao recorrente', desc: 'Cliente cadastra cartao 1 vez no Asaas, cobra automatico todo mes' },
-      { title: 'Notificacoes por email', desc: 'Cliente recebe lembrete antes do vencimento' },
-      { title: 'Relatorios exportaveis', desc: 'Excel e CSV com filtros customizados' },
+      { title: 'Cobranças recorrentes Asaas', desc: 'Boleto, PIX e cartão de crédito automático' },
+      { title: 'Cartão recorrente', desc: 'Cliente cadastra o cartão uma vez no Asaas e a cobrança é automática todo mês' },
+      { title: 'Notificações por e-mail', desc: 'Cliente recebe lembrete antes do vencimento' },
+      { title: 'Relatórios exportáveis', desc: 'Excel e CSV com filtros customizados' },
     ]}
   />
 );
@@ -86,10 +86,10 @@ export const DemoAssinaturas = () => (
     title="Assinaturas"
     description="Assinaturas recorrentes no Asaas"
     features={[
-      { title: 'Mensal, trimestral, anual', desc: 'Qualquer ciclo de cobranca disponivel' },
-      { title: 'Mix boleto + PIX + cartao', desc: 'Cliente escolhe a forma de pagamento' },
-      { title: 'Upgrade/downgrade de plano', desc: 'Muda oferta sem cancelar a assinatura' },
-      { title: 'Pausar/retomar', desc: 'Cliente em viagem? Pausa a assinatura sem cancelar' },
+      { title: 'Mensal, trimestral ou anual', desc: 'Qualquer ciclo de cobrança disponível' },
+      { title: 'Boleto, PIX e cartão', desc: 'Cliente escolhe a forma de pagamento' },
+      { title: 'Upgrade e downgrade de plano', desc: 'Muda a oferta sem cancelar a assinatura' },
+      { title: 'Pausar e retomar', desc: 'Cliente em viagem? Pausa a assinatura sem cancelar' },
     ]}
   />
 );
@@ -98,11 +98,11 @@ export const DemoAssinaturas = () => (
 export const DemoPlanos = () => (
   <DemoComingSoon
     title="Planos"
-    description="Catalogo de planos disponiveis"
+    description="Catálogo de planos disponíveis"
     features={[
-      { title: 'Integracao Ta Telecom', desc: 'Planos puxados automaticamente da API com codigo, nome e franquia' },
-      { title: 'Custo configuravel', desc: 'Voce define o custo do plano e o sistema calcula margem em tempo real' },
-      { title: 'Multiplas ofertas por plano', desc: '1 plano pode ter varias ofertas (diferentes precos ou combos)' },
+      { title: 'Integração com Tá Telecom', desc: 'Planos importados automaticamente da API com código, nome e franquia' },
+      { title: 'Custo configurável', desc: 'Você define o custo do plano e o sistema calcula a margem em tempo real' },
+      { title: 'Múltiplas ofertas por plano', desc: 'Um plano pode ter várias ofertas (diferentes preços ou combos)' },
     ]}
   />
 );
@@ -111,11 +111,11 @@ export const DemoPlanos = () => (
 export const DemoOfertas = () => (
   <DemoComingSoon
     title="Ofertas"
-    description="Ofertas comerciais (combinacoes de plano + preco)"
+    description="Ofertas comerciais (combinações de plano e preço)"
     features={[
-      { title: 'Ofertas ilimitadas por plano', desc: 'Promocoes, descontos, combos — tudo configuravel' },
-      { title: 'Margem em tempo real', desc: 'Sistema mostra lucro e margem de cada oferta automaticamente' },
-      { title: 'Ativar/desativar sem deletar', desc: 'Mantem historico de ofertas antigas para relatorios' },
+      { title: 'Ofertas ilimitadas por plano', desc: 'Promoções, descontos, combos — tudo configurável' },
+      { title: 'Margem em tempo real', desc: 'O sistema mostra o lucro e a margem de cada oferta automaticamente' },
+      { title: 'Ativar e desativar sem apagar', desc: 'Mantém o histórico de ofertas antigas para relatórios' },
     ]}
   />
 );
@@ -126,10 +126,10 @@ export const DemoRevendedores = () => (
     title="Rede de Revendedores"
     description="Gerenciamento de revendedores parceiros"
     features={[
-      { title: 'Portal exclusivo por revendedor', desc: 'Cada revendedor tem login proprio e ve so seus clientes' },
-      { title: 'Comissoes automaticas', desc: 'Sistema calcula comissao por ativacao ou mensalidade' },
-      { title: 'Ranking de performance', desc: 'Top revendedores, metas e premiacoes' },
-      { title: 'Link de divulgacao personalizado', desc: 'Cada revendedor tem um link proprio para compartilhar' },
+      { title: 'Portal exclusivo por revendedor', desc: 'Cada revendedor tem seu login e visualiza apenas seus clientes' },
+      { title: 'Comissões automáticas', desc: 'O sistema calcula a comissão por ativação ou mensalidade' },
+      { title: 'Ranking de performance', desc: 'Melhores revendedores, metas e premiações' },
+      { title: 'Link de divulgação personalizado', desc: 'Cada revendedor tem um link próprio para compartilhar' },
     ]}
   />
 );
@@ -137,19 +137,19 @@ export const DemoRevendedores = () => (
 // Self-Service - DIFERENCIAL!
 export const DemoSelfService = () => (
   <DemoComingSoon
-    title="Ativacao Self-Service"
+    title="Ativação Self-Service"
     description="Cliente ativa o chip sozinho em minutos"
     highlight={{
-      title: 'Ativacao por QR Code — sem envolvimento manual',
-      description: 'O cliente le o QR Code do chip, preenche CPF (sistema puxa os dados automaticamente via CPFHub), escolhe o plano, paga via PIX/cartao e o chip e ativado instantaneamente na Ta Telecom. Voce acompanha tudo em tempo real, mas nao precisa fazer NADA.',
+      title: 'Ativação por QR Code — sem envolvimento manual',
+      description: 'O cliente lê o QR Code do chip, preenche o CPF (o sistema puxa os dados automaticamente via CPFHub), escolhe o plano, paga via PIX ou cartão e o chip é ativado instantaneamente na Tá Telecom. Você acompanha tudo em tempo real, sem precisar intervir.',
     }}
     features={[
       { title: 'QR Code em cada chip', desc: 'Gerado automaticamente ao cadastrar o chip no sistema' },
-      { title: 'Preenchimento CPF automatico', desc: 'Cliente digita so o CPF, sistema busca nome/endereco' },
-      { title: 'Pagamento via PIX', desc: 'Aprovacao instantanea, chip ativa na hora' },
-      { title: 'Retry inteligente', desc: 'Se a Ta falhar, o sistema reprocessa ate 5 vezes sem intervencao' },
-      { title: 'Acompanhamento em tempo real', desc: 'Voce ve cada ativacao acontecendo no painel admin' },
-      { title: 'Mensagens personalizadas', desc: 'Email/WhatsApp com instrucoes apos ativacao' },
+      { title: 'Preenchimento de CPF automático', desc: 'Cliente digita apenas o CPF e o sistema busca nome e endereço' },
+      { title: 'Pagamento via PIX', desc: 'Aprovação instantânea — o chip ativa na hora' },
+      { title: 'Retry inteligente', desc: 'Se a Tá falhar, o sistema reprocessa até 5 vezes sem intervenção' },
+      { title: 'Acompanhamento em tempo real', desc: 'Você vê cada ativação acontecendo no painel administrativo' },
+      { title: 'Mensagens personalizadas', desc: 'E-mail e WhatsApp com instruções após a ativação' },
     ]}
   />
 );
@@ -157,13 +157,13 @@ export const DemoSelfService = () => (
 // Divulgacao
 export const DemoDivulgacao = () => (
   <DemoComingSoon
-    title="Divulgacao"
-    description="Landing page publica para captar novos clientes"
+    title="Divulgação"
+    description="Landing page pública para captar novos clientes"
     features={[
-      { title: 'Landing customizavel', desc: 'Mostra seus planos e valores com sua marca' },
+      { title: 'Landing personalizável', desc: 'Mostra seus planos e valores com a sua marca' },
       { title: 'Link curto para divulgar', desc: 'Compartilhe no Instagram, WhatsApp ou Google Ads' },
-      { title: 'Metricas de visita', desc: 'Veja quantas pessoas acessaram e quantas converteram' },
-      { title: 'Formulario de interesse', desc: 'Cliente deixa contato e voce recebe no WhatsApp' },
+      { title: 'Métricas de visita', desc: 'Veja quantas pessoas acessaram e quantas converteram' },
+      { title: 'Formulário de interesse', desc: 'Cliente deixa o contato e você recebe no WhatsApp' },
     ]}
   />
 );
@@ -171,13 +171,13 @@ export const DemoDivulgacao = () => (
 // Usuarios
 export const DemoUsuarios = () => (
   <DemoComingSoon
-    title="Usuarios do Sistema"
+    title="Usuários do Sistema"
     description="Controle de acesso por perfis"
     features={[
-      { title: 'Multi-usuario', desc: 'Admin, Atendente, Financeiro — cada um com permissoes especificas' },
+      { title: 'Multi-usuário', desc: 'Admin, Atendente, Financeiro — cada um com permissões específicas' },
       { title: 'Controle granular', desc: 'Limita o que cada atendente pode ver e fazer' },
-      { title: 'Confirmacao por senha', desc: 'Acoes criticas exigem confirmacao do admin' },
-      { title: 'Log de auditoria', desc: 'Cada acao fica registrada com usuario, IP e horario' },
+      { title: 'Confirmação por senha', desc: 'Ações críticas exigem confirmação do administrador' },
+      { title: 'Log de auditoria', desc: 'Cada ação fica registrada com usuário, IP e horário' },
     ]}
   />
 );
@@ -185,13 +185,13 @@ export const DemoUsuarios = () => (
 // Logs
 export const DemoLogs = () => (
   <DemoComingSoon
-    title="Logs & Auditoria"
-    description="Rastreabilidade completa de todas as acoes"
+    title="Logs e Auditoria"
+    description="Rastreabilidade completa de todas as ações"
     features={[
-      { title: 'Log de cada chamada API', desc: 'Requisicao + resposta da Ta Telecom e Asaas registradas' },
-      { title: 'Historico de ativacoes', desc: 'Quem ativou, quando e com quais dados' },
-      { title: 'Detec de erros', desc: 'Alertas em tempo real para falhas de integracao' },
-      { title: 'Exportacao para LGPD', desc: 'Relatorios de acesso a dados pessoais exportaveis' },
+      { title: 'Log de cada chamada à API', desc: 'Requisição e resposta da Tá Telecom e do Asaas ficam registradas' },
+      { title: 'Histórico de ativações', desc: 'Quem ativou, quando e com quais dados' },
+      { title: 'Detecção de erros', desc: 'Alertas em tempo real para falhas de integração' },
+      { title: 'Exportação para LGPD', desc: 'Relatórios de acesso a dados pessoais exportáveis' },
     ]}
   />
 );

@@ -9,7 +9,6 @@ const statusBadge = {
   OVERDUE: 'bg-red-500/15 text-red-400 border-red-500/40',
 };
 const statusLabel = { RECEIVED: 'Recebido', PENDING: 'Pendente', OVERDUE: 'Vencido' };
-
 const formatDateBR = (iso) => {
   if (!iso) return '-';
   const [y, m, d] = iso.split('-');
@@ -35,16 +34,16 @@ export default function DemoCobrancas() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Gestao de Cobrancas</h1>
-        <p className="text-zinc-400 text-sm mt-1">Cobrancas integradas com Asaas — boleto, PIX e cartao recorrente</p>
+        <h1 className="text-3xl font-bold text-white">Gestão de Cobranças</h1>
+        <p className="text-zinc-400 text-sm mt-1">Cobranças integradas com Asaas — boleto, PIX e cartão recorrente</p>
       </div>
 
       {/* Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard icon={DollarSign} label="Receita" value={brl(resumoCobrancas.financeiro.receita_total)} color="emerald" />
-        <StatCard icon={Clock} label="Pendente" value={brl(resumoCobrancas.financeiro.pendente_total)} color="amber" sub={`${resumoCobrancas.cobrancas.pendentes} cobrancas`} />
-        <StatCard icon={AlertCircle} label="Vencido" value={brl(resumoCobrancas.financeiro.vencido_total)} color="red" sub={`${resumoCobrancas.cobrancas.vencidas} cobrancas`} />
-        <StatCard icon={FileText} label={`${resumoCobrancas.cobrancas.total} cobrancas`} value={`${resumoCobrancas.cobrancas.pagas} pagas`} color="blue" sub={`${resumoCobrancas.cobrancas.pendentes} pendentes`} />
+        <StatCard icon={Clock} label="Pendente" value={brl(resumoCobrancas.financeiro.pendente_total)} color="amber" sub={`${resumoCobrancas.cobrancas.pendentes} cobranças`} />
+        <StatCard icon={AlertCircle} label="Vencido" value={brl(resumoCobrancas.financeiro.vencido_total)} color="red" sub={`${resumoCobrancas.cobrancas.vencidas} cobranças`} />
+        <StatCard icon={FileText} label={`${resumoCobrancas.cobrancas.total} cobranças`} value={`${resumoCobrancas.cobrancas.pagas} pagas`} color="blue" sub={`${resumoCobrancas.cobrancas.pendentes} pendentes`} />
       </div>
 
       {/* Filtros */}
@@ -77,8 +76,7 @@ export default function DemoCobrancas() {
                 <th className="px-3 py-3 font-bold uppercase text-xs">Vencimento</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs">Status</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs">ID Asaas</th>
-              </tr>
-            </thead>
+              </tr>            </thead>
             <tbody>
               {cobsFiltradas.map((c, idx) => (
                 <tr key={c.id} className={`border-t border-zinc-800 hover:bg-zinc-800/50 ${idx % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'}`}>
@@ -99,7 +97,7 @@ export default function DemoCobrancas() {
           </table>
         </div>
         <div className="bg-zinc-950 px-4 py-2 text-xs text-zinc-500 border-t border-zinc-800">
-          Exibindo {cobsFiltradas.length} de {data.cobrancas.length} cobrancas
+          Exibindo {cobsFiltradas.length} de {data.cobrancas.length} cobranças
         </div>
       </div>
     </div>

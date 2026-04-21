@@ -11,27 +11,27 @@ export default function DemoDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <p className="text-zinc-400 text-sm mt-1">Visao geral da operacao — 150 linhas ficticias com valores reais da Ta</p>
+        <p className="text-zinc-400 text-sm mt-1">Visão geral da operação — 150 linhas fictícias com valores reais da Tá</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={Users} label="Clientes" value={clientes.length} color="blue" sub={`${clientes.filter(c=>c.ativo).length} ativos`} />
         <StatCard icon={Phone} label="Linhas Ativas" value={resumo.ativas} color="emerald" sub={`${resumo.total_linhas} total`} />
-        <StatCard icon={CreditCard} label="Bloqueadas" value={resumo.suspensas} color="red" sub="Vencimento/inadimp." />
-        <StatCard icon={Package} label="Planos ativos" value={data.planos.length} color="violet" sub="Tabela Ta Telecom" />
-        <StatCard icon={Zap} label="Ativacoes mes" value={18} color="amber" sub="Self-service QR Code" />
+        <StatCard icon={CreditCard} label="Bloqueadas" value={resumo.suspensas} color="red" sub="Vencimento / inadimp." />
+        <StatCard icon={Package} label="Planos ativos" value={data.planos.length} color="violet" sub="Tabela Tá Telecom" />
+        <StatCard icon={Zap} label="Ativações no mês" value={18} color="amber" sub="Self-Service QR Code" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={DollarSign} label="Receita mensal" value={brl(resumo.receita)} color="emerald" />
         <StatCard icon={Wallet} label="Custo Total" value={brl(resumo.custo_total)} color="orange" sub={`+ ${brl(resumo.custo_fixo)} fixos`} />
-        <StatCard icon={TrendingUp} label="Lucro Liquido" value={brl(resumo.lucro_liquido)} color="blue" />
+        <StatCard icon={TrendingUp} label="Lucro Líquido" value={brl(resumo.lucro_liquido)} color="blue" />
         <StatCard icon={TrendingUp} label="Margem" value={`${resumo.margem_pct.toFixed(1)}%`} color="violet" />
       </div>
 
       {/* Distribuicao por plano */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-white mb-4">Distribuicao por plano</h3>
+        <h3 className="text-sm font-semibold text-white mb-4">Distribuição por plano</h3>
         <div className="grid grid-cols-3 lg:grid-cols-9 gap-2">
           {data.planos.map(p => {
             const qtd = linhas.filter(l => l.plano_nome === p.nome).length;
@@ -51,16 +51,16 @@ export default function DemoDashboard() {
         <h3 className="text-lg font-bold text-emerald-400 mb-2">Por que o HELP4PRIME MVNO?</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
           <div>
-            <div className="font-semibold text-white">🎯 Ativacao em segundos</div>
-            <p className="text-zinc-400 text-xs mt-1">Cliente le QR Code, paga via PIX e ja tem chip ativado automaticamente via API Ta Telecom.</p>
+            <div className="font-semibold text-white">🎯 Ativação em segundos</div>
+            <p className="text-zinc-400 text-xs mt-1">O cliente lê o QR Code, paga via PIX e o chip é ativado automaticamente pela API da Tá Telecom.</p>
           </div>
           <div>
-            <div className="font-semibold text-white">💸 Zero inadimplencia</div>
-            <p className="text-zinc-400 text-xs mt-1">Cobranca recorrente via Asaas. Boleto, PIX, cartao de credito — tudo integrado.</p>
+            <div className="font-semibold text-white">💸 Zero inadimplência</div>
+            <p className="text-zinc-400 text-xs mt-1">Cobrança recorrente via Asaas. Boleto, PIX e cartão de crédito — tudo integrado.</p>
           </div>
           <div>
-            <div className="font-semibold text-white">📊 Visao financeira real</div>
-            <p className="text-zinc-400 text-xs mt-1">Planilha Operacional mostra Custo, Lucro, Margem por linha. Saiba exatamente o que voce ganha.</p>
+            <div className="font-semibold text-white">📊 Visão financeira real</div>
+            <p className="text-zinc-400 text-xs mt-1">A Planilha Operacional mostra custo, lucro e margem por linha. Você sabe exatamente o que está ganhando.</p>
           </div>
         </div>
       </div>

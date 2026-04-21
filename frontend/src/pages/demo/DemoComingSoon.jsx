@@ -20,8 +20,7 @@ export default function DemoComingSoon({ title, description, features = [], high
           <div className="relative">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold tracking-widest mb-3">
               <Sparkles className="w-3 h-3" /> DIFERENCIAL EXCLUSIVO
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">{highlight.title}</h2>
+            </div>            <h2 className="text-2xl font-bold text-white mb-2">{highlight.title}</h2>
             <p className="text-zinc-300 text-sm max-w-2xl">{highlight.description}</p>
           </div>
         </div>
@@ -53,19 +52,16 @@ export default function DemoComingSoon({ title, description, features = [], high
             <Zap className="w-5 h-5 text-amber-400" />
           </div>
           <div className="flex-1 min-w-[260px]">
-            <h3 className="text-base font-semibold text-white mb-1">Visualizacao indisponivel no modo demo</h3>
+            <h3 className="text-base font-semibold text-white mb-1">Visualização indisponível no modo demo</h3>
             <p className="text-zinc-400 text-sm leading-relaxed">
-              Esta funcionalidade esta 100% implementada e disponivel no sistema real.
+              Esta funcionalidade está 100% implementada e disponível no sistema real.
               No modo demo apresentamos apenas uma amostra resumida.
               <br/><br/>
-              <strong className="text-amber-300">Apos o pre-contrato</strong>, voce recebe uma demonstracao pratica ao vivo com seus proprios dados
-              — assim evitamos desgaste de ambas as partes e focamos em quem realmente quer avancar.
-              <br/><br/>
-              📱 Contato: <a href="https://wa.me/5511915322526" target="_blank" rel="noopener noreferrer" className="text-emerald-400 font-semibold hover:underline">(11) 91532-2526</a>
+              Após o <strong className="text-amber-300">pré-contrato</strong>, você recebe uma demonstração prática ao vivo com seus próprios dados.
             </p>
           </div>
           <a
-            href="https://wa.me/5511915322526?text=Ol%C3%A1!%20Vi%20a%20demo%20do%20HELP4PRIME%20MVNO%20e%20tenho%20interesse%20real%20em%20avan%C3%A7ar%20para%20pre-contrato"
+            href="https://wa.me/5511915322526?text=Ol%C3%A1!%20Vi%20a%20demonstra%C3%A7%C3%A3o%20do%20HELP4PRIME%20MVNO%20e%20gostaria%20de%20conversar%20sobre%20os%20pr%C3%B3ximos%20passos."
             target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-emerald-500/20"
             data-testid="demo-cta-whats"

@@ -40,10 +40,10 @@ export default function DemoLogin() {
       <div className="relative w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mb-4">
-            <Zap className="w-3.5 h-3.5" /> DEMONSTRACAO AO VIVO
+            <Zap className="w-3.5 h-3.5" /> DEMONSTRAÇÃO AO VIVO
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">HELP4PRIME <span className="text-emerald-400">MVNO</span></h1>
-          <p className="text-zinc-400 text-sm">Sistema completo de gestao de operadora movel</p>
+          <p className="text-zinc-400 text-sm">Sistema completo de gestão de operadora móvel</p>
         </div>
 
         <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-2xl p-8 shadow-2xl">
@@ -53,7 +53,7 @@ export default function DemoLogin() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Acesso restrito</h2>
-              <p className="text-xs text-zinc-400">Digite a senha da demonstracao</p>
+              <p className="text-xs text-zinc-400">Digite a senha da demonstração</p>
             </div>
           </div>
 
@@ -63,24 +63,24 @@ export default function DemoLogin() {
               <input
                 type="password" value={pwd} onChange={e => { setPwd(e.target.value); setErr(''); }}
                 className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:border-emerald-500 focus:outline-none transition"
-                placeholder="Digite a senha da demo"
+                placeholder="Digite a senha da demonstração"
                 data-testid="demo-password-input"
                 autoFocus
               />
               {err && <p className="text-red-400 text-xs mt-2">{err}</p>}
             </div>
             <button type="submit" className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20" data-testid="demo-submit-btn">
-              <Play className="w-4 h-4" /> Entrar na Demo
+              <Play className="w-4 h-4" /> Entrar na Demonstração
             </button>
           </form>
 
           <p className="text-xs text-zinc-500 text-center mt-6">
-            Dados 100% ficticios para fins de apresentacao. Nao ha vinculo com sistema em producao.
+            Dados 100% fictícios para fins de apresentação. Não há vínculo com o sistema em produção.
           </p>
         </div>
 
         <div className="text-center mt-6 text-xs text-zinc-600">
-          Quer conhecer mais? <a href="https://wa.me/5511915322526" className="text-emerald-400 hover:underline">Fale com a gente no WhatsApp (11) 91532-2526</a>
+          Quer conhecer mais? <a href="https://wa.me/5511915322526" className="text-emerald-400 hover:underline">Fale com a gente no WhatsApp</a>
         </div>
       </div>
     </div>

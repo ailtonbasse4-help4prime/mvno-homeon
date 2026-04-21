@@ -22,17 +22,17 @@ export default function DemoCustos() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Custos & Lucro</h1>
-        <p className="text-zinc-400 text-sm mt-1">Financeiro consolidado — receita, custos variaveis e fixos, lucro liquido por plano</p>
+        <h1 className="text-3xl font-bold text-white">Custos e Lucro</h1>
+        <p className="text-zinc-400 text-sm mt-1">Financeiro consolidado — receita, custos variáveis e fixos, lucro líquido por plano</p>
       </div>
 
       {/* Cards principais */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon={DollarSign} label="Receita mensal" value={brl(resumo.receita)} color="emerald" />
-        <StatCard icon={Wallet} label="Custo Variavel" value={brl(resumo.custo)} color="orange" sub="Repasse Ta (70%)" />
-        <StatCard icon={Building2} label="Custo Fixo" value={brl(totalFixos)} color="red" sub="Painel (VPS, Asaas...)" />
-        <StatCard icon={Wallet} label="Custo Total" value={brl(resumo.custo_total)} color="red" sub="Variavel + Fixo" />
-        <StatCard icon={TrendingUp} label="Lucro Liquido" value={brl(resumo.lucro_liquido)} color={resumo.lucro_liquido >= 0 ? 'emerald' : 'red'} sub={`Margem: ${resumo.margem_pct.toFixed(1)}%`} />
+        <StatCard icon={Wallet} label="Custo Variável" value={brl(resumo.custo)} color="orange" sub="Repasse Tá (70%)" />
+        <StatCard icon={Building2} label="Custo Fixo" value={brl(totalFixos)} color="red" sub="Painel (VPS, Asaas, etc.)" />
+        <StatCard icon={Wallet} label="Custo Total" value={brl(resumo.custo_total)} color="red" sub="Variável + Fixo" />
+        <StatCard icon={TrendingUp} label="Lucro Líquido" value={brl(resumo.lucro_liquido)} color={resumo.lucro_liquido >= 0 ? 'emerald' : 'red'} sub={`Margem: ${resumo.margem_pct.toFixed(1)}%`} />
       </div>
 
       {/* Box explicativo margem Ta */}
@@ -42,15 +42,15 @@ export default function DemoCustos() {
             <Info className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-sm text-zinc-300">
-            <div className="font-semibold text-white mb-1">Como funciona a margem Ta Telecom</div>
+            <div className="font-semibold text-white mb-1">Como funciona a margem da Tá Telecom</div>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              A Ta Telecom sugere uma <strong className="text-emerald-400">margem de 30% bruto</strong> sobre cada recarga (ela fica com 70%, voce com 30%).
+              A Tá Telecom sugere uma <strong className="text-emerald-400">margem bruta de 30%</strong> sobre cada recarga (ela fica com 70%, você com 30%).
               No exemplo ao lado: <strong className="text-emerald-400">{brl(resumo.receita)}</strong> de receita ×
-              <strong className="text-orange-400"> 70% = {brl(resumo.custo)}</strong> de repasse para Ta,
+              <strong className="text-orange-400"> 70% = {brl(resumo.custo)}</strong> de repasse para a Tá,
               sobrando <strong className="text-blue-400">{brl(resumo.receita - resumo.custo)}</strong> de lucro bruto.
-              Descontando custos fixos (<strong className="text-red-400">{brl(totalFixos)}</strong> em VPS, dominio e Asaas),
-              voce fica com <strong className="text-emerald-400">{brl(resumo.lucro_liquido)}</strong> liquido ({resumo.margem_pct.toFixed(1)}% de margem real).
-              Conforme o numero de linhas cresce, os custos fixos se diluem e a margem real sobe.
+              Descontando os custos fixos (<strong className="text-red-400">{brl(totalFixos)}</strong> em VPS, domínio e Asaas),
+              você fica com <strong className="text-emerald-400">{brl(resumo.lucro_liquido)}</strong> líquido ({resumo.margem_pct.toFixed(1)}% de margem real).
+              Conforme o número de linhas cresce, os custos fixos se diluem e a margem real sobe.
             </p>
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function DemoCustos() {
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
         <div className="flex items-center gap-2 p-4 border-b border-zinc-800">
           <Package className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-sm font-semibold text-white">Custos por Plano (tabela Ta Telecom)</h3>
+          <h3 className="text-sm font-semibold text-white">Custos por Plano (tabela Tá Telecom)</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -69,7 +69,7 @@ export default function DemoCustos() {
                 <th className="px-3 py-3 font-bold uppercase text-xs">Plano</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Custo unit.</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Venda unit.</th>
-                <th className="px-3 py-3 font-bold uppercase text-xs text-center">Qtd Linhas</th>
+                <th className="px-3 py-3 font-bold uppercase text-xs text-center">Qtd. de linhas</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Receita Total</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Custo Total</th>
                 <th className="px-3 py-3 font-bold uppercase text-xs text-right">Lucro</th>
@@ -123,8 +123,8 @@ export default function DemoCustos() {
       <div className="bg-gradient-to-br from-emerald-950/30 to-zinc-950 border border-emerald-500/30 rounded-xl overflow-hidden">
         <div className="flex items-center gap-2 p-4 border-b border-emerald-900/40">
           <ArrowUpRight className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-sm font-semibold text-white">Projecao de crescimento</h3>
-          <span className="text-[10px] text-zinc-500">(custos fixos se diluem conforme voce escala)</span>
+          <h3 className="text-sm font-semibold text-white">Projeção de crescimento</h3>
+          <span className="text-[10px] text-zinc-500">(custos fixos se diluem conforme você escala)</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-emerald-900/40">
           {projecoes.map(p => (
@@ -135,10 +135,10 @@ export default function DemoCustos() {
               </div>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between"><span className="text-zinc-500">Receita</span><span className="font-mono text-emerald-400 font-semibold">{brl(p.receita)}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Custo Ta (70%)</span><span className="font-mono text-orange-400">{brl(p.custoVar)}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Custo Tá (70%)</span><span className="font-mono text-orange-400">{brl(p.custoVar)}</span></div>
                 <div className="flex justify-between"><span className="text-zinc-500">Custos fixos</span><span className="font-mono text-red-400">{brl(totalFixos)}</span></div>
                 <div className="flex justify-between border-t border-zinc-800 pt-1 mt-1">
-                  <span className="text-white font-semibold">Lucro liquido</span>
+                  <span className="text-white font-semibold">Lucro líquido</span>
                   <span className="font-mono text-emerald-400 font-bold">{brl(p.lucro)}</span>
                 </div>
                 <div className="text-right text-[10px] text-violet-400 font-semibold">Margem: {p.margem.toFixed(1)}%</div>

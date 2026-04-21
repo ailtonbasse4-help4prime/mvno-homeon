@@ -13,15 +13,15 @@ const DEMO_AUTH_KEY = 'demo_authed_v1';
 
 const GROUPS = [
   {
-    id: 'operacao', label: 'Operacao', icon: Activity,
+    id: 'operacao', label: 'Operação', icon: Activity,
     items: [
       { to: '/demo/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/demo/operacional', label: 'Planilha Operacional', icon: FileSpreadsheet },
-      { to: '/demo/ativacoes', label: 'Ativacoes', icon: Zap, badge: 'DIFERENCIAL' },
+      { to: '/demo/ativacoes', label: 'Ativações', icon: Zap, badge: 'DIFERENCIAL' },
     ],
   },
   {
-    id: 'clientes', label: 'Clientes & Linhas', icon: Users,
+    id: 'clientes', label: 'Clientes e Linhas', icon: Users,
     items: [
       { to: '/demo/clientes', label: 'Clientes', icon: Users },
       { to: '/demo/chips', label: 'Chips', icon: CreditCard },
@@ -31,10 +31,10 @@ const GROUPS = [
   {
     id: 'financeiro', label: 'Financeiro', icon: DollarSign,
     items: [
-      { to: '/demo/cobrancas', label: 'Cobrancas', icon: Wallet },
-      { to: '/demo/carteira', label: 'Carteira Movel', icon: Receipt },
+      { to: '/demo/cobrancas', label: 'Cobranças', icon: Wallet },
+      { to: '/demo/carteira', label: 'Carteira Móvel', icon: Receipt },
       { to: '/demo/assinaturas', label: 'Assinaturas', icon: CreditCard },
-      { to: '/demo/custos', label: 'Custos & Lucro', icon: DollarSign },
+      { to: '/demo/custos', label: 'Custos e Lucro', icon: DollarSign },
     ],
   },
   {
@@ -49,14 +49,14 @@ const GROUPS = [
     items: [
       { to: '/demo/revendedores', label: 'Revendedores', icon: Store },
       { to: '/demo/self-service', label: 'Self-Service', icon: Smartphone, badge: 'DIFERENCIAL' },
-      { to: '/demo/divulgacao', label: 'Divulgacao', icon: Share2 },
+      { to: '/demo/divulgacao', label: 'Divulgação', icon: Share2 },
     ],
   },
   {
     id: 'sistema', label: 'Sistema', icon: Settings,
     items: [
-      { to: '/demo/usuarios', label: 'Usuarios', icon: UserCog },
-      { to: '/demo/logs', label: 'Logs & Auditoria', icon: FileText },
+      { to: '/demo/usuarios', label: 'Usuários', icon: UserCog },
+      { to: '/demo/logs', label: 'Logs e Auditoria', icon: FileText },
     ],
   },
 ];
@@ -155,7 +155,7 @@ export default function DemoLayout() {
       <main className="flex-1 overflow-auto">
         {/* Barra demo */}
         <div className="sticky top-0 z-20 bg-gradient-to-r from-emerald-600/95 to-emerald-500/95 backdrop-blur text-white text-xs text-center py-1.5 font-semibold flex items-center justify-center gap-2">
-          <Zap className="w-3 h-3" /> MODO DEMONSTRACAO · Dados ficticios para apresentacao · Valores da tabela Ta Telecom
+          <Zap className="w-3 h-3" /> MODO DEMONSTRAÇÃO · Dados fictícios para apresentação · Valores da tabela Tá Telecom
         </div>
         <div className="p-6 space-y-6">
           <Outlet />
