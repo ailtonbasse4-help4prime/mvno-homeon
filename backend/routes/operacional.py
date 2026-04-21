@@ -40,26 +40,38 @@ def _calc_proxima_recarga(data_ativacao_iso, data_bloqueio_iso):
     """Calcula a data da PROXIMA RECARGA do chip na Ta Telecom.
 
     A API da Ta Telecom retorna `data_ativacao` e `data_bloqueio`. Quando o
-    chip nunca foi bloqueado, `data_bloqueio` vem igual a `data_ativacao` (o
-    que nao representa proxima recarga). Logica:
-      - Se data_bloqueio > data_ativacao: chip esta/foi bloqueado naquela
-        data -> proxima recarga = data_bloqueio (cliente deve recarregar ate la).
-      - Caso contrario (ou ambas iguais): proxima recarga = data_ativacao + 30 dias.
+    chip nunca foi bloqueado, `data_bloqueio` vem igual a `data_ativacao` ou null.
+    Quando o chip vai ser bloqueado (recarga programada), `data_bloqueio` traz
+    uma data futura (a proxima recarga). Logica:
+      - Se data_bloqueio > hoje: usar data_bloqueio (recarga programada pela Ta).
+      - Caso contrario: calcular a proxima mensalidade a partir da data de
+        ativacao, avancando 30 dias por ciclo ate encontrar uma data futura.
+        Assim funciona para chips ativos ha varios meses sem data_bloqueio.
     """
-    from datetime import datetime as _dt, timedelta as _td
+    from datetime import datetime as _dt, date as _date, timedelta as _td
     def _pd(s):
         if not s: return None
         try:
             return _dt.strptime(s[:10], "%Y-%m-%d").date()
         except Exception:
             return None
+    hoje = _date.today()
     at = _pd(data_ativacao_iso)
     bl = _pd(data_bloqueio_iso)
-    if bl and at and bl > at:
+    # 1. Se data_bloqueio da Ta e FUTURA, ela e a proxima recarga real
+    if bl and bl > hoje:
         return bl.strftime("%Y-%m-%d")
+    # 2. Calcular ciclo mensal a partir da ativacao
     if at:
-        return (at + _td(days=30)).strftime("%Y-%m-%d")
-    return data_bloqueio_iso or data_ativacao_iso
+        prox = at + _td(days=30)
+        # Avanca 30 dias ate encontrar data futura (chip ativo ha varios meses)
+        while prox <= hoje:
+            prox = prox + _td(days=30)
+        return prox.strftime("%Y-%m-%d")
+    # 3. Fallback: data_bloqueio mesmo que passada (ultima info disponivel)
+    if bl:
+        return bl.strftime("%Y-%m-%d")
+    return None
 
 
 def _parse_tamanho_gb(nome: str, franquia: str = "") -> float:
