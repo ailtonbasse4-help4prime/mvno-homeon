@@ -147,6 +147,18 @@ export function AtivacoesSelfService() {
     setSubmitting(null);
   };
 
+  const handleSincronizar = async (id) => {
+    setSubmitting(id);
+    try {
+      const res = await axios.post(`${API_URL}/api/ativacoes-selfservice/${id}/sincronizar`, {}, { withCredentials: true });
+      toast.success(res.data?.message || 'Sincronizacao concluida');
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao sincronizar');
+    }
+    setSubmitting(null);
+  };
+
   const filtered = activations.filter(a => {
     if (search) {
       const s = search.toLowerCase();
@@ -324,6 +336,14 @@ export function AtivacoesSelfService() {
                               )}
                               Retentar
                             </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleSincronizar(a.id)}
+                              disabled={submitting === a.id}
+                              className="h-7 px-2 text-xs border-blue-500/50 text-blue-300 hover:bg-blue-500/10"
+                              title="Consulta a operadora e grava o numero/MSISDN se o chip ja estiver ativo"
+                              data-testid={`sinc-btn-${a.id}`}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 mr-1" /> Sincronizar
+                            </Button>
                             <Button size="sm" variant="outline" onClick={() => handleCancel(a.id)}
                               disabled={submitting === a.id}
                               className="h-7 px-2 text-xs border-zinc-700 text-zinc-400 hover:text-red-400"
@@ -336,6 +356,16 @@ export function AtivacoesSelfService() {
                         {a.status === 'ativo' && (
                           <span className="text-emerald-400 text-xs flex items-center gap-1">
                             <CheckCircle className="w-3.5 h-3.5" /> Concluido
+                            {!a.msisdn && (
+                              <Button size="sm" variant="outline" onClick={() => handleSincronizar(a.id)}
+                                disabled={submitting === a.id}
+                                className="h-7 px-2 ml-2 text-xs border-blue-500/50 text-blue-300 hover:bg-blue-500/10"
+                                title="Puxa o MSISDN da operadora e reenvia email"
+                                data-testid={`sinc-ativo-btn-${a.id}`}
+                              >
+                                <RefreshCw className="w-3 h-3 mr-1" /> Sincronizar nº
+                              </Button>
+                            )}
                           </span>
                         )}
                         {a.status === 'ativando' && (
