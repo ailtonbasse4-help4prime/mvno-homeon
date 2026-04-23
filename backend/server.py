@@ -5104,7 +5104,11 @@ async def admin_sincronizar_selfservice(activation_id: str, request: Request):
 
     msisdn = check.data.get("msisdn") or check.data.get("numero")
     status_operadora = (check.data.get("status") or "").lower()
+    is_portability = doc.get("portability", False)
+
     if not msisdn:
+        if is_portability and doc.get("status") == "portabilidade_em_andamento":
+            raise HTTPException(status_code=400, detail="A portabilidade ainda nao foi concluida na Ta Telecom. Tente novamente em algumas horas.")
         raise HTTPException(status_code=400, detail="Operadora nao retornou o MSISDN. Tente novamente em alguns minutos.")
 
     # Atualiza chip

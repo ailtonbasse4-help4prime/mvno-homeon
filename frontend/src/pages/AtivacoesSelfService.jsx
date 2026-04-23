@@ -322,35 +322,41 @@ export function AtivacoesSelfService() {
                             </Button>
                           </>
                         )}
-                        {(a.status === 'erro' || a.status === 'retry_pendente') && (
+                        {(a.status === 'erro' || a.status === 'retry_pendente' || a.status === 'portabilidade_em_andamento') && (
                           <>
-                            <Button size="sm" onClick={() => handleRetry(a.id)}
-                              disabled={submitting === a.id}
-                              className="h-7 px-2 bg-orange-600 hover:bg-orange-700 text-white text-xs"
-                              data-testid={`retry-btn-${a.id}`}
-                            >
-                              {submitting === a.id ? (
-                                <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
-                              ) : (
-                                <RotateCw className="w-3.5 h-3.5 mr-1" />
-                              )}
-                              Retentar
-                            </Button>
+                            {a.status !== 'portabilidade_em_andamento' && (
+                              <Button size="sm" onClick={() => handleRetry(a.id)}
+                                disabled={submitting === a.id}
+                                className="h-7 px-2 bg-orange-600 hover:bg-orange-700 text-white text-xs"
+                                data-testid={`retry-btn-${a.id}`}
+                              >
+                                {submitting === a.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                ) : (
+                                  <RotateCw className="w-3.5 h-3.5 mr-1" />
+                                )}
+                                Retentar
+                              </Button>
+                            )}
                             <Button size="sm" variant="outline" onClick={() => handleSincronizar(a.id)}
                               disabled={submitting === a.id}
                               className="h-7 px-2 text-xs border-blue-500/50 text-blue-300 hover:bg-blue-500/10"
-                              title="Consulta a operadora e grava o numero/MSISDN se o chip ja estiver ativo"
+                              title={a.status === 'portabilidade_em_andamento'
+                                ? 'Consulta a Tá Telecom pra verificar se a portabilidade concluiu e grava o número'
+                                : 'Consulta a operadora e grava o numero/MSISDN se o chip ja estiver ativo'}
                               data-testid={`sinc-btn-${a.id}`}
                             >
                               <RefreshCw className="w-3.5 h-3.5 mr-1" /> Sincronizar
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleCancel(a.id)}
-                              disabled={submitting === a.id}
-                              className="h-7 px-2 text-xs border-zinc-700 text-zinc-400 hover:text-red-400"
-                              data-testid={`cancel-btn-${a.id}`}
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                            </Button>
+                            {a.status !== 'portabilidade_em_andamento' && (
+                              <Button size="sm" variant="outline" onClick={() => handleCancel(a.id)}
+                                disabled={submitting === a.id}
+                                className="h-7 px-2 text-xs border-zinc-700 text-zinc-400 hover:text-red-400"
+                                data-testid={`cancel-btn-${a.id}`}
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                           </>
                         )}
                         {a.status === 'ativo' && (
