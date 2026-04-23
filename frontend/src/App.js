@@ -33,9 +33,15 @@ import DemoDashboard from "./pages/demo/DemoDashboard";
 import DemoPlanilha from "./pages/demo/DemoPlanilha";
 import DemoCobrancas from "./pages/demo/DemoCobrancas";
 import DemoCustos from "./pages/demo/DemoCustos";
+import DemoAtivacoesReais from "./pages/demo/DemoAtivacoesReais";
+import DemoLinhasReais from "./pages/demo/DemoLinhasReais";
+import DemoClientesReais from "./pages/demo/DemoClientesReais";
+import DemoChipsReais from "./pages/demo/DemoChipsReais";
+import DemoPlanosReais from "./pages/demo/DemoPlanosReais";
+import DemoOfertasReais from "./pages/demo/DemoOfertasReais";
 import {
-  DemoAtivacoes, DemoLinhas, DemoClientes, DemoChips, DemoCarteira, DemoAssinaturas,
-  DemoPlanos, DemoOfertas, DemoRevendedores, DemoSelfService, DemoDivulgacao,
+  DemoCarteira, DemoAssinaturas,
+  DemoRevendedores, DemoSelfService, DemoDivulgacao,
   DemoUsuarios, DemoLogs,
 } from "./pages/demo/DemoPlaceholders";
 
@@ -57,14 +63,14 @@ function AppRoutes() {
         <Route path="/demo/cobrancas" element={<DemoCobrancas />} />
         <Route path="/demo/custos" element={<DemoCustos />} />
         {/* Placeholders com destaque de diferenciais */}
-        <Route path="/demo/ativacoes" element={<DemoAtivacoes />} />
-        <Route path="/demo/linhas" element={<DemoLinhas />} />
-        <Route path="/demo/clientes" element={<DemoClientes />} />
-        <Route path="/demo/chips" element={<DemoChips />} />
+        <Route path="/demo/ativacoes" element={<DemoAtivacoesReais />} />
+        <Route path="/demo/linhas" element={<DemoLinhasReais />} />
+        <Route path="/demo/clientes" element={<DemoClientesReais />} />
+        <Route path="/demo/chips" element={<DemoChipsReais />} />
         <Route path="/demo/carteira" element={<DemoCarteira />} />
         <Route path="/demo/assinaturas" element={<DemoAssinaturas />} />
-        <Route path="/demo/planos" element={<DemoPlanos />} />
-        <Route path="/demo/ofertas" element={<DemoOfertas />} />
+        <Route path="/demo/planos" element={<DemoPlanosReais />} />
+        <Route path="/demo/ofertas" element={<DemoOfertasReais />} />
         <Route path="/demo/revendedores" element={<DemoRevendedores />} />
         <Route path="/demo/self-service" element={<DemoSelfService />} />
         <Route path="/demo/divulgacao" element={<DemoDivulgacao />} />

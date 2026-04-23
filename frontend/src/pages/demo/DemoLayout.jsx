@@ -17,7 +17,7 @@ const GROUPS = [
     items: [
       { to: '/demo/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/demo/operacional', label: 'Planilha Operacional', icon: FileSpreadsheet },
-      { to: '/demo/ativacoes', label: 'Ativações', icon: Zap, badge: 'DIFERENCIAL' },
+      { to: '/demo/ativacoes', label: 'Ativações', icon: Zap },
     ],
   },
   {
@@ -25,7 +25,7 @@ const GROUPS = [
     items: [
       { to: '/demo/clientes', label: 'Clientes', icon: Users },
       { to: '/demo/chips', label: 'Chips', icon: CreditCard },
-      { to: '/demo/linhas', label: 'Linhas', icon: Phone, badge: 'DIFERENCIAL' },
+      { to: '/demo/linhas', label: 'Linhas', icon: Phone },
     ],
   },
   {
