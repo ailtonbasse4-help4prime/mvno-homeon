@@ -74,6 +74,45 @@ def _calc_proxima_recarga(data_ativacao_iso, data_bloqueio_iso):
     return None
 
 
+def _resolver_proxima_recarga(*, data_ativacao, data_bloqueio, data_expiracao_direta):
+    """Resolve a PROXIMA RECARGA considerando todos os candidatos da API Ta.
+
+    Regra mestre: a proxima recarga SEMPRE tem que ser uma data FUTURA (>= hoje).
+    Se a API retornar qualquer data no passado (ex: data_expiracao do ciclo
+    anterior), descarta e calcula via ciclo de 30d a partir da ativacao.
+    """
+    from datetime import datetime as _dt, date as _date, timedelta as _td
+    def _pd(s):
+        if not s: return None
+        try:
+            return _dt.strptime(s[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+    hoje = _date.today()
+    at = _pd(data_ativacao)
+    bl = _pd(data_bloqueio)
+    ex = _pd(data_expiracao_direta)
+
+    # 1. data_expiracao explicita, se for FUTURA - melhor candidata
+    if ex and ex >= hoje:
+        return ex.strftime("%Y-%m-%d")
+    # 2. data_bloqueio futura - proxima recarga programada
+    if bl and bl > hoje:
+        return bl.strftime("%Y-%m-%d")
+    # 3. Calcular ciclo mensal a partir da ativacao (avanca 30d ate achar data futura)
+    if at:
+        prox = at + _td(days=30)
+        while prox <= hoje:
+            prox = prox + _td(days=30)
+        return prox.strftime("%Y-%m-%d")
+    # 4. Fallback: data_expiracao passada, depois data_bloqueio passada
+    if ex:
+        return ex.strftime("%Y-%m-%d")
+    if bl:
+        return bl.strftime("%Y-%m-%d")
+    return None
+
+
 def _parse_tamanho_gb(nome: str, franquia: str = "") -> float:
     """Extrai tamanho em GB do nome do plano/franquia. MB -> GB fracionado."""
     text = f"{nome} {franquia}".upper()
@@ -138,6 +177,32 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
     """Retorna uma linha por LINHA ativa/suspensa com dados consolidados: cliente+chip+oferta+plano+cobrancas."""
     await _ctx["get_current_user"](request)
     db = _ctx["db"]
+
+    # AUTO-CORRECAO de datas passadas: toda vez que alguem abre a planilha,
+    # qualquer linha com expirar_dados no passado e avancada para o proximo ciclo (30d)
+    # ate encontrar uma data futura. Usuario nunca ve data antiga.
+    try:
+        from datetime import date as _date, timedelta as _td
+        hoje_date = _date.today()
+        hoje_iso_str = hoje_date.strftime("%Y-%m-%d")
+        linhas_passadas = await db.linhas.find(
+            {"expirar_dados": {"$ne": None, "$lt": hoje_iso_str}},
+            {"expirar_dados": 1},
+        ).to_list(5000)
+        for lp in linhas_passadas:
+            try:
+                dt = datetime.fromisoformat(lp["expirar_dados"][:10]).date()
+                while dt <= hoje_date:
+                    dt = dt + _td(days=30)
+                await db.linhas.update_one(
+                    {"_id": lp["_id"]},
+                    {"$set": {"expirar_dados": dt.strftime("%Y-%m-%d"), "expirar_dados_updated_at": datetime.now(timezone.utc)}},
+                )
+            except Exception:
+                continue
+    except Exception:
+        # Nunca bloqueia a planilha por causa da auto-correcao
+        pass
 
     # Buscar todas as linhas
     linhas = await db.linhas.find({}).to_list(5000)
@@ -568,7 +633,11 @@ async def atualizar_expirar_dados(iccid: str, request: Request):
             or inner.get("expira_em") or inner.get("validity")
             or inner.get("data_validade") or inner.get("validade")
         )
-        expirar = expirar_direto or _calc_proxima_recarga(data_at, data_bl_raw)
+        # Usa resolver que garante data FUTURA (descarta datas passadas)
+        expirar = _resolver_proxima_recarga(
+            data_ativacao=data_at, data_bloqueio=data_bl_raw,
+            data_expiracao_direta=expirar_direto,
+        )
         chip = await db.chips.find_one({"iccid": iccid})
         if chip:
             await db.linhas.update_many({"chip_id": str(chip["_id"])}, {"$set": {"expirar_dados": expirar, "expirar_dados_updated_at": datetime.now(timezone.utc)}})
@@ -741,8 +810,11 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
                     inner.get("data_expiracao") or inner.get("dataExpiracao")
                     or inner.get("validade") or inner.get("data_validade")
                 )
-                # Preferencia: data_expiracao explicita > calculo ativacao+30 / data_bloqueio
-                expirar = expirar_direto or _calc_proxima_recarga(data_at, data_bl_raw)
+                # Resolver que SEMPRE retorna data futura (ignora datas passadas)
+                expirar = _resolver_proxima_recarga(
+                    data_ativacao=data_at, data_bloqueio=data_bl_raw,
+                    data_expiracao_direta=expirar_direto,
+                )
                 status_raw = str(
                     inner.get("status") or inner.get("situacao") or data.get("status") or ""
                 ).upper().strip()
@@ -919,6 +991,88 @@ async def auto_proxima_recarga(request: Request):
 
     await _ctx["create_log"]("operacional", f"Auto proxima recarga: {updated} linhas atualizadas", user["id"], user["name"])
     return {"updated": updated, "total_linhas": len(linhas)}
+
+
+# ==================== LIMPEZA DE DATAS PASSADAS ====================
+@router.post("/limpar-datas-passadas")
+async def limpar_datas_passadas(request: Request):
+    """Varre linhas com `expirar_dados` no passado e recalcula via ciclo de 30 dias.
+
+    Utiliza `data_ativacao` do chip (se disponivel) OU a ultima cobranca paga.
+    Chamado automaticamente ao abrir a planilha operacional e pelo scheduler diario.
+    """
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    from datetime import timedelta, date as _date
+    hoje = _date.today()
+    hoje_iso = hoje.strftime("%Y-%m-%d")
+
+    # Pega linhas com expirar_dados no passado
+    linhas_passadas = await db.linhas.find({
+        "expirar_dados": {"$ne": None, "$lt": hoje_iso},
+    }).to_list(10000)
+
+    if not linhas_passadas:
+        return {"corrigidas": 0, "mensagem": "Nenhuma linha com data passada"}
+
+    # Pega data_ativacao dos chips envolvidos
+    chip_ids = list({l["chip_id"] for l in linhas_passadas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
+    chips_map = {}
+    if chip_ids:
+        chs = await db.chips.find({"_id": {"$in": [ObjectId(c) for c in chip_ids]}}, {"data_ativacao": 1}).to_list(10000)
+        chips_map = {str(c["_id"]): c for c in chs}
+
+    # Ultima cobranca paga por cliente (fallback)
+    pagas = await db.cobrancas.find(
+        {"status": {"$in": ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"]}},
+        {"cliente_id": 1, "vencimento": 1, "pago_em": 1},
+    ).to_list(30000)
+    ultima_paga_por_cliente = {}
+    for c in pagas:
+        cid = c.get("cliente_id")
+        venc = c.get("vencimento") or c.get("pago_em")
+        if not cid or not venc:
+            continue
+        venc_str = str(venc)[:10]
+        if cid not in ultima_paga_por_cliente or venc_str > ultima_paga_por_cliente[cid]:
+            ultima_paga_por_cliente[cid] = venc_str
+
+    corrigidas = 0
+    for l in linhas_passadas:
+        expirar_atual = l.get("expirar_dados")
+        if not expirar_atual:
+            continue
+        # 1. Tenta avancar 30 dias a partir da data passada ate achar uma futura
+        try:
+            dt = datetime.fromisoformat(expirar_atual[:10]).date()
+            while dt <= hoje:
+                dt = dt + timedelta(days=30)
+            nova_data = dt.strftime("%Y-%m-%d")
+        except Exception:
+            nova_data = None
+
+        # 2. Se ainda nao tem data, tenta via ultima cobranca paga
+        if not nova_data:
+            cid = l.get("cliente_id")
+            last_venc = ultima_paga_por_cliente.get(cid)
+            if last_venc:
+                try:
+                    dt = datetime.fromisoformat(last_venc).date() + timedelta(days=30)
+                    while dt <= hoje:
+                        dt = dt + timedelta(days=30)
+                    nova_data = dt.strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+
+        if nova_data and nova_data != expirar_atual:
+            await db.linhas.update_one(
+                {"_id": l["_id"]},
+                {"$set": {"expirar_dados": nova_data, "expirar_dados_updated_at": datetime.now(timezone.utc)}},
+            )
+            corrigidas += 1
+
+    await _ctx["create_log"]("operacional", f"Limpeza de datas passadas: {corrigidas}/{len(linhas_passadas)} linhas corrigidas", user["id"], user["name"])
+    return {"corrigidas": corrigidas, "total_analisadas": len(linhas_passadas)}
 
 
 # ==================== CUSTO POR PLANO (aplica em todas ofertas) ====================
