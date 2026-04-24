@@ -996,6 +996,57 @@ async def sync_status_tatelecom(request: Request):
 
 
 # ==================== AUTO-PREENCHER CANAL ====================
+@router.get("/debug-iccid/{iccid}")
+async def debug_iccid(iccid: str, request: Request):
+    """Mostra resposta CRUA da Tá Telecom + decisao do resolver. Use para debugar datas erradas."""
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    from services.operadora_service import operadora_service
+
+    resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
+    if not resp or not resp.success:
+        raise HTTPException(status_code=502, detail=f"Falha Ta: {getattr(resp, 'message', '?')}")
+
+    data = resp.data if isinstance(resp.data, dict) else {}
+    inner = data.get("data") if isinstance(data.get("data"), dict) else data
+
+    # Extrai todos candidatos de data
+    campos_ativacao = {k: inner.get(k) for k in ["data_ativacao", "dataAtivacao"]}
+    campos_bloqueio = {k: inner.get(k) for k in ["data_bloqueio", "dataBloqueio"]}
+    campos_expiracao = {k: inner.get(k) for k in [
+        "data_expiracao", "dataExpiracao", "expira_em", "validity",
+        "data_validade", "validade", "prox_recarga", "proxima_recarga",
+        "vencimento", "data_vencimento", "data_corte", "data_renovacao",
+        "saldo_validade", "saldo_ate", "dados_validade",
+    ]}
+
+    data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
+    data_bl_raw = _parse_data_br(inner.get("data_bloqueio") or data.get("data_bloqueio"))
+    expirar_direto = _parse_data_br(
+        inner.get("data_expiracao") or inner.get("dataExpiracao")
+        or inner.get("validade") or inner.get("data_validade")
+    )
+    decisao = _resolver_proxima_recarga(
+        data_ativacao=data_at, data_bloqueio=data_bl_raw,
+        data_expiracao_direta=expirar_direto,
+    )
+
+    return {
+        "iccid": iccid,
+        "resposta_crua_ta": inner,  # JSON inteiro da Tá
+        "campos_parseados": {
+            "ativacao_candidatos": campos_ativacao,
+            "bloqueio_candidatos": campos_bloqueio,
+            "expiracao_candidatos": campos_expiracao,
+        },
+        "data_ativacao_final": data_at,
+        "data_bloqueio_final": data_bl_raw,
+        "expirar_direto_final": expirar_direto,
+        "decisao_resolver": decisao,
+        "hoje": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+    }
+
+
 @router.post("/auto-canal")
 async def auto_preencher_canal(request: Request):
     """Preenche canal automaticamente:
