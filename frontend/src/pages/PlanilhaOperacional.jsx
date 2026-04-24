@@ -173,7 +173,26 @@ export default function PlanilhaOperacional() {
         normalize(l.email || '').includes(s)
       );
     }
-    if (filterStatus) res = res.filter(l => l.status_linha === filterStatus);
+    if (filterStatus === 'recarga_ordem') {
+      // Ordena pela coluna Recarga Tá (expirar_dados) crescente — mais proximos primeiro
+      res = [...res].sort((a, b) => {
+        const da = a.expirar_dados || '9999-12-31';
+        const db = b.expirar_dados || '9999-12-31';
+        return da.localeCompare(db);
+      });
+    } else if (filterStatus === 'recarga_7dias') {
+      // So linhas com Recarga Ta nos proximos 7 dias (inclui hoje), ordenadas crescente
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const limite = new Date(hoje);
+      limite.setDate(limite.getDate() + 7);
+      const hojeIso = hoje.toISOString().slice(0, 10);
+      const limiteIso = limite.toISOString().slice(0, 10);
+      res = res.filter(l => l.expirar_dados && l.expirar_dados >= hojeIso && l.expirar_dados <= limiteIso);
+      res = [...res].sort((a, b) => (a.expirar_dados || '').localeCompare(b.expirar_dados || ''));
+    } else if (filterStatus) {
+      res = res.filter(l => l.status_linha === filterStatus);
+    }
     if (filterBloqueio) res = res.filter(l => (l.status_chip || '') === filterBloqueio);
     if (filterCanal) res = res.filter(l => (l.canal || '') === filterCanal);
     return res;
@@ -354,6 +373,8 @@ export default function PlanilhaOperacional() {
           <option value="suspenso">Suspenso</option>
           <option value="cancelado">Cancelado</option>
           <option value="bloqueado">Bloqueado</option>
+          <option value="recarga_ordem">Recarga Tá — ordem de vencimento</option>
+          <option value="recarga_7dias">Recarga Tá — próximos 7 dias</option>
         </select>
         <select value={filterBloqueio} onChange={e => setFilterBloqueio(e.target.value)} className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm" data-testid="filter-bloqueio">
           <option value="">Todos chips</option>
