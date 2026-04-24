@@ -96,6 +96,7 @@ def _norm(s: str) -> str:
 class LinhaOperacionalUpdate(BaseModel):
     observacoes: Optional[str] = None
     proxima_recarga: Optional[str] = None  # ISO date YYYY-MM-DD
+    expirar_dados: Optional[str] = None  # ISO date YYYY-MM-DD - Data "Recarga Ta" editavel
     canal: Optional[str] = None  # atualizar no cliente
     status_chip: Optional[str] = None  # texto livre
     complemento: Optional[str] = None  # identificacao interna (ex: "filho Joao")
@@ -154,11 +155,14 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
             # Pega linhas com data passada OU sem data OU nao-sincronizadas ha >12h
             cutoff = now - timedelta(hours=12)
             stale = await db.linhas.find({
-                "$or": [
-                    {"expirar_dados": None},
-                    {"expirar_dados": {"$lt": hoje_iso_str}},
-                    {"expirar_dados_updated_at": {"$lt": cutoff}},
-                    {"expirar_dados_updated_at": {"$exists": False}},
+                "$and": [
+                    {"expirar_dados_manual": {"$ne": True}},  # nunca mexer nas datas editadas manualmente
+                    {"$or": [
+                        {"expirar_dados": None},
+                        {"expirar_dados": {"$lt": hoje_iso_str}},
+                        {"expirar_dados_updated_at": {"$lt": cutoff}},
+                        {"expirar_dados_updated_at": {"$exists": False}},
+                    ]},
                 ],
             }, {"_id": 1, "chip_id": 1}).limit(200).to_list(200)
             stale_ids = [str(l["_id"]) for l in stale]
@@ -289,6 +293,7 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
             "status_linha": status_linha,
             "status_chip": l.get("status_chip") or chip.get("status", ""),
             "expirar_dados": l.get("expirar_dados"),
+            "expirar_dados_manual": bool(l.get("expirar_dados_manual")),
             "proxima_recarga": l.get("proxima_recarga"),
             "complemento": l.get("complemento", ""),
             "incluir_custo": incluir_custo,
@@ -387,6 +392,11 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
         update_linha["observacoes"] = data.observacoes
     if data.proxima_recarga is not None:
         update_linha["proxima_recarga"] = data.proxima_recarga
+    if data.expirar_dados is not None:
+        # Edicao manual: grava a data + marca atualizacao pra nao sobrescrever automatico
+        update_linha["expirar_dados"] = data.expirar_dados
+        update_linha["expirar_dados_manual"] = True
+        update_linha["expirar_dados_updated_at"] = datetime.now(timezone.utc)
     if data.status_chip is not None:
         update_linha["status_chip"] = data.status_chip
     if data.complemento is not None:
@@ -718,13 +728,17 @@ async def atualizar_custos_batch(data: CustosBatchUpdate, request: Request):
 
 # ==================== SINCRONIZACAO AUTOMATICA TA TELECOM ====================
 async def _auto_sync_linhas_stale(linha_ids: list):
-    """Sincroniza com Ta Telecom apenas as linhas que precisam (data passada/stale).
+    """Calcula a "Expiracao do Plano Ta" (Recarga Ta) para cada linha stale.
 
-    Executa em background, disparado pelo GET /planilha. NAO bloqueia a resposta.
-    Cada consulta tem throttle de 0.4s para nao estourar rate limit.
+    Regra validada com o painel da Ta Telecom:
+      Expiracao do Plano = Data do ULTIMO PAGAMENTO no Asaas + 30 dias
+    Asaas e a fonte da verdade porque cada recarga comeca quando o boleto/pix
+    e pago, e o sistema da Ta atualiza internamente baseado nesse pagamento.
+    Fallback: se cliente nao tem pagamento, usa data_ativacao da Ta + 30d.
     """
     db = _ctx["db"]
     from services.operadora_service import operadora_service
+    from datetime import timedelta as _td
     import asyncio as _asyncio
 
     try:
@@ -732,6 +746,34 @@ async def _auto_sync_linhas_stale(linha_ids: list):
         if not obj_ids:
             return
         linhas = await db.linhas.find({"_id": {"$in": obj_ids}}).to_list(len(obj_ids))
+
+        # 1. Mapear ultimo pagamento do Asaas por cliente
+        cliente_ids = list({l.get("cliente_id") for l in linhas if l.get("cliente_id")})
+        pagamentos_por_cliente = {}  # cliente_id -> data do ultimo pagamento (date)
+        if cliente_ids:
+            pagas = await db.cobrancas.find(
+                {
+                    "cliente_id": {"$in": cliente_ids},
+                    "status": {"$in": ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"]},
+                },
+                {"cliente_id": 1, "pago_em": 1, "data_pagamento": 1, "payment_date": 1, "vencimento": 1},
+            ).to_list(50000)
+            for c in pagas:
+                cid = c.get("cliente_id")
+                raw = c.get("pago_em") or c.get("data_pagamento") or c.get("payment_date") or c.get("vencimento")
+                if not raw:
+                    continue
+                try:
+                    if isinstance(raw, datetime):
+                        d = raw.date()
+                    else:
+                        d = datetime.fromisoformat(str(raw)[:10]).date()
+                    if cid not in pagamentos_por_cliente or d > pagamentos_por_cliente[cid]:
+                        pagamentos_por_cliente[cid] = d
+                except Exception:
+                    continue
+
+        # 2. Carrega chips (pra ter iccid e fallback data_ativacao)
         chip_ids = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
         chips_map = {}
         if chip_ids:
@@ -739,49 +781,82 @@ async def _auto_sync_linhas_stale(linha_ids: list):
             chips_map = {str(c["_id"]): c for c in chs}
 
         for l in linhas:
+            cid = l.get("cliente_id")
             chip = chips_map.get(l.get("chip_id") or "")
-            if not chip or not chip.get("iccid"):
-                continue
-            iccid = chip["iccid"]
-            try:
-                await _asyncio.sleep(0.4)  # throttle rate limit
-                resp = await operadora_service.consultar_linha(iccid, db=db, user_id="auto-sync", user_name="auto-sync")
-                if not resp or not resp.success:
-                    continue
-                data = resp.data if isinstance(resp.data, dict) else {}
-                inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
-                data_bl_raw = _parse_data_br(inner.get("data_bloqueio") or data.get("data_bloqueio"))
-                expirar_direto = _parse_data_br(
-                    inner.get("data_expiracao") or inner.get("dataExpiracao")
-                    or inner.get("validade") or inner.get("data_validade")
-                )
-                expirar = _resolver_proxima_recarga(
-                    data_ativacao=data_at, data_bloqueio=data_bl_raw,
-                    data_expiracao_direta=expirar_direto,
-                )
-                status_raw = str(
-                    inner.get("status") or inner.get("situacao") or data.get("status") or ""
-                ).upper().strip()
-                status_map = {
-                    "FUNCIONAL": "Ativo", "ATIVO": "Ativo", "FS": "Ativo",
-                    "NOVO": "Novo", "NP": "Novo",
-                    "BLOQUEADO_PARCIAL": "Bloq. Parcial",
-                    "BLOQUEADO_TOTAL": "Bloqueado", "BLOQUEADO": "Bloqueado",
-                    "CANCELADO": "Cancelado", "SUSPENSO": "Suspenso",
-                    "PENDENTE": "Pendente", "PENDING": "Pendente",
-                }
-                status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
-                update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
-                if expirar:
-                    update["expirar_dados"] = expirar
-                if status_chip_sigla:
-                    update["status_chip"] = status_chip_sigla
-                if len(update) > 1:
-                    await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
-            except Exception as e:
-                logger.warning(f"Auto-sync falhou para ICCID {iccid}: {e}")
-                continue
+            expirar_date = None
+
+            # OPCAO 1 (prioritaria): Ultimo pagamento Asaas + 30 dias
+            ultimo_pg = pagamentos_por_cliente.get(cid)
+            if ultimo_pg:
+                expirar_date = ultimo_pg + _td(days=30)
+
+            # OPCAO 2 (fallback): consultar Ta e usar data_ativacao + 30d
+            status_chip_sigla = None
+            if not expirar_date and chip and chip.get("iccid"):
+                iccid = chip["iccid"]
+                try:
+                    await _asyncio.sleep(0.4)
+                    resp = await operadora_service.consultar_linha(
+                        iccid, db=db, user_id="auto-sync", user_name="auto-sync"
+                    )
+                    if resp and resp.success:
+                        data = resp.data if isinstance(resp.data, dict) else {}
+                        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                        data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
+                        if data_at:
+                            try:
+                                at = datetime.fromisoformat(data_at[:10]).date()
+                                expirar_date = at + _td(days=30)
+                            except Exception:
+                                pass
+                        status_raw = str(
+                            inner.get("status") or inner.get("situacao") or data.get("status") or ""
+                        ).upper().strip()
+                        status_map = {
+                            "FUNCIONAL": "Ativo", "ATIVO": "Ativo", "FS": "Ativo",
+                            "NOVO": "Novo", "NP": "Novo",
+                            "BLOQUEADO_PARCIAL": "Bloq. Parcial",
+                            "BLOQUEADO_TOTAL": "Bloqueado", "BLOQUEADO": "Bloqueado",
+                            "CANCELADO": "Cancelado", "SUSPENSO": "Suspenso",
+                            "PENDENTE": "Pendente", "PENDING": "Pendente",
+                        }
+                        status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
+                except Exception as e:
+                    logger.warning(f"Auto-sync Ta falhou ICCID {iccid}: {e}")
+            elif chip and chip.get("iccid"):
+                # Mesmo quando tem Asaas, consulta Ta so pra atualizar status_chip
+                iccid = chip["iccid"]
+                try:
+                    await _asyncio.sleep(0.4)
+                    resp = await operadora_service.consultar_linha(
+                        iccid, db=db, user_id="auto-sync", user_name="auto-sync"
+                    )
+                    if resp and resp.success:
+                        data = resp.data if isinstance(resp.data, dict) else {}
+                        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                        status_raw = str(
+                            inner.get("status") or inner.get("situacao") or data.get("status") or ""
+                        ).upper().strip()
+                        status_map = {
+                            "FUNCIONAL": "Ativo", "ATIVO": "Ativo", "FS": "Ativo",
+                            "NOVO": "Novo", "NP": "Novo",
+                            "BLOQUEADO_PARCIAL": "Bloq. Parcial",
+                            "BLOQUEADO_TOTAL": "Bloqueado", "BLOQUEADO": "Bloqueado",
+                            "CANCELADO": "Cancelado", "SUSPENSO": "Suspenso",
+                            "PENDENTE": "Pendente", "PENDING": "Pendente",
+                        }
+                        status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
+                except Exception as e:
+                    logger.warning(f"Auto-sync Ta (status) falhou ICCID {iccid}: {e}")
+
+            # 3. Grava no MongoDB se encontrou algo
+            update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
+            if expirar_date:
+                update["expirar_dados"] = expirar_date.strftime("%Y-%m-%d")
+            if status_chip_sigla:
+                update["status_chip"] = status_chip_sigla
+            if len(update) > 1:
+                await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
     except Exception as e:
         logger.error(f"Erro no auto-sync de linhas: {e}")
 

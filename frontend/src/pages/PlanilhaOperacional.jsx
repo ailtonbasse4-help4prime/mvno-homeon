@@ -434,7 +434,22 @@ export default function PlanilhaOperacional() {
                         <span className="text-zinc-600">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.expirar_dados)}</td>
+                    <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap" onClick={() => isAdmin && startEdit(l.linha_id, 'expirar_dados', l.expirar_dados || '')} data-testid={`cell-expirar-${l.linha_id}`}>
+                      {editingCell?.id === l.linha_id && editingCell?.field === 'expirar_dados' ? (
+                        <div className="flex gap-1 items-center">
+                          <input type="date" value={editValue} onChange={e => setEditValue(e.target.value)}
+                            className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm" autoFocus
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }} />
+                          <button onClick={saveEdit} className="text-emerald-400"><Save className="w-4 h-4" /></button>
+                          <button onClick={cancelEdit} className="text-zinc-500"><XIcon className="w-4 h-4" /></button>
+                        </div>
+                      ) : (
+                        <span className={`${isAdmin ? 'cursor-pointer hover:text-emerald-400' : ''} ${l.expirar_dados_manual ? 'text-blue-300 font-semibold' : ''}`}
+                          title={isAdmin ? (l.expirar_dados_manual ? 'Editado manualmente — clique pra alterar' : 'Calculado automaticamente — clique pra editar') : ''}>
+                          {l.expirar_dados ? formatDateBR(l.expirar_dados) : <span className="text-zinc-600">—</span>}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-zinc-300 whitespace-nowrap">{formatDateBR(l.ultima_cobranca_venc)}</td>
                     <td className="px-3 py-2.5 text-zinc-300" onClick={() => startEdit(l.linha_id, 'canal', l.canal)}>
                       {isEditingCanal ? (
