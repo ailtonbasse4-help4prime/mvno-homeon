@@ -149,14 +149,14 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
         if flag and flag.get("last_run"):
             last = flag["last_run"]
             if isinstance(last, datetime):
-                if (now - last).total_seconds() < 600:
+                if (now - last).total_seconds() < 300:  # 5min debounce
                     cooldown_ok = False
         if cooldown_ok:
-            # Pega linhas com data passada OU sem data OU nao-sincronizadas ha >12h
-            cutoff = now - timedelta(hours=12)
+            # Pega linhas com data passada OU sem data OU nao-sincronizadas ha >6h (exceto editadas manualmente)
+            cutoff = now - timedelta(hours=6)
             stale = await db.linhas.find({
                 "$and": [
-                    {"expirar_dados_manual": {"$ne": True}},  # nunca mexer nas datas editadas manualmente
+                    {"expirar_dados_manual": {"$ne": True}},
                     {"$or": [
                         {"expirar_dados": None},
                         {"expirar_dados": {"$lt": hoje_iso_str}},
@@ -164,7 +164,7 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
                         {"expirar_dados_updated_at": {"$exists": False}},
                     ]},
                 ],
-            }, {"_id": 1, "chip_id": 1}).limit(200).to_list(200)
+            }, {"_id": 1, "chip_id": 1}).limit(500).to_list(500)
             stale_ids = [str(l["_id"]) for l in stale]
             if stale_ids:
                 await db.sync_flags.update_one(
@@ -784,15 +784,12 @@ async def _auto_sync_linhas_stale(linha_ids: list):
             cid = l.get("cliente_id")
             chip = chips_map.get(l.get("chip_id") or "")
             expirar_date = None
-
-            # OPCAO 1 (prioritaria): Ultimo pagamento Asaas + 30 dias
-            ultimo_pg = pagamentos_por_cliente.get(cid)
-            if ultimo_pg:
-                expirar_date = ultimo_pg + _td(days=30)
-
-            # OPCAO 2 (fallback): consultar Ta e usar data_ativacao + 30d
             status_chip_sigla = None
-            if not expirar_date and chip and chip.get("iccid"):
+
+            # OPCAO 1 (prioritaria): Consulta Ta Telecom pelo ICCID -> data_ativacao + 30d
+            # data_ativacao da API e atualizada a cada recarga feita na plataforma Ta
+            # (incluindo recargas manuais pelo painel), entao bate 1:1 com "Expiracao do Plano".
+            if chip and chip.get("iccid"):
                 iccid = chip["iccid"]
                 try:
                     await _asyncio.sleep(0.4)
@@ -802,10 +799,10 @@ async def _auto_sync_linhas_stale(linha_ids: list):
                     if resp and resp.success:
                         data = resp.data if isinstance(resp.data, dict) else {}
                         inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                        data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
-                        if data_at:
+                        data_at_iso = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
+                        if data_at_iso:
                             try:
-                                at = datetime.fromisoformat(data_at[:10]).date()
+                                at = datetime.fromisoformat(data_at_iso[:10]).date()
                                 expirar_date = at + _td(days=30)
                             except Exception:
                                 pass
@@ -823,31 +820,12 @@ async def _auto_sync_linhas_stale(linha_ids: list):
                         status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
                 except Exception as e:
                     logger.warning(f"Auto-sync Ta falhou ICCID {iccid}: {e}")
-            elif chip and chip.get("iccid"):
-                # Mesmo quando tem Asaas, consulta Ta so pra atualizar status_chip
-                iccid = chip["iccid"]
-                try:
-                    await _asyncio.sleep(0.4)
-                    resp = await operadora_service.consultar_linha(
-                        iccid, db=db, user_id="auto-sync", user_name="auto-sync"
-                    )
-                    if resp and resp.success:
-                        data = resp.data if isinstance(resp.data, dict) else {}
-                        inner = data.get("data") if isinstance(data.get("data"), dict) else data
-                        status_raw = str(
-                            inner.get("status") or inner.get("situacao") or data.get("status") or ""
-                        ).upper().strip()
-                        status_map = {
-                            "FUNCIONAL": "Ativo", "ATIVO": "Ativo", "FS": "Ativo",
-                            "NOVO": "Novo", "NP": "Novo",
-                            "BLOQUEADO_PARCIAL": "Bloq. Parcial",
-                            "BLOQUEADO_TOTAL": "Bloqueado", "BLOQUEADO": "Bloqueado",
-                            "CANCELADO": "Cancelado", "SUSPENSO": "Suspenso",
-                            "PENDENTE": "Pendente", "PENDING": "Pendente",
-                        }
-                        status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
-                except Exception as e:
-                    logger.warning(f"Auto-sync Ta (status) falhou ICCID {iccid}: {e}")
+
+            # OPCAO 2 (fallback): Ultimo pagamento Asaas + 30 dias
+            if not expirar_date:
+                ultimo_pg = pagamentos_por_cliente.get(cid)
+                if ultimo_pg:
+                    expirar_date = ultimo_pg + _td(days=30)
 
             # 3. Grava no MongoDB se encontrou algo
             update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
