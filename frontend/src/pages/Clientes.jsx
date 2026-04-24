@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone, Wrench } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone, Wrench, Ban, XCircle } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
 
@@ -52,6 +52,7 @@ export function Clientes() {
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all'); // all | ativo | bloqueado | cancelado
   const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
 
   const fetchClientes = useCallback(async () => {
@@ -306,6 +307,56 @@ export function Clientes() {
         <Input type="text" placeholder="Buscar por nome, documento ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} className="form-input pl-10" data-testid="search-clientes" />
       </div>
 
+      {/* Cards de status — clicaveis para filtrar */}
+      {(() => {
+        const counts = { all: clientes.length, ativo: 0, bloqueado: 0, cancelado: 0 };
+        clientes.forEach(c => {
+          const linhas = c.linhas || [];
+          if (linhas.length === 0) return; // cliente sem linha nao entra em nenhum filtro
+          const statuses = linhas.map(l => (l.status || '').toLowerCase());
+          if (statuses.includes('ativo')) counts.ativo += 1;
+          else if (statuses.every(s => s === 'cancelado')) counts.cancelado += 1;
+          else if (statuses.some(s => s === 'bloqueado')) counts.bloqueado += 1;
+        });
+        const cards = [
+          { key: 'all',       label: 'Total',      value: counts.all,       Icon: Users,       color: 'blue' },
+          { key: 'ativo',     label: 'Ativos',     value: counts.ativo,     Icon: CheckCircle, color: 'emerald' },
+          { key: 'bloqueado', label: 'Bloqueados', value: counts.bloqueado, Icon: Ban,         color: 'red' },
+          { key: 'cancelado', label: 'Cancelados', value: counts.cancelado, Icon: XCircle,     color: 'zinc' },
+        ];
+        const colorMap = {
+          blue:    { bg: 'from-blue-950/60',    border: 'border-blue-800/40',    txt: 'text-blue-300',    selBorder: 'border-blue-400',    selRing: 'ring-blue-500/30' },
+          emerald: { bg: 'from-emerald-950/60', border: 'border-emerald-800/40', txt: 'text-emerald-300', selBorder: 'border-emerald-400', selRing: 'ring-emerald-500/30' },
+          red:     { bg: 'from-red-950/60',    border: 'border-red-800/40',     txt: 'text-red-300',     selBorder: 'border-red-400',     selRing: 'ring-red-500/30' },
+          zinc:    { bg: 'from-zinc-800/60',   border: 'border-zinc-700/40',    txt: 'text-zinc-300',    selBorder: 'border-zinc-400',    selRing: 'ring-zinc-500/30' },
+        };
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {cards.map(c => {
+              const selected = statusFilter === c.key;
+              const cm = colorMap[c.color];
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setStatusFilter(selected && c.key !== 'all' ? 'all' : c.key)}
+                  className={`text-left p-4 rounded-xl bg-gradient-to-br ${cm.bg} to-zinc-950 border transition-all hover:-translate-y-0.5 hover:shadow-lg ${
+                    selected ? `${cm.selBorder} ring-2 ${cm.selRing}` : cm.border
+                  }`}
+                  data-testid={`filter-card-${c.key}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <c.Icon className={`w-4 h-4 ${cm.txt}`} />
+                    {selected && <span className={`text-[10px] font-bold ${cm.txt} uppercase tracking-wider`}>Filtrando</span>}
+                  </div>
+                  <div className="text-2xl font-black text-white">{c.value}</div>
+                  <div className={`text-xs ${cm.txt} mt-0.5`}>{c.label}</div>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       <div className="dashboard-card overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
           <table className="data-table w-full min-w-[1600px]" data-testid="clientes-table">
@@ -324,9 +375,22 @@ export function Clientes() {
               </tr>
             </thead>
             <tbody>
-              {clientes.length === 0 ? (
-                <tr><td colSpan={10} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>
-              ) : [...clientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).flatMap((c) => {
+              {(() => {
+                // Aplica filtro de status ao clicar em um card
+                const filteredClientes = clientes.filter(c => {
+                  if (statusFilter === 'all') return true;
+                  const linhas = c.linhas || [];
+                  if (linhas.length === 0) return false;
+                  const statuses = linhas.map(l => (l.status || '').toLowerCase());
+                  if (statusFilter === 'ativo')     return statuses.includes('ativo');
+                  if (statusFilter === 'bloqueado') return !statuses.includes('ativo') && statuses.some(s => s === 'bloqueado');
+                  if (statusFilter === 'cancelado') return statuses.length > 0 && statuses.every(s => s === 'cancelado');
+                  return true;
+                });
+                if (filteredClientes.length === 0) {
+                  return <tr><td colSpan={10} className="text-center text-zinc-500 py-8">Nenhum cliente encontrado</td></tr>;
+                }
+                return [...filteredClientes].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR')).flatMap((c) => {
                 const linhas = c.linhas || [];
                 if (linhas.length === 0) {
                   return [(
@@ -380,7 +444,8 @@ export function Clientes() {
                     </td>
                   </tr>
                 ));
-              })}
+              });
+              })()}
             </tbody>
           </table>
         </div>
