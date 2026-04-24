@@ -2,13 +2,15 @@
 import io
 import re
 import unicodedata
-from datetime import datetime, timezone
+import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/operacional", tags=["operacional"])
 
 # Injetado pelo server.py principal
@@ -178,31 +180,43 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
     await _ctx["get_current_user"](request)
     db = _ctx["db"]
 
-    # AUTO-CORRECAO de datas passadas: toda vez que alguem abre a planilha,
-    # qualquer linha com expirar_dados no passado e avancada para o proximo ciclo (30d)
-    # ate encontrar uma data futura. Usuario nunca ve data antiga.
+    # Auto-sync com Ta Telecom em BACKGROUND para linhas com data passada ou stale.
+    # Dispara no maximo 1x a cada 10 minutos (usa flag no mongodb como debounce).
     try:
+        import asyncio as _asyncio
         from datetime import date as _date, timedelta as _td
-        hoje_date = _date.today()
-        hoje_iso_str = hoje_date.strftime("%Y-%m-%d")
-        linhas_passadas = await db.linhas.find(
-            {"expirar_dados": {"$ne": None, "$lt": hoje_iso_str}},
-            {"expirar_dados": 1},
-        ).to_list(5000)
-        for lp in linhas_passadas:
-            try:
-                dt = datetime.fromisoformat(lp["expirar_dados"][:10]).date()
-                while dt <= hoje_date:
-                    dt = dt + _td(days=30)
-                await db.linhas.update_one(
-                    {"_id": lp["_id"]},
-                    {"$set": {"expirar_dados": dt.strftime("%Y-%m-%d"), "expirar_dados_updated_at": datetime.now(timezone.utc)}},
+        hoje_iso_str = _date.today().strftime("%Y-%m-%d")
+        # Debounce: verifica se ja sincronizou nos ultimos 10 min
+        flag = await db.sync_flags.find_one({"key": "planilha_auto_sync"})
+        now = datetime.now(timezone.utc)
+        cooldown_ok = True
+        if flag and flag.get("last_run"):
+            last = flag["last_run"]
+            if isinstance(last, datetime):
+                if (now - last).total_seconds() < 600:
+                    cooldown_ok = False
+        if cooldown_ok:
+            # Pega linhas com data passada OU sem data OU nao-sincronizadas ha >12h
+            cutoff = now - timedelta(hours=12)
+            stale = await db.linhas.find({
+                "$or": [
+                    {"expirar_dados": None},
+                    {"expirar_dados": {"$lt": hoje_iso_str}},
+                    {"expirar_dados_updated_at": {"$lt": cutoff}},
+                    {"expirar_dados_updated_at": {"$exists": False}},
+                ],
+            }, {"_id": 1, "chip_id": 1}).limit(200).to_list(200)
+            stale_ids = [str(l["_id"]) for l in stale]
+            if stale_ids:
+                await db.sync_flags.update_one(
+                    {"key": "planilha_auto_sync"},
+                    {"$set": {"last_run": now, "count": len(stale_ids)}},
+                    upsert=True,
                 )
-            except Exception:
-                continue
-    except Exception:
-        # Nunca bloqueia a planilha por causa da auto-correcao
-        pass
+                # Dispara sync em background (nao bloqueia a resposta)
+                _asyncio.create_task(_auto_sync_linhas_stale(stale_ids))
+    except Exception as _e:
+        logger.warning(f"Falha no auto-sync da planilha (nao-critico): {_e}")
 
     # Buscar todas as linhas
     linhas = await db.linhas.find({}).to_list(5000)
@@ -748,6 +762,75 @@ async def atualizar_custos_batch(data: CustosBatchUpdate, request: Request):
 
 
 # ==================== SINCRONIZACAO AUTOMATICA TA TELECOM ====================
+async def _auto_sync_linhas_stale(linha_ids: list):
+    """Sincroniza com Ta Telecom apenas as linhas que precisam (data passada/stale).
+
+    Executa em background, disparado pelo GET /planilha. NAO bloqueia a resposta.
+    Cada consulta tem throttle de 0.4s para nao estourar rate limit.
+    """
+    db = _ctx["db"]
+    from services.operadora_service import operadora_service
+    import asyncio as _asyncio
+
+    try:
+        obj_ids = [ObjectId(x) for x in linha_ids if ObjectId.is_valid(x)]
+        if not obj_ids:
+            return
+        linhas = await db.linhas.find({"_id": {"$in": obj_ids}}).to_list(len(obj_ids))
+        chip_ids = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
+        chips_map = {}
+        if chip_ids:
+            chs = await db.chips.find({"_id": {"$in": [ObjectId(c) for c in chip_ids]}}).to_list(len(chip_ids))
+            chips_map = {str(c["_id"]): c for c in chs}
+
+        for l in linhas:
+            chip = chips_map.get(l.get("chip_id") or "")
+            if not chip or not chip.get("iccid"):
+                continue
+            iccid = chip["iccid"]
+            try:
+                await _asyncio.sleep(0.4)  # throttle rate limit
+                resp = await operadora_service.consultar_linha(iccid, db=db, user_id="auto-sync", user_name="auto-sync")
+                if not resp or not resp.success:
+                    continue
+                data = resp.data if isinstance(resp.data, dict) else {}
+                inner = data.get("data") if isinstance(data.get("data"), dict) else data
+                data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
+                data_bl_raw = _parse_data_br(inner.get("data_bloqueio") or data.get("data_bloqueio"))
+                expirar_direto = _parse_data_br(
+                    inner.get("data_expiracao") or inner.get("dataExpiracao")
+                    or inner.get("validade") or inner.get("data_validade")
+                )
+                expirar = _resolver_proxima_recarga(
+                    data_ativacao=data_at, data_bloqueio=data_bl_raw,
+                    data_expiracao_direta=expirar_direto,
+                )
+                status_raw = str(
+                    inner.get("status") or inner.get("situacao") or data.get("status") or ""
+                ).upper().strip()
+                status_map = {
+                    "FUNCIONAL": "Ativo", "ATIVO": "Ativo", "FS": "Ativo",
+                    "NOVO": "Novo", "NP": "Novo",
+                    "BLOQUEADO_PARCIAL": "Bloq. Parcial",
+                    "BLOQUEADO_TOTAL": "Bloqueado", "BLOQUEADO": "Bloqueado",
+                    "CANCELADO": "Cancelado", "SUSPENSO": "Suspenso",
+                    "PENDENTE": "Pendente", "PENDING": "Pendente",
+                }
+                status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
+                update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
+                if expirar:
+                    update["expirar_dados"] = expirar
+                if status_chip_sigla:
+                    update["status_chip"] = status_chip_sigla
+                if len(update) > 1:
+                    await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
+            except Exception as e:
+                logger.warning(f"Auto-sync falhou para ICCID {iccid}: {e}")
+                continue
+    except Exception as e:
+        logger.error(f"Erro no auto-sync de linhas: {e}")
+
+
 async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
     """Executa sync com Ta Telecom em background e grava progresso em db.sync_jobs."""
     db = _ctx["db"]
