@@ -39,80 +39,35 @@ def _parse_data_br(s):
 
 
 def _calc_proxima_recarga(data_ativacao_iso, data_bloqueio_iso):
-    """Calcula a data da PROXIMA RECARGA do chip na Ta Telecom.
+    """Calcula a EXPIRACAO DO PLANO da Ta Telecom (= proxima recarga).
 
-    A API da Ta Telecom retorna `data_ativacao` e `data_bloqueio`. Quando o
-    chip nunca foi bloqueado, `data_bloqueio` vem igual a `data_ativacao` ou null.
-    Quando o chip vai ser bloqueado (recarga programada), `data_bloqueio` traz
-    uma data futura (a proxima recarga). Logica:
-      - Se data_bloqueio > hoje: usar data_bloqueio (recarga programada pela Ta).
-      - Caso contrario: calcular a proxima mensalidade a partir da data de
-        ativacao, avancando 30 dias por ciclo ate encontrar uma data futura.
-        Assim funciona para chips ativos ha varios meses sem data_bloqueio.
+    Regra da Ta Telecom (validada no painel deles):
+      Expiracao do Plano = Ultima Recarga + 30 dias
+    A API retorna `data_ativacao` que e atualizado a cada recarga. Entao
+    basta somar 30 dias. Zero calculo, zero adivinhacao, espelha 1:1 a Ta.
     """
-    from datetime import datetime as _dt, date as _date, timedelta as _td
+    from datetime import datetime as _dt, timedelta as _td
     def _pd(s):
         if not s: return None
         try:
             return _dt.strptime(s[:10], "%Y-%m-%d").date()
         except Exception:
             return None
-    hoje = _date.today()
     at = _pd(data_ativacao_iso)
-    bl = _pd(data_bloqueio_iso)
-    # 1. Se data_bloqueio da Ta e FUTURA, ela e a proxima recarga real
-    if bl and bl > hoje:
-        return bl.strftime("%Y-%m-%d")
-    # 2. Calcular ciclo mensal a partir da ativacao
     if at:
-        prox = at + _td(days=30)
-        # Avanca 30 dias ate encontrar data futura (chip ativo ha varios meses)
-        while prox <= hoje:
-            prox = prox + _td(days=30)
-        return prox.strftime("%Y-%m-%d")
-    # 3. Fallback: data_bloqueio mesmo que passada (ultima info disponivel)
+        return (at + _td(days=30)).strftime("%Y-%m-%d")
+    # Fallback: se nao tiver data_ativacao, usa data_bloqueio + 30d
+    bl = _pd(data_bloqueio_iso)
     if bl:
-        return bl.strftime("%Y-%m-%d")
+        return (bl + _td(days=30)).strftime("%Y-%m-%d")
     return None
 
 
 def _resolver_proxima_recarga(*, data_ativacao, data_bloqueio, data_expiracao_direta):
-    """Resolve a PROXIMA RECARGA considerando todos os candidatos da API Ta.
-
-    Regra mestre: a proxima recarga SEMPRE tem que ser uma data FUTURA (>= hoje).
-    Se a API retornar qualquer data no passado (ex: data_expiracao do ciclo
-    anterior), descarta e calcula via ciclo de 30d a partir da ativacao.
+    """Alias para _calc_proxima_recarga — mantido por compatibilidade.
+    A EXPIRACAO DO PLANO na Ta Telecom e sempre `data_ativacao + 30d`.
     """
-    from datetime import datetime as _dt, date as _date, timedelta as _td
-    def _pd(s):
-        if not s: return None
-        try:
-            return _dt.strptime(s[:10], "%Y-%m-%d").date()
-        except Exception:
-            return None
-    hoje = _date.today()
-    at = _pd(data_ativacao)
-    bl = _pd(data_bloqueio)
-    ex = _pd(data_expiracao_direta)
-
-    # 1. data_expiracao explicita, se for FUTURA - melhor candidata
-    if ex and ex >= hoje:
-        return ex.strftime("%Y-%m-%d")
-    # 2. data_bloqueio futura - proxima recarga programada
-    if bl and bl > hoje:
-        return bl.strftime("%Y-%m-%d")
-    # 3. Calcular ciclo mensal a partir da ativacao (avanca 30d ate achar data futura)
-    if at:
-        prox = at + _td(days=30)
-        while prox <= hoje:
-            prox = prox + _td(days=30)
-        return prox.strftime("%Y-%m-%d")
-    # 4. Fallback: data_expiracao passada, depois data_bloqueio passada
-    if ex:
-        return ex.strftime("%Y-%m-%d")
-    if bl:
-        return bl.strftime("%Y-%m-%d")
-    return None
+    return _calc_proxima_recarga(data_ativacao, data_bloqueio)
 
 
 def _parse_tamanho_gb(nome: str, franquia: str = "") -> float:
