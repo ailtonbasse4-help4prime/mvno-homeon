@@ -5162,6 +5162,118 @@ async def admin_sincronizar_selfservice(activation_id: str, request: Request):
         "message": f"Sincronizado! MSISDN {msisdn} gravado na linha.{' Email de ativacao reenviado.' if email_sent else ''}",
     }
 
+@api_router.post("/clientes/{cliente_id}/sincronizar-com-ta")
+async def sincronizar_cliente_com_ta(cliente_id: str, request: Request):
+    """Sincroniza um cliente especifico com a Ta Telecom — usa para casos onde
+    a ativacao foi feita manualmente no painel da Ta e o sistema nao foi atualizado.
+
+    Cobre cenarios:
+    - Cliente nao tem linha (caso Murilo: chip reservado, sem linha registrada)
+    - Linha existe mas sem MSISDN
+    - Status do chip esta "reservado" mas Ta diz que esta ativo
+    """
+    user = await require_admin(request)
+    if not ObjectId.is_valid(cliente_id):
+        raise HTTPException(status_code=400, detail="ID invalido")
+    cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    # Acha o chip atrelado a esse cliente (pode estar como reservado/ativado)
+    chip = await db.chips.find_one({"cliente_id": cliente_id})
+    if not chip:
+        # Tenta buscar via ativacao self-service como fallback
+        ativ = await db.ativacoes_selfservice.find_one({"cliente_id": cliente_id})
+        if ativ and ativ.get("chip_id"):
+            chip = await db.chips.find_one({"_id": ObjectId(ativ["chip_id"])})
+    if not chip or not chip.get("iccid"):
+        raise HTTPException(status_code=404, detail="Cliente nao tem chip atrelado. Verifique o cadastro.")
+
+    iccid = chip["iccid"]
+
+    # Consulta Ta Telecom
+    check = await operadora_service.consultar_linha(iccid=iccid, db=db, user_id=user["id"], user_name=user["name"])
+    if not check.success or not check.data:
+        raise HTTPException(status_code=400, detail=f"Nao foi possivel consultar a Ta: {check.message}")
+
+    raw = check.data
+    inner = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+    msisdn = (
+        check.data.get("msisdn") or check.data.get("numero")
+        or inner.get("msisdn") or inner.get("numero")
+        or inner.get("numero_contrato")
+    )
+    status_ta = str(inner.get("status") or raw.get("status") or "").upper().strip()
+
+    if not msisdn:
+        raise HTTPException(status_code=400, detail=f"Ta retornou status '{status_ta or '?'}' mas nao tem numero. Tente em alguns minutos.")
+
+    # Atualiza chip
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+        "status": ChipStatus.ativado.value, "cliente_id": cliente_id, "msisdn": msisdn,
+    }})
+
+    # Cria/atualiza linha
+    existing_line = await db.linhas.find_one({"chip_id": str(chip["_id"])})
+    if not existing_line:
+        existing_line = await db.linhas.find_one({"chip_id": chip["_id"]})
+
+    if existing_line:
+        await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {
+            "msisdn": msisdn, "numero": msisdn, "status": "ativo", "cliente_id": cliente_id,
+        }})
+        line_action = "atualizada"
+    else:
+        # Pega plano da ativacao self-service ou do cadastro do cliente
+        ativ = await db.ativacoes_selfservice.find_one({"cliente_id": cliente_id})
+        plano_id = (ativ or {}).get("plano_id") or cliente.get("plano_id")
+        oferta_id = (ativ or {}).get("oferta_id") or cliente.get("oferta_id")
+        await db.linhas.insert_one({
+            "numero": msisdn, "status": "ativo",
+            "cliente_id": cliente_id, "chip_id": str(chip["_id"]),
+            "plano_id": plano_id, "oferta_id": oferta_id,
+            "msisdn": msisdn, "created_at": datetime.now(timezone.utc),
+        })
+        line_action = "criada"
+
+    # Marca ativacao self-service como ativa, se existir
+    ativ = await db.ativacoes_selfservice.find_one({"cliente_id": cliente_id})
+    if ativ:
+        await db.ativacoes_selfservice.update_one({"_id": ativ["_id"]}, {"$set": {
+            "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+        }})
+
+    # Envia email de ativacao
+    email_sent = False
+    if email_service.is_configured and cliente.get("email"):
+        try:
+            plano_id = (ativ or {}).get("plano_id") or cliente.get("plano_id")
+            plano = None
+            if plano_id and ObjectId.is_valid(str(plano_id)):
+                plano = await db.planos.find_one({"_id": ObjectId(str(plano_id))})
+            await email_service.send_ativacao_sucesso(
+                to_email=cliente["email"],
+                cliente_nome=cliente["nome"],
+                numero=msisdn,
+                plano_nome=(plano or {}).get("nome"),
+                iccid=iccid,
+            )
+            email_sent = True
+        except Exception as ee:
+            logger.warning(f"Erro ao enviar email pos-sincronizacao: {ee}")
+
+    await create_log("ativacao", f"Admin sincronizou cliente com Ta: {cliente['nome']} - chip {iccid} - MSISDN {msisdn} (linha {line_action}{', email enviado' if email_sent else ''})", user["id"], user["name"])
+
+    return {
+        "success": True,
+        "msisdn": msisdn,
+        "iccid": iccid,
+        "status_ta": status_ta,
+        "linha_action": line_action,
+        "email_enviado": email_sent,
+        "message": f"Pronto! Numero {msisdn} gravado, linha {line_action}{', email reenviado' if email_sent else ''}.",
+    }
+
 @api_router.get("/retry-queue")
 async def get_retry_queue(request: Request):
     """Lista ativacoes na fila de retry automatico."""

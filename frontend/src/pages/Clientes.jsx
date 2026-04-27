@@ -12,7 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone, Wrench, Ban, XCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, CheckCircle, AlertCircle, RefreshCw, Phone, Wrench, Ban, XCircle, Zap } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
 
@@ -193,6 +193,17 @@ export function Clientes() {
       toast.error(typeof msg === 'string' ? msg : 'Erro ao reparar');
     } finally {
       setRepairing(false);
+    }
+  };
+
+  const handleSincronizarComTa = async (cliente) => {
+    if (!confirm(`Consultar a Tá Telecom e atualizar o status/linha de ${cliente.nome}?`)) return;
+    try {
+      const res = await axios.post(`${API_URL}/api/clientes/${cliente.id}/sincronizar-com-ta`, {}, { withCredentials: true });
+      toast.success(res.data?.message || 'Sincronizado com sucesso');
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao sincronizar com a Tá');
     }
   };
 
@@ -438,6 +449,7 @@ export function Clientes() {
                     <td className="whitespace-nowrap"><span className={`whitespace-nowrap ${l.status === 'ativo' ? 'badge-active' : l.status === 'bloqueado' ? 'badge-blocked' : 'badge-inactive'}`}>{l.status}</span></td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleSincronizarComTa(c)} className="text-zinc-400 hover:text-blue-400" title="Sincronizar com Tá Telecom (puxa MSISDN, cria/atualiza linha, manda email)" data-testid={`sync-cliente-${c.id}`}><Zap className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(c)} className="text-zinc-400 hover:text-white" data-testid={`edit-cliente-${c.id}`}><Edit className="w-4 h-4" /></Button>
                         {isAdmin && <Button variant="ghost" size="sm" onClick={() => { setClienteToDelete(c); setDeleteDialogOpen(true); }} className="text-zinc-400 hover:text-red-400" data-testid={`delete-cliente-${c.id}`}><Trash2 className="w-4 h-4" /></Button>}
                       </div>
