@@ -397,6 +397,12 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
         update_linha["expirar_dados"] = data.expirar_dados
         update_linha["expirar_dados_manual"] = True
         update_linha["expirar_dados_updated_at"] = datetime.now(timezone.utc)
+        # Log dedicado pra permitir auditoria/recuperacao caso a flag seja perdida
+        await _ctx["create_log"](
+            "expirar_dados_manual_edit",
+            f"linha={linha_id}|cliente={linha.get('cliente_id')}|chip={linha.get('chip_id')}|valor={data.expirar_dados}",
+            user["id"], user["name"],
+        )
     if data.status_chip is not None:
         update_linha["status_chip"] = data.status_chip
     if data.complemento is not None:
@@ -416,6 +422,45 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
 
     await _ctx["create_log"]("operacional", f"Linha {linha_id} atualizada inline", user["id"], user["name"])
     return {"success": True, "updated": {**update_linha, **({"canal": data.canal} if data.canal is not None else {})}}
+
+
+@router.post("/restaurar-edicoes-manuais")
+async def restaurar_edicoes_manuais(request: Request):
+    """Varre logs de 'expirar_dados_manual_edit' e restaura as ultimas edicoes
+    manuais que possam ter sido perdidas. Usar uma vez quando suspeitar de
+    perda de dados. Pega a edicao mais recente por linha_id.
+    """
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    logs = await db.logs.find({"action": "expirar_dados_manual_edit"}).sort("timestamp", -1).to_list(10000)
+    seen = set()
+    restauradas = 0
+    for log in logs:
+        desc = log.get("description") or log.get("descricao") or ""
+        # Format: linha={linha_id}|cliente=...|chip=...|valor=YYYY-MM-DD
+        parts = {}
+        for kv in desc.split("|"):
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                parts[k.strip()] = v.strip()
+        linha_id = parts.get("linha")
+        valor = parts.get("valor")
+        if not linha_id or not valor or linha_id in seen:
+            continue
+        seen.add(linha_id)
+        if not ObjectId.is_valid(linha_id):
+            continue
+        await db.linhas.update_one(
+            {"_id": ObjectId(linha_id)},
+            {"$set": {
+                "expirar_dados": valor,
+                "expirar_dados_manual": True,
+                "expirar_dados_updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        restauradas += 1
+    await _ctx["create_log"]("operacional", f"Restauradas {restauradas} edicoes manuais via logs", user["id"], user["name"])
+    return {"restauradas": restauradas, "total_logs_processados": len(logs)}
 
 
 @router.get("/export")
