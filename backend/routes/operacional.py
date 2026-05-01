@@ -136,46 +136,9 @@ async def planilha_consolidada(request: Request, search: Optional[str] = None, s
     await _ctx["get_current_user"](request)
     db = _ctx["db"]
 
-    # Auto-sync com Ta Telecom em BACKGROUND para linhas com data passada ou stale.
-    # Dispara no maximo 1x a cada 10 minutos (usa flag no mongodb como debounce).
-    try:
-        import asyncio as _asyncio
-        from datetime import date as _date, timedelta as _td
-        hoje_iso_str = _date.today().strftime("%Y-%m-%d")
-        # Debounce: verifica se ja sincronizou nos ultimos 10 min
-        flag = await db.sync_flags.find_one({"key": "planilha_auto_sync"})
-        now = datetime.now(timezone.utc)
-        cooldown_ok = True
-        if flag and flag.get("last_run"):
-            last = flag["last_run"]
-            if isinstance(last, datetime):
-                if (now - last).total_seconds() < 300:  # 5min debounce
-                    cooldown_ok = False
-        if cooldown_ok:
-            # Pega linhas com data passada OU sem data OU nao-sincronizadas ha >6h (exceto editadas manualmente)
-            cutoff = now - timedelta(hours=6)
-            stale = await db.linhas.find({
-                "$and": [
-                    {"expirar_dados_manual": {"$ne": True}},
-                    {"$or": [
-                        {"expirar_dados": None},
-                        {"expirar_dados": {"$lt": hoje_iso_str}},
-                        {"expirar_dados_updated_at": {"$lt": cutoff}},
-                        {"expirar_dados_updated_at": {"$exists": False}},
-                    ]},
-                ],
-            }, {"_id": 1, "chip_id": 1}).limit(500).to_list(500)
-            stale_ids = [str(l["_id"]) for l in stale]
-            if stale_ids:
-                await db.sync_flags.update_one(
-                    {"key": "planilha_auto_sync"},
-                    {"$set": {"last_run": now, "count": len(stale_ids)}},
-                    upsert=True,
-                )
-                # Dispara sync em background (nao bloqueia a resposta)
-                _asyncio.create_task(_auto_sync_linhas_stale(stale_ids))
-    except Exception as _e:
-        logger.warning(f"Falha no auto-sync da planilha (nao-critico): {_e}")
+    # AUTO-SYNC DE expirar_dados DESATIVADO PERMANENTEMENTE.
+    # A coluna "Recarga Ta" e 100% manual - apenas o usuario pode alterar.
+    # Nenhuma logica automatica vai sobrescrever esta coluna.
 
     # Buscar todas as linhas
     linhas = await db.linhas.find({}).to_list(5000)
@@ -811,10 +774,12 @@ async def importar_excel(request: Request, file: UploadFile = File(...)):
 
 @router.post("/atualizar-expirar-dados/{iccid}")
 async def atualizar_expirar_dados(iccid: str, request: Request):
-    """Consulta Ta Telecom e cacheia a data de expiracao dos dados em linhas.expirar_dados."""
+    """DESATIVADO: Este endpoint nao toca mais em `expirar_dados`.
+    A coluna 'Recarga Ta' agora e 100% manual.
+    Retorna apenas a resposta crua da Ta para diagnostico.
+    """
     user = await _ctx["require_admin"](request)
     db = _ctx["db"]
-    # Import local para nao criar import circular
     from services.operadora_service import operadora_service
     try:
         resp = await operadora_service.consultar_linha(iccid, db=db, user_id=user["id"], user_name=user["name"])
@@ -822,23 +787,7 @@ async def atualizar_expirar_dados(iccid: str, request: Request):
             raise HTTPException(status_code=502, detail=f"Falha Ta Telecom: {getattr(resp, 'message', '') or getattr(resp, 'status', '?')}")
         data = resp.data if isinstance(resp.data, dict) else {}
         inner = data.get("data") if isinstance(data.get("data"), dict) else data
-        data_at = _parse_data_br(inner.get("data_ativacao") or data.get("data_ativacao"))
-        data_bl_raw = _parse_data_br(inner.get("data_bloqueio") or data.get("data_bloqueio"))
-        expirar_direto = _parse_data_br(
-            inner.get("data_expiracao") or inner.get("dataExpiracao")
-            or inner.get("expira_em") or inner.get("validity")
-            or inner.get("data_validade") or inner.get("validade")
-        )
-        # Usa resolver que garante data FUTURA (descarta datas passadas)
-        expirar = _resolver_proxima_recarga(
-            data_ativacao=data_at, data_bloqueio=data_bl_raw,
-            data_expiracao_direta=expirar_direto,
-        )
-        chip = await db.chips.find_one({"iccid": iccid})
-        if chip:
-            await db.linhas.update_many({"chip_id": str(chip["_id"])}, {"$set": {"expirar_dados": expirar, "expirar_dados_updated_at": datetime.now(timezone.utc)}})
-        await _ctx["create_log"]("operacional", f"Expirar dados atualizado via TaTelecom: ICCID {iccid}", user["id"], user["name"])
-        return {"iccid": iccid, "expirar_dados": expirar, "raw": inner}
+        return {"iccid": iccid, "raw": inner, "info": "endpoint somente leitura - nao escreve em expirar_dados"}
     except HTTPException:
         raise
     except Exception as e:
@@ -945,14 +894,10 @@ async def atualizar_custos_batch(data: CustosBatchUpdate, request: Request):
 
 # ==================== SINCRONIZACAO AUTOMATICA TA TELECOM ====================
 async def _auto_sync_linhas_stale(linha_ids: list):
-    """Calcula a "Expiracao do Plano Ta" (Recarga Ta) para cada linha stale.
-
-    Regra validada com o painel da Ta Telecom:
-      Expiracao do Plano = Data do ULTIMO PAGAMENTO no Asaas + 30 dias
-    Asaas e a fonte da verdade porque cada recarga comeca quando o boleto/pix
-    e pago, e o sistema da Ta atualiza internamente baseado nesse pagamento.
-    Fallback: se cliente nao tem pagamento, usa data_ativacao da Ta + 30d.
+    """DESATIVADO: O auto-sync NUNCA mais toca em `expirar_dados`.
+    Esta coluna agora e 100% manual (gerenciada pelo usuario).
     """
+    return  # no-op — protegido permanentemente
     db = _ctx["db"]
     from services.operadora_service import operadora_service
     from datetime import timedelta as _td
@@ -1056,11 +1001,8 @@ async def _auto_sync_linhas_stale(linha_ids: list):
         logger.error(f"Erro no auto-sync de linhas: {e}")
 
 
-async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = False):
-    """Executa sync com Ta Telecom em background e grava progresso em db.sync_jobs.
-    Se force=False (padrao): respeita expirar_dados_manual=True (nao sobrescreve edicoes).
-    Se force=True: ignora a flag e sincroniza tudo (use apenas para recuperacao).
-    """
+async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
+    """Sync em background: atualiza APENAS status_chip. NUNCA toca em expirar_dados."""
     db = _ctx["db"]
     from services.operadora_service import operadora_service
     import asyncio as _asyncio
@@ -1073,7 +1015,6 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = Fal
         "iniciado_em": datetime.now(timezone.utc),
         "total": 0, "atualizadas": 0, "erros": 0,
         "user_id": user_id,
-        "force": force,
     })
 
     try:
@@ -1090,7 +1031,6 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = Fal
         erros_count = 0
         erros_lista = []
         nao_encontrados = 0
-        protegidas_manual = 0
 
         for idx, l in enumerate(linhas):
             chip = chips_map.get(l.get("chip_id") or "")
@@ -1140,16 +1080,11 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = Fal
                     "PENDENTE": "Pendente", "PENDING": "Pendente",
                 }
                 status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
-                update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
-                # Protege edicoes manuais (a menos que force=True)
-                tem_manual = bool(l.get("expirar_dados_manual"))
-                if expirar and (force or not tem_manual):
-                    update["expirar_dados"] = expirar
-                elif tem_manual and not force:
-                    protegidas_manual += 1
+                update = {}
+                # NUNCA toca em expirar_dados - coluna 100% manual do usuario
                 if status_chip_sigla:
                     update["status_chip"] = status_chip_sigla
-                if len(update) > 1:
+                if update:
                     await db.linhas.update_one({"_id": l["_id"]}, {"$set": update})
                     atualizados += 1
             except Exception as e:
@@ -1168,11 +1103,10 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = Fal
             "finalizado_em": datetime.now(timezone.utc),
             "atualizadas": atualizados,
             "sem_chip": nao_encontrados,
-            "protegidas_manual": protegidas_manual,
             "erros": erros_count,
             "erros_lista": erros_lista,
         }})
-        await _ctx["create_log"]("operacional", f"Sync TaTelecom batch{' [FORCE]' if force else ''}: {atualizados}/{len(linhas)} atualizadas, {protegidas_manual} protegidas manual", user_id, user_name)
+        await _ctx["create_log"]("operacional", f"Sync TaTelecom batch (status_chip apenas): {atualizados}/{len(linhas)} atualizadas", user_id, user_name)
     except Exception as e:
         await db.sync_jobs.update_one({"job_id": job_id}, {"$set": {
             "status": "error",
@@ -1182,17 +1116,15 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = Fal
 
 
 @router.post("/sincronizar-tatelecom")
-async def sincronizar_tatelecom_batch(request: Request, force: bool = False):
-    """Dispara sync em background. Retorna imediatamente. Use GET /sync-status para acompanhar.
-    Query param `force=true` forca sincronizacao mesmo de linhas com expirar_dados_manual=True
-    (use SOMENTE para recuperacao de dados perdidos - sobrescreve edicoes manuais).
+async def sincronizar_tatelecom_batch(request: Request):
+    """Dispara sync em background. Atualiza apenas `status_chip` (Ativo/Bloq./etc).
+    NAO toca em `expirar_dados` (coluna 100% manual).
     """
     user = await _ctx["require_admin"](request)
     from services.operadora_service import operadora_service
     if getattr(operadora_service, "use_mock", True):
         raise HTTPException(status_code=400, detail="Ta Telecom nao configurado (em modo mock)")
 
-    # Checar se ja tem um job rodando
     db = _ctx["db"]
     existing = await db.sync_jobs.find_one({"tipo": "tatelecom", "status": "running"})
     if existing:
@@ -1203,11 +1135,10 @@ async def sincronizar_tatelecom_batch(request: Request, force: bool = False):
         }
 
     import asyncio as _asyncio
-    _asyncio.create_task(_run_sync_tatelecom_bg(user["id"], user["name"], force=force))
+    _asyncio.create_task(_run_sync_tatelecom_bg(user["id"], user["name"]))
     return {
         "status": "started",
-        "force": force,
-        "message": f"Sincronizacao iniciada{' (FORCE - sobrescreve manuais)' if force else ''}. Use GET /sync-status/tatelecom para acompanhar.",
+        "message": "Sincronizacao iniciada (apenas status do chip). expirar_dados nao sera tocado.",
     }
 
 
@@ -1461,12 +1392,15 @@ async def auto_proxima_recarga(request: Request):
 # ==================== LIMPEZA DE DATAS PASSADAS ====================
 @router.post("/limpar-datas-passadas")
 async def limpar_datas_passadas(request: Request):
-    """Varre linhas com `expirar_dados` no passado e recalcula via ciclo de 30 dias.
-
-    Utiliza `data_ativacao` do chip (se disponivel) OU a ultima cobranca paga.
-    Chamado automaticamente ao abrir a planilha operacional e pelo scheduler diario.
+    """DESATIVADO: A coluna `expirar_dados` (Recarga Ta) e 100% manual.
+    Nenhuma rotina automatica vai mais alterar essa coluna.
     """
-    user = await _ctx["require_admin"](request)
+    await _ctx["require_admin"](request)
+    return {"corrigidas": 0, "mensagem": "Endpoint desativado - coluna 100% manual"}
+
+
+async def _limpar_datas_passadas_legado_NAO_USAR(request: Request):
+    """Funcao legada mantida apenas como referencia - nao chamada por nenhuma rota."""
     db = _ctx["db"]
     from datetime import timedelta, date as _date
     hoje = _date.today()
