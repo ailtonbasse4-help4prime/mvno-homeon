@@ -8,6 +8,21 @@
 - Dominio: https://mvno.homeonapp.com.br
 - Config nginx ativa: `/etc/nginx/sites-enabled/app-ativacao` (tem `try_files $uri $uri/ /index.html;`)
 
+## DEPLOY (1 comando só)
+
+Na sua VPS, dentro de `/opt/mvno-homeon`, rode:
+
+```bash
+cd /opt/mvno-homeon && git pull && bash deploy.sh
+```
+
+O script `/opt/mvno-homeon/deploy.sh`:
+- Faz pull do GitHub
+- Build do frontend
+- Copia build para nginx (preservando `homeon-assets/`)
+- Reinicia backend e valida (rollback automático se falhar)
+- Imprime os próximos passos no final
+
 ## REGRAS CRITICAS — NUNCA QUEBRAR
 
 ⛔ **JAMAIS RODAR `mongosh` com `$unset` em campos manuais ou de configuracao do usuario.**
@@ -19,7 +34,7 @@
 
 ⛔ **NUNCA** sugerir comandos de "re-sync forcado" que usam `$unset` ou `deleteMany` em colecoes de producao.
 
-✅ **SEMPRE** preservar o `yarn.lock` se possivel. So apagar se git pull abortar.
+✅ **SEMPRE** preservar o `yarn.lock` se possivel. So apagar se git pull abortar (deploy.sh ja faz isso automaticamente).
 
 ---
 
