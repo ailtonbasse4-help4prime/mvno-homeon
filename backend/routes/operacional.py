@@ -403,6 +403,22 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
             f"linha={linha_id}|cliente={linha.get('cliente_id')}|chip={linha.get('chip_id')}|valor={data.expirar_dados}",
             user["id"], user["name"],
         )
+        # PROTECAO DUPLA: grava tambem em colecao dedicada `manual_overrides`
+        # que NUNCA e tocada pelo auto-sync. Mesmo que a flag seja perdida,
+        # essa colecao e o backup imutavel das edicoes do usuario.
+        await db.manual_overrides.update_one(
+            {"linha_id": linha_id, "field": "expirar_dados"},
+            {"$set": {
+                "linha_id": linha_id,
+                "field": "expirar_dados",
+                "value": data.expirar_dados,
+                "cliente_id": linha.get("cliente_id"),
+                "chip_id": linha.get("chip_id"),
+                "user_id": user["id"],
+                "updated_at": datetime.now(timezone.utc),
+            }},
+            upsert=True,
+        )
     if data.status_chip is not None:
         update_linha["status_chip"] = data.status_chip
     if data.complemento is not None:
