@@ -3,7 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Search, Download, Upload, RefreshCw, DollarSign, TrendingUp, Wallet, Percent, Save, X as XIcon, Signal, Receipt } from 'lucide-react';
+import { Search, Download, Upload, RefreshCw, DollarSign, TrendingUp, Wallet, Percent, Save, X as XIcon, Signal, Receipt, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatDateBR, formatDateTimeBR } from '../lib/formatters';
 import { StatCard } from '../components/StatCard';
@@ -44,6 +44,10 @@ export default function PlanilhaOperacional() {
   const [syncingTa, setSyncingTa] = useState(false);
   const [syncProgress, setSyncProgress] = useState(null); // {processadas, total, atualizadas}
   const [syncingAsaas, setSyncingAsaas] = useState(false);
+  const [showRestaurarModal, setShowRestaurarModal] = useState(false);
+  const [restaurarTexto, setRestaurarTexto] = useState('');
+  const [restaurarBusy, setRestaurarBusy] = useState(false);
+  const [restaurarResultado, setRestaurarResultado] = useState(null);
   const [lastSyncTa, setLastSyncTa] = useState(() => {
     try { return localStorage.getItem('last_sync_tatelecom'); } catch { return null; }
   });
@@ -114,6 +118,80 @@ export default function PlanilhaOperacional() {
       toast.error(e.response?.data?.detail || 'Erro ao importar do Asaas');
     }
     setSyncingAsaas(false);
+  };
+
+  const restaurarDoLog = async () => {
+    if (!window.confirm('Tentar restaurar edicoes manuais a partir dos logs e backups internos? Idempotente.')) return;
+    setRestaurarBusy(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/operacional/restaurar-edicoes-manuais`, {}, { withCredentials: true });
+      const { restauradas, fonte, total_overrides, total_logs } = r.data;
+      if (restauradas > 0) {
+        toast.success(`${restauradas} edicao(oes) restaurada(s)! (overrides: ${fonte.manual_overrides}, logs: ${fonte.logs})`);
+        fetchData();
+      } else {
+        toast.info(`Nenhuma edicao para restaurar (overrides=${total_overrides}, logs=${total_logs})`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao restaurar');
+    }
+    setRestaurarBusy(false);
+  };
+
+  const restaurarLote = async () => {
+    if (!restaurarTexto.trim()) {
+      toast.error('Cole as edicoes no campo de texto');
+      return;
+    }
+    // Parse: aceita CSV (nome;data) ou (numero;data) ou (cpf;data) ou JSON
+    let edicoes = [];
+    const txt = restaurarTexto.trim();
+    if (txt.startsWith('[') || txt.startsWith('{')) {
+      try {
+        const j = JSON.parse(txt);
+        edicoes = Array.isArray(j) ? j : (j.edicoes || []);
+      } catch {
+        toast.error('JSON invalido');
+        return;
+      }
+    } else {
+      // Cada linha: identificador;data  ou  identificador,data  ou  identificador<TAB>data
+      const linhas = txt.split('\n').map(l => l.trim()).filter(Boolean);
+      for (const linha of linhas) {
+        const parts = linha.split(/[;,\t]/).map(p => p.trim()).filter(Boolean);
+        if (parts.length < 2) continue;
+        const ident = parts[0];
+        const data = parts[parts.length - 1];
+        const item = { valor: data };
+        // Detecta o tipo: ICCID (19-20 digitos), CPF (11), numero (10-11) ou nome
+        const digitos = ident.replace(/\D/g, '');
+        if (digitos.length >= 18) item.iccid = digitos;
+        else if (digitos.length === 11) item.cpf = digitos;
+        else if (digitos.length >= 10) item.numero = digitos;
+        else item.nome = ident;
+        edicoes.push(item);
+      }
+    }
+    if (edicoes.length === 0) {
+      toast.error('Nenhuma edicao reconhecida no texto');
+      return;
+    }
+    setRestaurarBusy(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/operacional/restaurar-edicoes-lote`, { edicoes }, { withCredentials: true });
+      setRestaurarResultado(r.data);
+      const { restauradas, nao_encontradas } = r.data;
+      if (restauradas > 0) {
+        toast.success(`${restauradas} edicao(oes) restaurada(s)!`);
+        fetchData();
+      }
+      if (nao_encontradas?.length > 0) {
+        toast.warning(`${nao_encontradas.length} nao encontrada(s) - veja detalhes abaixo`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro no lote');
+    }
+    setRestaurarBusy(false);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -322,6 +400,11 @@ export default function PlanilhaOperacional() {
           <Button onClick={syncTaTelecom} disabled={syncingTa} variant="outline" size="sm" className="border-emerald-700 text-emerald-400 hover:bg-emerald-900/20" data-testid="sync-tatelecom-btn" title="Consulta a Ta Telecom para atualizar Recarga Ta e status dos chips">
             <Signal className={`w-4 h-4 mr-1.5 ${syncingTa ? 'animate-pulse' : ''}`} />{syncingTa ? 'Sincronizando...' : 'Sincronizar Tá Telecom'}
           </Button>
+          {isAdmin && (
+            <Button onClick={() => setShowRestaurarModal(true)} variant="outline" size="sm" className="border-violet-700 text-violet-400 hover:bg-violet-900/20" data-testid="restaurar-recarga-btn" title="Restaurar edicoes manuais perdidas via logs/backup ou colar lista">
+              <ShieldCheck className="w-4 h-4 mr-1.5" />Restaurar Recarga Tá
+            </Button>
+          )}
           {isAdmin && (
             <Button onClick={syncAsaas} disabled={syncingAsaas} variant="outline" size="sm" className="border-amber-700 text-amber-400 hover:bg-amber-900/20" data-testid="sync-asaas-btn" title="Importa cobrancas do Asaas para o sistema local">
               <Receipt className={`w-4 h-4 mr-1.5 ${syncingAsaas ? 'animate-pulse' : ''}`} />{syncingAsaas ? 'Importando...' : 'Importar Asaas'}
@@ -543,6 +626,77 @@ export default function PlanilhaOperacional() {
 
       {isAdmin && (
         <p className="text-xs text-zinc-500">Dica: clique nas celulas <strong>Complemento</strong>, <strong>Canal</strong>, <strong>Desc.</strong> (desconto R$) ou <strong>Obs</strong> para editar inline. Marque ou desmarque os checkbox em <strong>Custo</strong> e <strong>Lucro</strong> para incluir ou excluir a linha do calculo total.</p>
+      )}
+
+      {/* MODAL: Restaurar Recarga Tá */}
+      {showRestaurarModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => !restaurarBusy && setShowRestaurarModal(false)} data-testid="restaurar-modal">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-zinc-800 flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-bold text-violet-400 flex items-center gap-2"><ShieldCheck className="w-5 h-5" /> Restaurar Coluna "Recarga Tá"</h2>
+                <p className="text-xs text-zinc-400 mt-1">Recupere edicoes manuais perdidas por logs internos, ou cole uma lista para reaplicar de uma vez.</p>
+              </div>
+              <button onClick={() => setShowRestaurarModal(false)} className="text-zinc-500 hover:text-white" disabled={restaurarBusy}><XIcon className="w-5 h-5" /></button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* Opcao 1: Restaurar do log */}
+              <div className="bg-zinc-950 rounded-md p-4 border border-zinc-800">
+                <h3 className="font-semibold text-sm text-emerald-400 mb-2">1️⃣ Restaurar dos backups internos</h3>
+                <p className="text-xs text-zinc-400 mb-3">Le os logs (action=expirar_dados_manual_edit) e a colecao manual_overrides. Funciona apenas para edicoes feitas <strong>apos</strong> a implantacao da auditoria.</p>
+                <Button onClick={restaurarDoLog} disabled={restaurarBusy} size="sm" className="bg-emerald-700 hover:bg-emerald-600" data-testid="restaurar-log-btn">
+                  {restaurarBusy ? 'Processando...' : 'Restaurar do log/backup'}
+                </Button>
+              </div>
+
+              {/* Opcao 2: Colar lista */}
+              <div className="bg-zinc-950 rounded-md p-4 border border-zinc-800">
+                <h3 className="font-semibold text-sm text-violet-400 mb-2">2️⃣ Colar lista (CSV ou JSON)</h3>
+                <p className="text-xs text-zinc-400 mb-2">Uma edicao por linha. Identificador (Nome, CPF, Numero ou ICCID) <strong>;</strong> Data (YYYY-MM-DD ou DD/MM/YYYY).</p>
+                <p className="text-[11px] text-zinc-500 mb-3 font-mono bg-zinc-900 p-2 rounded">
+                  Exemplo CSV:<br/>
+                  Jose Felipe;25/04/2026<br/>
+                  11954321987;2026-04-25<br/>
+                  12345678900;15/05/2026<br/>
+                  <br/>
+                  Ou JSON: [{`{"nome":"Jose","valor":"2026-04-25"}`}, ...]
+                </p>
+                <textarea
+                  value={restaurarTexto}
+                  onChange={e => setRestaurarTexto(e.target.value)}
+                  placeholder="Cole sua lista aqui (um por linha)"
+                  className="w-full h-40 bg-zinc-900 border border-zinc-700 rounded p-2 text-sm font-mono text-zinc-200"
+                  data-testid="restaurar-textarea"
+                  disabled={restaurarBusy}
+                />
+                <Button onClick={restaurarLote} disabled={restaurarBusy || !restaurarTexto.trim()} size="sm" className="mt-2 bg-violet-700 hover:bg-violet-600" data-testid="restaurar-lote-btn">
+                  {restaurarBusy ? 'Processando...' : 'Aplicar Lote'}
+                </Button>
+              </div>
+
+              {/* Resultado */}
+              {restaurarResultado && (
+                <div className="bg-zinc-950 rounded-md p-4 border border-emerald-700">
+                  <h3 className="font-semibold text-sm text-emerald-400 mb-2">Resultado</h3>
+                  <div className="text-sm text-zinc-300">
+                    ✅ <strong>{restaurarResultado.restauradas}</strong> de <strong>{restaurarResultado.total_enviadas}</strong> restauradas
+                  </div>
+                  {restaurarResultado.nao_encontradas?.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-xs text-amber-400 mb-1">⚠️ {restaurarResultado.nao_encontradas.length} nao encontrada(s):</div>
+                      <ul className="text-xs text-zinc-400 max-h-40 overflow-auto bg-zinc-900 p-2 rounded font-mono">
+                        {restaurarResultado.nao_encontradas.map((n, i) => (
+                          <li key={i}>{n.nome || n.cpf || n.numero || n.iccid || n.linha_id} {n.erro ? `(${n.erro})` : ''}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

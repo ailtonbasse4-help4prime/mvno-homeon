@@ -442,30 +442,29 @@ async def atualizar_linha_inline(linha_id: str, data: LinhaOperacionalUpdate, re
 
 @router.post("/restaurar-edicoes-manuais")
 async def restaurar_edicoes_manuais(request: Request):
-    """Varre logs de 'expirar_dados_manual_edit' e restaura as ultimas edicoes
-    manuais que possam ter sido perdidas. Usar uma vez quando suspeitar de
-    perda de dados. Pega a edicao mais recente por linha_id.
+    """Restaura edicoes manuais perdidas a partir de DUAS fontes:
+       1. Coleção `manual_overrides` (backup imutavel - prioritaria)
+       2. Coleção `db.logs` com action='expirar_dados_manual_edit'
+    Pega a edicao mais recente por linha_id. Idempotente: pode rodar varias vezes.
     """
     user = await _ctx["require_admin"](request)
     db = _ctx["db"]
-    logs = await db.logs.find({"action": "expirar_dados_manual_edit"}).sort("timestamp", -1).to_list(10000)
     seen = set()
     restauradas = 0
-    for log in logs:
-        desc = log.get("description") or log.get("descricao") or ""
-        # Format: linha={linha_id}|cliente=...|chip=...|valor=YYYY-MM-DD
-        parts = {}
-        for kv in desc.split("|"):
-            if "=" in kv:
-                k, v = kv.split("=", 1)
-                parts[k.strip()] = v.strip()
-        linha_id = parts.get("linha")
-        valor = parts.get("valor")
+    fonte = {"manual_overrides": 0, "logs": 0}
+
+    # 1. Fonte prioritaria: manual_overrides (backup imutavel, criado com $set upsert)
+    overrides = await db.manual_overrides.find(
+        {"field": "expirar_dados"}
+    ).sort("updated_at", -1).to_list(10000)
+    for ov in overrides:
+        linha_id = ov.get("linha_id")
+        valor = ov.get("value")
         if not linha_id or not valor or linha_id in seen:
             continue
-        seen.add(linha_id)
         if not ObjectId.is_valid(linha_id):
             continue
+        seen.add(linha_id)
         await db.linhas.update_one(
             {"_id": ObjectId(linha_id)},
             {"$set": {
@@ -475,8 +474,165 @@ async def restaurar_edicoes_manuais(request: Request):
             }},
         )
         restauradas += 1
-    await _ctx["create_log"]("operacional", f"Restauradas {restauradas} edicoes manuais via logs", user["id"], user["name"])
-    return {"restauradas": restauradas, "total_logs_processados": len(logs)}
+        fonte["manual_overrides"] += 1
+
+    # 2. Fonte secundaria: logs (caso manual_overrides esteja vazio/incompleto)
+    logs = await db.logs.find({"action": "expirar_dados_manual_edit"}).sort("timestamp", -1).to_list(10000)
+    for log in logs:
+        desc = log.get("description") or log.get("descricao") or ""
+        parts = {}
+        for kv in desc.split("|"):
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                parts[k.strip()] = v.strip()
+        linha_id = parts.get("linha")
+        valor = parts.get("valor")
+        if not linha_id or not valor or linha_id in seen:
+            continue
+        if not ObjectId.is_valid(linha_id):
+            continue
+        seen.add(linha_id)
+        await db.linhas.update_one(
+            {"_id": ObjectId(linha_id)},
+            {"$set": {
+                "expirar_dados": valor,
+                "expirar_dados_manual": True,
+                "expirar_dados_updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        restauradas += 1
+        fonte["logs"] += 1
+
+    await _ctx["create_log"](
+        "operacional",
+        f"Restauradas {restauradas} edicoes manuais (overrides={fonte['manual_overrides']}, logs={fonte['logs']})",
+        user["id"], user["name"],
+    )
+    return {
+        "restauradas": restauradas,
+        "fonte": fonte,
+        "total_overrides": len(overrides),
+        "total_logs": len(logs),
+    }
+
+
+class RestaurarLoteItem(BaseModel):
+    linha_id: Optional[str] = None  # se voce tem o ID
+    iccid: Optional[str] = None     # OU o ICCID
+    numero: Optional[str] = None    # OU o numero/MSISDN
+    cpf: Optional[str] = None       # OU o CPF do cliente
+    nome: Optional[str] = None      # OU o nome do cliente (match parcial)
+    valor: str                      # YYYY-MM-DD - data desejada
+
+
+class RestaurarLoteRequest(BaseModel):
+    edicoes: List[RestaurarLoteItem]
+
+
+@router.post("/restaurar-edicoes-lote")
+async def restaurar_edicoes_lote(data: RestaurarLoteRequest, request: Request):
+    """Restaura edicoes manuais a partir de uma LISTA fornecida pelo usuario.
+    Util quando ele consegue extrair os valores de um backup/screenshot/anotacao.
+    Aceita matching por linha_id, iccid, numero, cpf ou nome.
+    """
+    user = await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    restauradas = 0
+    nao_encontradas = []
+
+    for item in data.edicoes:
+        linha = None
+
+        # 1. Por linha_id direto
+        if item.linha_id and ObjectId.is_valid(item.linha_id):
+            linha = await db.linhas.find_one({"_id": ObjectId(item.linha_id)})
+
+        # 2. Por ICCID (via chip)
+        if not linha and item.iccid:
+            chip = await db.chips.find_one({"iccid": item.iccid.strip()})
+            if chip:
+                linha = await db.linhas.find_one({"chip_id": str(chip["_id"])})
+
+        # 3. Por numero/MSISDN
+        if not linha and item.numero:
+            num = re.sub(r"\D", "", item.numero)
+            if num:
+                linha = await db.linhas.find_one({
+                    "$or": [
+                        {"numero": {"$regex": num[-9:]}},
+                        {"msisdn": {"$regex": num[-9:]}},
+                    ]
+                })
+
+        # 4. Por CPF do cliente
+        if not linha and item.cpf:
+            cpf = re.sub(r"\D", "", item.cpf)
+            if cpf:
+                cli = await db.clientes.find_one({"documento": cpf})
+                if cli:
+                    linha = await db.linhas.find_one({
+                        "cliente_id": str(cli["_id"]),
+                        "status": {"$in": ["ativo", "suspenso"]},
+                    })
+
+        # 5. Por nome (match parcial case-insensitive)
+        if not linha and item.nome:
+            cli = await db.clientes.find_one({"nome": {"$regex": re.escape(item.nome), "$options": "i"}})
+            if cli:
+                linha = await db.linhas.find_one({
+                    "cliente_id": str(cli["_id"]),
+                    "status": {"$in": ["ativo", "suspenso"]},
+                })
+
+        if not linha:
+            nao_encontradas.append({
+                "linha_id": item.linha_id, "iccid": item.iccid,
+                "numero": item.numero, "cpf": item.cpf, "nome": item.nome,
+            })
+            continue
+
+        # Valida formato da data
+        valor = _parse_data_br(item.valor)
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", valor or ""):
+            nao_encontradas.append({"linha_id": str(linha["_id"]), "erro": f"data invalida: {item.valor}"})
+            continue
+
+        await db.linhas.update_one(
+            {"_id": linha["_id"]},
+            {"$set": {
+                "expirar_dados": valor,
+                "expirar_dados_manual": True,
+                "expirar_dados_updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        # Grava no backup imutavel
+        await db.manual_overrides.update_one(
+            {"linha_id": str(linha["_id"]), "field": "expirar_dados"},
+            {"$set": {
+                "linha_id": str(linha["_id"]),
+                "field": "expirar_dados",
+                "value": valor,
+                "cliente_id": linha.get("cliente_id"),
+                "chip_id": linha.get("chip_id"),
+                "user_id": user["id"],
+                "updated_at": datetime.now(timezone.utc),
+                "fonte": "restaurar-lote",
+            }},
+            upsert=True,
+        )
+        await _ctx["create_log"](
+            "expirar_dados_manual_edit",
+            f"linha={linha['_id']}|cliente={linha.get('cliente_id')}|chip={linha.get('chip_id')}|valor={valor}|fonte=lote",
+            user["id"], user["name"],
+        )
+        restauradas += 1
+
+    await _ctx["create_log"]("operacional", f"Restauracao em lote: {restauradas} restauradas, {len(nao_encontradas)} nao encontradas", user["id"], user["name"])
+    return {
+        "restauradas": restauradas,
+        "nao_encontradas": nao_encontradas,
+        "total_enviadas": len(data.edicoes),
+    }
 
 
 @router.get("/export")

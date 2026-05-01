@@ -105,6 +105,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Botao "Abrir HomeOn" adicionado no header admin
 - [x] Testado via UI: cliques disparados no SMART/POWER/Hero sao registrados e aparecem no painel com % de conversao correto
 
+### Recuperacao e Protecao Tripla "Recarga Ta" (01/05/2026)
+- [x] Endpoint `POST /api/operacional/restaurar-edicoes-manuais` agora le DUAS fontes: `manual_overrides` (backup imutavel) + `db.logs`
+- [x] Novo endpoint `POST /api/operacional/restaurar-edicoes-lote` aceita lista CSV/JSON com matching por linha_id, ICCID, CPF, numero ou nome
+- [x] Modal "Restaurar Recarga Ta" (botao violet com escudo) na Planilha Operacional com 2 opcoes: restaurar do log OU colar lista CSV/JSON
+- [x] Toda edicao manual agora gravada em 3 lugares: `linhas.expirar_dados_manual=true`, `db.logs` (action=expirar_dados_manual_edit) E `db.manual_overrides` (upsert imutavel)
+- [x] Script forense `/app/memory/RECUPERAR_RECARGA_TA.sh` para rodar na VPS (verifica logs, manual_overrides, oplog do MongoDB e mongodumps locais)
+- [x] Testado backend (curl): restauracao por nome funcionando (restauradas=1 em 1 envio)
+
 ## Backlog
 
 ### P1 - Alta Prioridade
