@@ -1324,6 +1324,98 @@ async def auto_preencher_canal(request: Request):
     return {"updated_revendedor": updated_rev, "updated_proprio": updated_ss}
 
 
+@router.get("/diagnostico-recarga-ta")
+async def diagnostico_recarga_ta(request: Request):
+    """Relatorio: distribuicao das datas da coluna 'Recarga Ta' por mes.
+    Mostra quantas linhas tem data passada (potencialmente vencidas ou erro de sync)
+    e quantas tem data futura (saudaveis). Util pra auditar apos sync.
+    """
+    await _ctx["require_admin"](request)
+    db = _ctx["db"]
+    from datetime import date as _date
+    hoje_iso = _date.today().strftime("%Y-%m-%d")
+
+    linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
+
+    por_mes = {}
+    futuras = 0
+    expiradas = 0
+    sem_data = 0
+    detalhes_passadas = []
+    detalhes_futuras = []
+
+    cliente_ids = list({l.get("cliente_id") for l in linhas if l.get("cliente_id")})
+    clientes_map = {}
+    if cliente_ids:
+        cs = await db.clientes.find(
+            {"_id": {"$in": [ObjectId(c) for c in cliente_ids if ObjectId.is_valid(c)]}},
+            {"nome": 1},
+        ).to_list(5000)
+        clientes_map = {str(c["_id"]): c.get("nome", "?") for c in cs}
+
+    for l in linhas:
+        ed = l.get("expirar_dados")
+        if not ed:
+            sem_data += 1
+            continue
+        ed_str = str(ed)[:10]
+        ano_mes = ed_str[:7]
+        por_mes[ano_mes] = por_mes.get(ano_mes, 0) + 1
+        cli_nome = clientes_map.get(l.get("cliente_id") or "", "?")
+        item = {
+            "data": ed_str,
+            "cliente": cli_nome,
+            "numero": l.get("numero") or l.get("msisdn") or "",
+            "iccid": "",  # preenchido abaixo
+            "status_chip": l.get("status_chip") or "",
+            "manual": bool(l.get("expirar_dados_manual")),
+        }
+        if ed_str < hoje_iso:
+            expiradas += 1
+            detalhes_passadas.append(item)
+        else:
+            futuras += 1
+            detalhes_futuras.append(item)
+
+    # Adiciona ICCID
+    chip_ids_unicos = list({l["chip_id"] for l in linhas if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])})
+    if chip_ids_unicos:
+        chs = await db.chips.find(
+            {"_id": {"$in": [ObjectId(c) for c in chip_ids_unicos]}},
+            {"iccid": 1},
+        ).to_list(5000)
+        chips_iccid = {str(c["_id"]): c.get("iccid", "") for c in chs}
+        # mapeia linha -> iccid
+        for l, item in zip(
+            [x for x in linhas if x.get("expirar_dados") and str(x.get("expirar_dados"))[:10] < hoje_iso],
+            detalhes_passadas,
+        ):
+            item["iccid"] = chips_iccid.get(l.get("chip_id") or "", "")
+
+    detalhes_passadas.sort(key=lambda x: x["data"])
+    detalhes_futuras.sort(key=lambda x: x["data"])
+
+    distribuicao = []
+    for ym in sorted(por_mes.keys()):
+        distribuicao.append({
+            "mes": ym,
+            "total": por_mes[ym],
+            "status": "passado" if ym < hoje_iso[:7] else "atual_ou_futuro",
+        })
+
+    return {
+        "total_linhas": len(linhas),
+        "futuras": futuras,
+        "expiradas": expiradas,
+        "sem_data": sem_data,
+        "hoje": hoje_iso,
+        "distribuicao_por_mes": distribuicao,
+        "detalhe_passadas": detalhes_passadas[:200],  # limita pra resposta nao explodir
+        "detalhe_passadas_total": len(detalhes_passadas),
+        "detalhe_futuras": detalhes_futuras[:50],
+    }
+
+
 # ==================== AUTO PROXIMA RECARGA ====================
 @router.post("/auto-proxima-recarga")
 async def auto_proxima_recarga(request: Request):
