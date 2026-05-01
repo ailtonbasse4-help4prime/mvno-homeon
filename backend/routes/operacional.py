@@ -1056,8 +1056,11 @@ async def _auto_sync_linhas_stale(linha_ids: list):
         logger.error(f"Erro no auto-sync de linhas: {e}")
 
 
-async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
-    """Executa sync com Ta Telecom em background e grava progresso em db.sync_jobs."""
+async def _run_sync_tatelecom_bg(user_id: str, user_name: str, force: bool = False):
+    """Executa sync com Ta Telecom em background e grava progresso em db.sync_jobs.
+    Se force=False (padrao): respeita expirar_dados_manual=True (nao sobrescreve edicoes).
+    Se force=True: ignora a flag e sincroniza tudo (use apenas para recuperacao).
+    """
     db = _ctx["db"]
     from services.operadora_service import operadora_service
     import asyncio as _asyncio
@@ -1070,6 +1073,7 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
         "iniciado_em": datetime.now(timezone.utc),
         "total": 0, "atualizadas": 0, "erros": 0,
         "user_id": user_id,
+        "force": force,
     })
 
     try:
@@ -1086,6 +1090,7 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
         erros_count = 0
         erros_lista = []
         nao_encontrados = 0
+        protegidas_manual = 0
 
         for idx, l in enumerate(linhas):
             chip = chips_map.get(l.get("chip_id") or "")
@@ -1136,8 +1141,12 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
                 }
                 status_chip_sigla = status_map.get(status_raw, status_raw.title() if status_raw else None)
                 update = {"expirar_dados_updated_at": datetime.now(timezone.utc)}
-                if expirar:
+                # Protege edicoes manuais (a menos que force=True)
+                tem_manual = bool(l.get("expirar_dados_manual"))
+                if expirar and (force or not tem_manual):
                     update["expirar_dados"] = expirar
+                elif tem_manual and not force:
+                    protegidas_manual += 1
                 if status_chip_sigla:
                     update["status_chip"] = status_chip_sigla
                 if len(update) > 1:
@@ -1159,10 +1168,11 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
             "finalizado_em": datetime.now(timezone.utc),
             "atualizadas": atualizados,
             "sem_chip": nao_encontrados,
+            "protegidas_manual": protegidas_manual,
             "erros": erros_count,
             "erros_lista": erros_lista,
         }})
-        await _ctx["create_log"]("operacional", f"Sync TaTelecom batch: {atualizados}/{len(linhas)} atualizadas", user_id, user_name)
+        await _ctx["create_log"]("operacional", f"Sync TaTelecom batch{' [FORCE]' if force else ''}: {atualizados}/{len(linhas)} atualizadas, {protegidas_manual} protegidas manual", user_id, user_name)
     except Exception as e:
         await db.sync_jobs.update_one({"job_id": job_id}, {"$set": {
             "status": "error",
@@ -1172,8 +1182,11 @@ async def _run_sync_tatelecom_bg(user_id: str, user_name: str):
 
 
 @router.post("/sincronizar-tatelecom")
-async def sincronizar_tatelecom_batch(request: Request):
-    """Dispara sync em background. Retorna imediatamente. Use GET /sync-status para acompanhar."""
+async def sincronizar_tatelecom_batch(request: Request, force: bool = False):
+    """Dispara sync em background. Retorna imediatamente. Use GET /sync-status para acompanhar.
+    Query param `force=true` forca sincronizacao mesmo de linhas com expirar_dados_manual=True
+    (use SOMENTE para recuperacao de dados perdidos - sobrescreve edicoes manuais).
+    """
     user = await _ctx["require_admin"](request)
     from services.operadora_service import operadora_service
     if getattr(operadora_service, "use_mock", True):
@@ -1190,10 +1203,11 @@ async def sincronizar_tatelecom_batch(request: Request):
         }
 
     import asyncio as _asyncio
-    _asyncio.create_task(_run_sync_tatelecom_bg(user["id"], user["name"]))
+    _asyncio.create_task(_run_sync_tatelecom_bg(user["id"], user["name"], force=force))
     return {
         "status": "started",
-        "message": "Sincronizacao iniciada em background. Use GET /sync-status/tatelecom para acompanhar.",
+        "force": force,
+        "message": f"Sincronizacao iniciada{' (FORCE - sobrescreve manuais)' if force else ''}. Use GET /sync-status/tatelecom para acompanhar.",
     }
 
 

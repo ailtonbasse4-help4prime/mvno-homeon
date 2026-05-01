@@ -65,15 +65,19 @@ export default function PlanilhaOperacional() {
     setLoading(false);
   };
 
-  const syncTaTelecom = async () => {
-    if (!window.confirm('Sincronizar dados de TODAS as linhas ativas com a Ta Telecom? A sync roda em background e leva 2-5 minutos.')) return;
+  const syncTaTelecom = async (force = false) => {
+    const msg = force
+      ? '⚠️ FORCE: vai SOBRESCREVER tambem edicoes manuais existentes. Use APENAS para recuperar dados perdidos. Continuar?'
+      : 'Sincronizar dados de TODAS as linhas ativas com a Ta Telecom? A sync roda em background e leva 2-5 minutos. Edicoes manuais serao PROTEGIDAS.';
+    if (!window.confirm(msg)) return;
     setSyncingTa(true);
     try {
-      const r = await axios.post(`${API_URL}/api/operacional/sincronizar-tatelecom`, {}, { withCredentials: true, timeout: 30000 });
+      const url = `${API_URL}/api/operacional/sincronizar-tatelecom${force ? '?force=true' : ''}`;
+      const r = await axios.post(url, {}, { withCredentials: true, timeout: 30000 });
       if (r.data.status === 'already_running') {
         toast.info('Ja existe uma sincronizacao em andamento');
       } else {
-        toast.success('Sincronizacao iniciada - acompanhe o progresso no rodape');
+        toast.success(`Sincronizacao iniciada${force ? ' (FORCE)' : ''} - acompanhe o progresso no rodape`);
       }
       // Polling do status a cada 3s
       const poll = setInterval(async () => {
@@ -83,7 +87,8 @@ export default function PlanilhaOperacional() {
           if (st.status === 'completed') {
             clearInterval(poll);
             setSyncingTa(false);
-            toast.success(`Sincronizacao concluida: ${st.atualizadas}/${st.total} linhas atualizadas${st.erros ? ` (${st.erros} erros)` : ''}`);
+            const protMsg = st.protegidas_manual ? ` (${st.protegidas_manual} protegidas manual)` : '';
+            toast.success(`Sincronizacao concluida: ${st.atualizadas}/${st.total} linhas atualizadas${st.erros ? ` (${st.erros} erros)` : ''}${protMsg}`);
             const now = new Date().toISOString();
             setLastSyncTa(now);
             try { localStorage.setItem('last_sync_tatelecom', now); } catch {}
@@ -641,6 +646,21 @@ export default function PlanilhaOperacional() {
             </div>
 
             <div className="p-5 space-y-5">
+              {/* Opcao 0: Recuperar TUDO via Ta Telecom (FORCE) - melhor para seu caso */}
+              <div className="bg-emerald-950/30 rounded-md p-4 border-2 border-emerald-600">
+                <h3 className="font-semibold text-sm text-emerald-300 mb-2">⭐ Recuperar TUDO via API da Tá Telecom</h3>
+                <p className="text-xs text-zinc-300 mb-1">
+                  <strong>Recomendado para o caso atual:</strong> a Tá tem `data_ativacao` de cada chip (atualizado a cada recarga).
+                  Esta opcao varre TODAS as linhas, consulta a Tá uma a uma, e grava `expirar_dados = data_ativacao + 30 dias`.
+                </p>
+                <p className="text-xs text-amber-300 mb-3">
+                  ⚠️ Modo FORCE: sobrescreve qualquer edicao manual existente. Como suas manuais ja foram perdidas, isso vai recuperar do zero.
+                </p>
+                <Button onClick={() => { setShowRestaurarModal(false); syncTaTelecom(true); }} disabled={restaurarBusy || syncingTa} size="sm" className="bg-emerald-600 hover:bg-emerald-500 font-semibold" data-testid="restaurar-via-ta-btn">
+                  <Signal className="w-4 h-4 mr-1.5" />Recuperar via Tá (FORCE)
+                </Button>
+              </div>
+
               {/* Opcao 1: Restaurar do log */}
               <div className="bg-zinc-950 rounded-md p-4 border border-zinc-800">
                 <h3 className="font-semibold text-sm text-emerald-400 mb-2">1️⃣ Restaurar dos backups internos</h3>
