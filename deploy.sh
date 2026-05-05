@@ -79,9 +79,7 @@ if [[ "$HTTP" =~ ^(200|401|422)$ ]]; then
     echo "  1. Acesse https://mvno.homeonapp.com.br"
     echo "  2. CTRL+SHIFT+R (ou no celular: feche e reabra o navegador)"
     echo "     -> isso bypassa o cache do PWA"
-    echo "  3. Va em Planilha Operacional"
-    echo "  4. Clique em 'Restaurar Recarga Tá' (botao roxo com escudo)"
-    echo "  5. Clique no botao verde '⭐ Recuperar via Tá (FORCE)'"
+    echo "  3. Va em Cobrancas e teste o botao 'WhatsApp Lote'"
     echo ""
 else
     echo ""
