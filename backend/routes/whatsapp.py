@@ -115,8 +115,15 @@ def _render_template(template: str, cobranca: dict, cliente: dict) -> str:
             venc = datetime.fromisoformat(str(venc)[:10]).strftime("%d/%m/%Y")
         except Exception:
             venc = str(venc)[:10]
-    link = cobranca.get("invoice_url") or cobranca.get("bank_slip_url") or cobranca.get("link") or ""
-    pix = cobranca.get("pix_copia_cola") or ""
+    # Link: prioriza invoice (pagina linda do Asaas) > bankslip > link generico
+    link = (cobranca.get("asaas_invoice_url")
+            or cobranca.get("invoice_url")
+            or cobranca.get("asaas_bankslip_url")
+            or cobranca.get("bank_slip_url")
+            or cobranca.get("link") or "")
+    pix = (cobranca.get("asaas_pix_code")
+           or cobranca.get("pix_copia_cola") or "")
+    barcode = cobranca.get("barcode") or ""
     return (template
             .replace("{primeiro_nome}", primeiro_nome)
             .replace("{nome}", nome)
@@ -124,7 +131,8 @@ def _render_template(template: str, cobranca: dict, cliente: dict) -> str:
             .replace("{data}", venc)
             .replace("{vencimento}", venc)
             .replace("{link}", link)
-            .replace("{pix}", pix))
+            .replace("{pix}", pix)
+            .replace("{boleto_codigo}", barcode))
 
 
 # ============================================================
@@ -155,7 +163,7 @@ async def _enviar_cobranca_completa(zapi_service, cobranca: dict, cliente: dict,
     }
 
     # 2. Se texto OK e tem PDF do boleto, anexa
-    pdf_url = cobranca.get("asaas_bankslip_url") or ""
+    pdf_url = cobranca.get("asaas_bankslip_url") or cobranca.get("bank_slip_url") or ""
     if result["success"] and pdf_url:
         cliente_nome = (cliente.get("nome") or "cliente").strip().split()[0]
         venc = (cobranca.get("vencimento") or "")[:10]
