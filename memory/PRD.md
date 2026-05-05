@@ -105,6 +105,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Botao "Abrir HomeOn" adicionado no header admin
 - [x] Testado via UI: cliques disparados no SMART/POWER/Hero sao registrados e aparecem no painel com % de conversao correto
 
+### Envio de Cobrancas em Lote via WhatsApp - Z-API (05/05/2026)
+- [x] Service `services/zapi_service.py` integrado com Z-API (instance + token + Client-Token)
+- [x] Router `routes/whatsapp.py` com endpoints: `/config`, `/status`, `/template`, `/enviar-cobranca`, `/enviar-lote`, `/job-status`, `/cancelar-job`, `/historico`
+- [x] Envio em background com delay aleatorio 5-8s anti-banimento, suporta cancelamento
+- [x] Componente `WhatsAppLoteDialog` na Gestao de Cobrancas: filtros (vencidas/hoje/3d/7d/pendentes), checkboxes, progresso em tempo real, edicao de template e credenciais
+- [x] Template configuravel com variaveis {nome}, {primeiro_nome}, {valor}, {data}, {link}, {pix}
+- [x] Envios registrados em db.zapi_envios para auditoria
+- [x] Testado: status da instancia retorna `connected: true`, modal renderiza com 44 cobrancas vencidas selecionadas
+
 ### Recuperacao e Protecao Tripla "Recarga Ta" (01/05/2026)
 - [x] Sync `POST /api/operacional/sincronizar-tatelecom` agora aceita `?force=true` para sobrescrever edicoes manuais (recuperacao) e respeita a flag por padrao (protege novas edicoes)
 - [x] Sync retorna `protegidas_manual` no status para mostrar quantas linhas foram preservadas

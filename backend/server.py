@@ -5556,6 +5556,22 @@ app.include_router(api_router_homeon)
 async def homeon_admin_stats(current_user: dict = Depends(require_admin)):
     return await homeon_get_stats()
 
+# Z-API WhatsApp - envios em lote de cobrancas
+from routes.whatsapp import router as whatsapp_router, init as init_whatsapp
+init_whatsapp(db=db, get_current_user=get_current_user, require_admin=require_admin, create_log=create_log)
+api_router_whatsapp = APIRouter(prefix="/api")
+api_router_whatsapp.include_router(whatsapp_router)
+app.include_router(api_router_whatsapp)
+
+# Carrega config Z-API no startup
+from services.zapi_service import zapi_service as _zapi_service
+@app.on_event("startup")
+async def _load_zapi_config():
+    try:
+        await _zapi_service.load_config(db)
+    except Exception as e:
+        logger.warning(f"Falha ao carregar config Z-API: {e}")
+
 # Download endpoint for VPS deploy package
 @app.get("/download/deploy-package")
 async def download_deploy_package():
