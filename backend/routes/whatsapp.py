@@ -84,6 +84,7 @@ _DEFAULT_TEMPLATE = (
     "💰 Valor: R$ {valor}\n"
     "📅 Vencimento: {data}\n\n"
     "🔗 Pague aqui: {link}\n\n"
+    "📎 O boleto em PDF também está anexado abaixo.\n\n"
     "Qualquer dúvida estamos por aqui!\n"
     "HomeOn Internet"
 )
@@ -134,6 +135,48 @@ class EnvioIndividual(BaseModel):
     template: Optional[str] = None  # opcional, usa o salvo se nao passado
 
 
+async def _enviar_cobranca_completa(zapi_service, cobranca: dict, cliente: dict, template: str) -> dict:
+    """Envia mensagem de texto + PDF do boleto (se houver). Retorna dict consolidado.
+
+    Estrategia:
+      1. Sempre envia o texto principal (template renderizado)
+      2. Se tem `asaas_bankslip_url` (PDF do boleto), envia como documento PDF
+    """
+    telefone = cliente.get("telefone") or cliente.get("celular") or ""
+    mensagem = _render_template(template, cobranca, cliente)
+
+    # 1. Envia texto
+    text_resp = await zapi_service.send_text(telefone, mensagem)
+    result = {
+        "success": text_resp.get("success", False),
+        "text_message_id": text_resp.get("message_id"),
+        "phone_normalized": text_resp.get("phone_normalized"),
+        "error": text_resp.get("error"),
+    }
+
+    # 2. Se texto OK e tem PDF do boleto, anexa
+    pdf_url = cobranca.get("asaas_bankslip_url") or ""
+    if result["success"] and pdf_url:
+        cliente_nome = (cliente.get("nome") or "cliente").strip().split()[0]
+        venc = (cobranca.get("vencimento") or "")[:10]
+        file_name = f"boleto-{cliente_nome}-{venc}.pdf".replace(" ", "_")
+        await asyncio.sleep(1.5)  # pequena pausa entre texto e PDF
+        pdf_resp = await zapi_service.send_document_pdf(
+            telefone, pdf_url, file_name=file_name
+        )
+        result["pdf_sent"] = pdf_resp.get("success", False)
+        result["pdf_message_id"] = pdf_resp.get("message_id")
+        if not pdf_resp.get("success"):
+            result["pdf_error"] = pdf_resp.get("error")
+    else:
+        result["pdf_sent"] = False
+        if not pdf_url and result["success"]:
+            result["pdf_error"] = "Sem URL do PDF do boleto"
+
+    result["mensagem"] = mensagem
+    return result
+
+
 @router.post("/enviar-cobranca")
 async def enviar_cobranca_individual(data: EnvioIndividual, request: Request):
     user = await _ctx["require_admin"](request)
@@ -166,8 +209,7 @@ async def enviar_cobranca_individual(data: EnvioIndividual, request: Request):
         tpl_doc = await db.config.find_one({"key": "zapi_template"})
         template = (tpl_doc or {}).get("template") or _DEFAULT_TEMPLATE
 
-    mensagem = _render_template(template, cobranca, cliente)
-    resp = await zapi_service.send_text(telefone, mensagem)
+    resp = await _enviar_cobranca_completa(zapi_service, cobranca, cliente, template)
 
     # Log do envio
     await db.zapi_envios.insert_one({
@@ -176,10 +218,13 @@ async def enviar_cobranca_individual(data: EnvioIndividual, request: Request):
         "cliente_nome": cliente.get("nome"),
         "telefone": telefone,
         "telefone_normalizado": resp.get("phone_normalized"),
-        "mensagem": mensagem,
+        "mensagem": resp.get("mensagem"),
         "success": resp.get("success", False),
+        "pdf_sent": resp.get("pdf_sent", False),
+        "pdf_error": resp.get("pdf_error"),
         "error": resp.get("error"),
-        "message_id": resp.get("message_id"),
+        "message_id": resp.get("text_message_id"),
+        "pdf_message_id": resp.get("pdf_message_id"),
         "tipo": "individual",
         "user_id": user["id"],
         "timestamp": datetime.now(timezone.utc),
@@ -302,14 +347,18 @@ async def _run_lote_bg(job_id: str, cobranca_ids: list, template: str,
                 continue
 
             mensagem = _render_template(template, cobranca, cliente)
-            resp = await zapi_service.send_text(telefone, mensagem)
+            resp = await _enviar_cobranca_completa(zapi_service, cobranca, cliente, template)
 
             await db.zapi_envios.insert_one({
                 "cobranca_id": cid, "cliente_id": cliente_id, "cliente_nome": cliente.get("nome"),
                 "telefone": telefone, "telefone_normalizado": resp.get("phone_normalized"),
                 "mensagem": mensagem,
-                "success": resp.get("success", False), "error": resp.get("error"),
-                "message_id": resp.get("message_id"),
+                "success": resp.get("success", False),
+                "pdf_sent": resp.get("pdf_sent", False),
+                "pdf_error": resp.get("pdf_error"),
+                "error": resp.get("error"),
+                "message_id": resp.get("text_message_id"),
+                "pdf_message_id": resp.get("pdf_message_id"),
                 "tipo": "lote", "job_id": job_id, "user_id": user_id,
                 "timestamp": datetime.now(timezone.utc),
             })

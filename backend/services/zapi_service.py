@@ -131,5 +131,37 @@ class ZapiService:
         except Exception as e:
             return {"configured": True, "error": str(e)[:200]}
 
+    async def send_document_pdf(self, phone: str, pdf_url: str, file_name: str = "boleto.pdf", caption: str = "") -> Dict[str, Any]:
+        """Envia documento PDF via URL. Z-API baixa o PDF e envia ao destinatario."""
+        if not self.is_configured():
+            return {"success": False, "error": "Z-API nao configurado"}
+        normalized = self.normalize_phone(phone)
+        if not normalized:
+            return {"success": False, "error": f"Telefone invalido: {phone}"}
+        if not pdf_url:
+            return {"success": False, "error": "URL do PDF vazia"}
+
+        url = f"{self.base_url}/instances/{self.instance_id}/token/{self.token}/send-document/pdf"
+        headers = {"Client-Token": self.client_token, "Content-Type": "application/json"}
+        payload = {
+            "phone": normalized,
+            "document": pdf_url,
+            "fileName": file_name,
+        }
+        if caption:
+            payload["caption"] = caption
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                r = await client.post(url, json=payload, headers=headers)
+                if r.status_code in (200, 201):
+                    data = r.json() if r.text else {}
+                    return {"success": True, "message_id": data.get("messageId") or data.get("id"), "raw": data}
+                return {"success": False, "status_code": r.status_code, "error": (r.text or "")[:300]}
+        except httpx.TimeoutException:
+            return {"success": False, "error": "Timeout (Z-API sem resposta em 60s)"}
+        except Exception as e:
+            return {"success": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
 
 zapi_service = ZapiService()
