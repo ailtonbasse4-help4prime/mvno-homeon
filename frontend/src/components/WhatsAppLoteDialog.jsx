@@ -363,7 +363,8 @@ export function WhatsAppLoteDialog({ open, onClose, cobrancas, clientes }) {
                 <code className="text-emerald-400">{'{valor}'}</code>{' '}
                 <code className="text-emerald-400">{'{data}'}</code>{' '}
                 <code className="text-emerald-400">{'{link}'}</code>{' '}
-                <code className="text-emerald-400">{'{pix}'}</code>
+                <code className="text-emerald-400">{'{pix}'}</code>{' '}
+                <code className="text-emerald-400">{'{boleto_codigo}'}</code>
               </p>
               <textarea
                 value={template}

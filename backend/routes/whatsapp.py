@@ -84,6 +84,8 @@ _DEFAULT_TEMPLATE = (
     "💰 Valor: R$ {valor}\n"
     "📅 Vencimento: {data}\n\n"
     "🔗 Pague aqui: {link}\n\n"
+    "📊 *Código de barras:*\n"
+    "{boleto_codigo}\n\n"
     "📎 O boleto em PDF também está anexado abaixo.\n\n"
     "Qualquer dúvida estamos por aqui!\n"
     "HomeOn Internet"
