@@ -244,13 +244,23 @@ export function GestaoCobrancas() {
     }
   };
 
-  const handleShareWhatsApp = (c) => {
-    if (!window.confirm(`Enviar cobranca por WhatsApp para ${c.cliente_nome}?`)) return;
-    let msg = `*Cobranca MVNO*\nCliente: ${c.cliente_nome}\nValor: R$ ${c.valor.toFixed(2)}\nVencimento: ${formatDateBR(c.vencimento)}\nTipo: ${c.billing_type}`;
-    if (c.asaas_invoice_url) msg += `\n\nLink para pagamento:\n${c.asaas_invoice_url}`;
-    if (c.barcode) msg += `\n\nCodigo de barras:\n${c.barcode}`;
-    if (c.asaas_pix_code) msg += `\n\nPix Copia e Cola:\n${c.asaas_pix_code}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  const [sendingWhats, setSendingWhats] = useState(null);
+
+  const handleShareWhatsApp = async (c) => {
+    if (!window.confirm(`Enviar cobranca por WhatsApp (Z-API) para ${c.cliente_nome}?`)) return;
+    setSendingWhats(c.id);
+    try {
+      const r = await axios.post(`${API_URL}/api/whatsapp/enviar-cobranca`,
+        { cobranca_id: c.id }, { withCredentials: true });
+      if (r.data?.success) {
+        toast.success(`WhatsApp enviado para ${c.cliente_nome}!`);
+      } else {
+        toast.error(`Falhou: ${r.data?.error || 'erro desconhecido'}`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao enviar via Z-API');
+    }
+    setSendingWhats(null);
   };
 
   const [sendingEmail, setSendingEmail] = useState(null);
@@ -673,8 +683,8 @@ export function GestaoCobrancas() {
                     <button onClick={() => handleRefreshCobranca(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Atualizar dados do Asaas">
                       <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
                     </button>
-                    <button onClick={() => handleShareWhatsApp(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Enviar por WhatsApp">
-                      <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <button onClick={() => handleShareWhatsApp(c)} disabled={sendingWhats === c.id} className="p-1.5 hover:bg-zinc-800 rounded disabled:opacity-50" title="Enviar por WhatsApp (Z-API)" data-testid={`whats-row-btn-${c.id}`}>
+                      <MessageCircle className={`w-3.5 h-3.5 text-emerald-400 ${sendingWhats === c.id ? 'animate-pulse' : ''}`} />
                     </button>
                     <button onClick={() => handleSendEmail(c)} disabled={sendingEmail === c.id} className="p-1.5 hover:bg-zinc-800 rounded" title="Enviar por Email"
                       data-testid={`send-email-btn-${c.id}`}>
