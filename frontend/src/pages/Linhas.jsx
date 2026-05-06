@@ -554,7 +554,7 @@ export function Linhas() {
               <label className="text-sm text-zinc-300 block mb-1">Novo titular (busque pelo nome COMPLETO ou CPF)</label>
               <SearchableSelect
                 value={transferDestino}
-                onChange={setTransferDestino}
+                onValueChange={setTransferDestino}
                 options={clientesList
                   .filter(c => c.id !== selectedLinha?.cliente_id)
                   .map(c => ({
@@ -562,7 +562,8 @@ export function Linhas() {
                     label: `${c.nome}${c.documento ? ' - ' + c.documento : ''}`,
                   }))}
                 placeholder="Buscar cliente..."
-                data-testid="transfer-cliente-destino"
+                searchPlaceholder="Digite nome completo ou CPF..."
+                testId="transfer-cliente-destino"
               />
               <p className="text-xs text-zinc-500 mt-1">⚠️ Atencao: busque pelo NOME COMPLETO para evitar confundir clientes com nomes parecidos.</p>
             </div>
