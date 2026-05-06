@@ -10,8 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle, Hash, CheckCircle, Clock, ShieldOff } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle, Hash, CheckCircle, Clock, ShieldOff, UserCog } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -99,6 +100,62 @@ export function Linhas() {
 
   // Cancel
   const [cancelDialog, setCancelDialog] = useState(false);
+
+  // Transferir titularidade
+  const [transferDialog, setTransferDialog] = useState(false);
+  const [transferDestino, setTransferDestino] = useState('');
+  const [transferMigrar, setTransferMigrar] = useState(false);
+  const [transferInativar, setTransferInativar] = useState(false);
+  const [clientesList, setClientesList] = useState([]);
+
+  const loadClientesParaTransferencia = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API_URL}/api/clientes`, { withCredentials: true });
+      setClientesList(safeArray(r.data));
+    } catch { setClientesList([]); }
+  }, []);
+
+  const handleTransferirTitularidade = async () => {
+    if (!selectedLinha || !transferDestino) {
+      toast.error('Selecione o cliente destino');
+      return;
+    }
+    if (transferDestino === selectedLinha.cliente_id) {
+      toast.error('A linha ja pertence a esse cliente');
+      return;
+    }
+    const destino = clientesList.find(c => c.id === transferDestino);
+    const confirmMsg = `CONFIRMAR TRANSFERENCIA:\n\n` +
+      `Linha: ${selectedLinha.msisdn || selectedLinha.numero}\n\n` +
+      `DE: ${selectedLinha.cliente_nome}\n` +
+      `PARA: ${destino?.nome || '?'}\n\n` +
+      (transferMigrar ? '✓ Cobrancas pendentes serao migradas\n' : '') +
+      (transferInativar ? '✓ Cliente origem sera inativado se ficar sem linhas\n' : '') +
+      `\nConfirmar?`;
+    if (!window.confirm(confirmMsg)) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/linhas/transferir-titularidade`, {
+        linha_id: selectedLinha.id,
+        cliente_destino_id: transferDestino,
+        migrar_cobrancas_pendentes: transferMigrar,
+        inativar_origem_se_vazio: transferInativar,
+      }, { withCredentials: true });
+      const { cobrancas_migradas, origem_inativado } = r.data;
+      let msg = 'Titularidade transferida com sucesso!';
+      if (cobrancas_migradas) msg += ` ${cobrancas_migradas} cobranca(s) migrada(s).`;
+      if (origem_inativado) msg += ' Cliente origem inativado.';
+      toast.success(msg);
+      setTransferDialog(false);
+      setTransferDestino('');
+      setTransferMigrar(false);
+      setTransferInativar(false);
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao transferir');
+    }
+    setProcessing(false);
+  };
   const handleCancel = async () => {
     if (!selectedLinha) return;
     setProcessing(true);
@@ -285,6 +342,11 @@ export function Linhas() {
                         </Button>
                       )}
                       {isAdmin && linha.status !== 'cancelado' && (
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setTransferDestino(''); setTransferMigrar(false); setTransferInativar(false); setTransferDialog(true); loadClientesParaTransferencia(); }} className="text-zinc-400 hover:text-violet-400" title="Transferir Titularidade" data-testid={`transfer-titularidade-${linha.id}`}>
+                          <UserCog className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {isAdmin && linha.status !== 'cancelado' && (
                         <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setCancelDialog(true); }} className="text-zinc-400 hover:text-red-500" title="Cancelar Linha" data-testid={`cancel-line-${linha.id}`}>
                           <XCircle className="w-4 h-4" />
                         </Button>
@@ -468,6 +530,55 @@ export function Linhas() {
             <Button variant="outline" onClick={() => setCancelDialog(false)} className="border-zinc-700">Voltar</Button>
             <Button onClick={handleCancel} disabled={processing} className="bg-red-600 hover:bg-red-700 text-white" data-testid="confirm-cancel-line">
               {processing ? 'Cancelando...' : 'Confirmar Cancelamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transferir Titularidade */}
+      <Dialog open={transferDialog} onOpenChange={setTransferDialog}>
+        <DialogContent className="bg-zinc-900 border-violet-500/40 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-violet-400" />Transferir Titularidade da Linha
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <div className="p-3 bg-zinc-800/60 rounded">
+              <p className="text-xs text-zinc-400">Linha</p>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+              <p className="text-xs text-zinc-400 mt-2">Titular ATUAL</p>
+              <p className="text-amber-300 text-sm font-semibold">{selectedLinha?.cliente_nome || '-'}</p>
+            </div>
+            <div>
+              <label className="text-sm text-zinc-300 block mb-1">Novo titular (busque pelo nome COMPLETO ou CPF)</label>
+              <SearchableSelect
+                value={transferDestino}
+                onChange={setTransferDestino}
+                options={clientesList
+                  .filter(c => c.id !== selectedLinha?.cliente_id)
+                  .map(c => ({
+                    value: c.id,
+                    label: `${c.nome}${c.documento ? ' - ' + c.documento : ''}`,
+                  }))}
+                placeholder="Buscar cliente..."
+                data-testid="transfer-cliente-destino"
+              />
+              <p className="text-xs text-zinc-500 mt-1">⚠️ Atencao: busque pelo NOME COMPLETO para evitar confundir clientes com nomes parecidos.</p>
+            </div>
+            <label className="flex items-start gap-2 text-sm text-zinc-300 cursor-pointer">
+              <input type="checkbox" checked={transferMigrar} onChange={e => setTransferMigrar(e.target.checked)} className="mt-1" data-testid="transfer-migrar-cobrancas" />
+              <span>Migrar cobrancas <strong>pendentes</strong> desta linha (somente NAO pagas)</span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-zinc-300 cursor-pointer">
+              <input type="checkbox" checked={transferInativar} onChange={e => setTransferInativar(e.target.checked)} className="mt-1" data-testid="transfer-inativar-origem" />
+              <span>Inativar cliente origem se ficar sem linhas</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferDialog(false)} className="border-zinc-700" disabled={processing}>Cancelar</Button>
+            <Button onClick={handleTransferirTitularidade} disabled={processing || !transferDestino} className="bg-violet-600 hover:bg-violet-500 text-white" data-testid="confirm-transfer-titularidade">
+              {processing ? 'Transferindo...' : 'Transferir'}
             </Button>
           </DialogFooter>
         </DialogContent>

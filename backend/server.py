@@ -1017,6 +1017,110 @@ async def buscar_cpf_publico(cpf: str):
     return await _consultar_cpfhub(doc_clean)
 
 
+class TransferirTitularidadeRequest(BaseModel):
+    linha_id: str
+    cliente_destino_id: str
+    migrar_cobrancas_pendentes: bool = False
+    inativar_origem_se_vazio: bool = False
+
+
+@api_router.post("/linhas/transferir-titularidade")
+async def transferir_titularidade(data: TransferirTitularidadeRequest, request: Request):
+    """Transfere uma linha de um cliente para outro.
+    Ativa: move chip+linha. Opcional: migra cobrancas PENDENTES (nao mexe em pagas).
+    Auditoria completa em db.logs.
+    """
+    user = await require_admin(request)
+    if not ObjectId.is_valid(data.linha_id):
+        raise HTTPException(status_code=400, detail="linha_id invalido")
+    if not ObjectId.is_valid(data.cliente_destino_id):
+        raise HTTPException(status_code=400, detail="cliente_destino_id invalido")
+
+    linha = await db.linhas.find_one({"_id": ObjectId(data.linha_id)})
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+
+    cliente_destino = await db.clientes.find_one({"_id": ObjectId(data.cliente_destino_id)})
+    if not cliente_destino:
+        raise HTTPException(status_code=404, detail="Cliente destino nao encontrado")
+
+    cliente_origem_id = linha.get("cliente_id")
+    cliente_origem = None
+    if cliente_origem_id and ObjectId.is_valid(cliente_origem_id):
+        cliente_origem = await db.clientes.find_one({"_id": ObjectId(cliente_origem_id)})
+
+    if cliente_origem_id == data.cliente_destino_id:
+        raise HTTPException(status_code=400, detail="Linha ja pertence a esse cliente")
+
+    # Move a linha
+    await db.linhas.update_one(
+        {"_id": ObjectId(data.linha_id)},
+        {"$set": {
+            "cliente_id": data.cliente_destino_id,
+            "titularidade_transferida_at": datetime.now(timezone.utc),
+            "titularidade_transferida_by": user["id"],
+            "titularidade_transferida_de": cliente_origem_id,
+        }},
+    )
+
+    # Move o chip vinculado (se houver)
+    chip_id = linha.get("chip_id")
+    if chip_id and ObjectId.is_valid(chip_id):
+        await db.chips.update_one(
+            {"_id": ObjectId(chip_id)},
+            {"$set": {"cliente_id": data.cliente_destino_id}},
+        )
+
+    # Migra cobrancas pendentes (opcional)
+    cobrancas_migradas = 0
+    if data.migrar_cobrancas_pendentes and cliente_origem_id:
+        STATUS_PENDENTES = ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS", "pendente"]
+        r = await db.cobrancas.update_many(
+            {
+                "cliente_id": cliente_origem_id,
+                "linha_id": data.linha_id,
+                "status": {"$in": STATUS_PENDENTES},
+            },
+            {"$set": {"cliente_id": data.cliente_destino_id, "cliente_nome": cliente_destino.get("nome")}},
+        )
+        cobrancas_migradas = r.modified_count
+
+    # Inativar origem se vazio (opcional)
+    origem_inativado = False
+    if data.inativar_origem_se_vazio and cliente_origem_id:
+        outras_linhas = await db.linhas.count_documents({"cliente_id": cliente_origem_id})
+        if outras_linhas == 0:
+            await db.clientes.update_one(
+                {"_id": ObjectId(cliente_origem_id)},
+                {"$set": {"status": "inativo", "inativado_em": datetime.now(timezone.utc), "inativado_motivo": "Sem linhas apos transferencia"}},
+            )
+            origem_inativado = True
+
+    await create_log(
+        "transferir_titularidade",
+        f"linha={data.linha_id} numero={linha.get('numero','-')} "
+        f"de={cliente_origem.get('nome') if cliente_origem else '?'} ({cliente_origem_id}) "
+        f"para={cliente_destino.get('nome')} ({data.cliente_destino_id}) "
+        f"cobrancas_migradas={cobrancas_migradas} origem_inativado={origem_inativado}",
+        user["id"], user["name"],
+    )
+
+    return {
+        "success": True,
+        "linha_id": data.linha_id,
+        "cliente_origem": {
+            "id": cliente_origem_id,
+            "nome": cliente_origem.get("nome") if cliente_origem else None,
+        },
+        "cliente_destino": {
+            "id": data.cliente_destino_id,
+            "nome": cliente_destino.get("nome"),
+        },
+        "cobrancas_migradas": cobrancas_migradas,
+        "origem_inativado": origem_inativado,
+    }
+
+
 @api_router.put("/clientes/{client_id}", response_model=ClientResponse)
 async def update_client(client_id: str, data: ClientCreate, request: Request):
     user = await get_current_user(request)
