@@ -1,0 +1,5697 @@
+from dotenv import load_dotenv
+load_dotenv(interpolate=False)
+
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
+import os
+import re
+import asyncio
+import logging
+import secrets
+import json
+import bcrypt
+import jwt
+import httpx
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone, timedelta
+from enum import Enum
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP, ErrorCode
+from services.asaas_service import asaas_service, AsaasNotConfiguredError, AsaasApiError
+from services.email_service import email_service
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+ROOT_DIR = Path(__file__).parent
+
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
+
+JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
+JWT_ALGORITHM = "HS256"
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
+SITE_URL = os.environ.get("SITE_URL", "")
+
+# ==================== RETRY CONFIG ====================
+RETRY_MAX_ATTEMPTS = 5
+RETRY_BACKOFF_MINUTES = [2, 5, 15, 30, 60]  # Backoff progressivo por tentativa
+RETRY_CHECK_INTERVAL_SECONDS = 120  # Verificar fila a cada 2 minutos
+RETRYABLE_ERROR_CODES = {
+    ErrorCode.TIMEOUT.value,
+    ErrorCode.RATE_LIMIT.value,
+    ErrorCode.SERVER_ERROR.value,
+    ErrorCode.CONNECTION.value,
+    ErrorCode.UNKNOWN.value,
+}
+
+def _is_retryable_error(erro_msg: str, error_code: str = None) -> bool:
+    """Verifica se o erro eh retentavel (timeout, rate limit, server error, connection)."""
+    if error_code and error_code in RETRYABLE_ERROR_CODES:
+        return True
+    if not erro_msg:
+        return False
+    msg_lower = erro_msg.lower()
+    retryable_keywords = ["timeout", "429", "rate limit", "conexao", "connection", "server error", "502", "503", "504"]
+    return any(kw in msg_lower for kw in retryable_keywords)
+
+def _get_next_retry_delay(retry_count: int) -> int:
+    """Retorna delay em minutos para a proxima tentativa baseado no backoff."""
+    if retry_count < len(RETRY_BACKOFF_MINUTES):
+        return RETRY_BACKOFF_MINUTES[retry_count]
+    return RETRY_BACKOFF_MINUTES[-1]
+
+def _append_portal_link(desc: str) -> str:
+    """Adiciona link do Portal do Cliente na descricao da cobranca Asaas."""
+    if SITE_URL:
+        return f"{desc} | Acesse seu portal: {SITE_URL}/portal"
+    return desc
+
+app = FastAPI(title="MVNO Management System - Ta Telecom")
+api_router = APIRouter(prefix="/api")
+
+# ==================== RATE LIMITER ====================
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Muitas requisicoes. Aguarde alguns minutos."},
+    )
+
+# ==================== SECURITY HEADERS MIDDLEWARE ====================
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if COOKIE_SECURE:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ==================== ENUMS ====================
+class UserRole(str, Enum):
+    admin = "admin"
+    atendente = "atendente"
+
+class ClientStatus(str, Enum):
+    ativo = "ativo"
+    inativo = "inativo"
+
+class TipoPessoa(str, Enum):
+    pf = "pf"
+    pj = "pj"
+
+class ChipStatus(str, Enum):
+    disponivel = "disponivel"
+    reservado = "reservado"
+    ativado = "ativado"
+    bloqueado = "bloqueado"
+    cancelado = "cancelado"
+
+class LineStatus(str, Enum):
+    ativo = "ativo"
+    bloqueado = "bloqueado"
+    pendente = "pendente"
+    erro = "erro"
+
+class LogAction(str, Enum):
+    ativacao = "ativacao"
+    bloqueio = "bloqueio"
+    desbloqueio = "desbloqueio"
+    erro = "erro"
+    login = "login"
+    logout = "logout"
+    cadastro = "cadastro"
+    api_call = "api_call"
+    consulta = "consulta"
+    alteracao_plano = "alteracao_plano"
+    sincronizacao = "sincronizacao"
+    financeiro = "financeiro"
+
+class BillingType(str, Enum):
+    boleto = "BOLETO"
+    pix = "PIX"
+    credit_card = "CREDIT_CARD"
+    undefined = "UNDEFINED"
+
+class PaymentStatus(str, Enum):
+    pendente = "PENDING"
+    confirmado = "CONFIRMED"
+    recebido = "RECEIVED"
+    vencido = "OVERDUE"
+    reembolsado = "REFUNDED"
+    cancelado = "CANCELLED"
+
+class SubscriptionStatus(str, Enum):
+    ativa = "ACTIVE"
+    expirada = "EXPIRED"
+    cancelada = "CANCELLED"
+
+# ==================== VALIDATION UTILS ====================
+def validate_cpf(cpf: str) -> bool:
+    cpf = re.sub(r'\D', '', cpf)
+    if len(cpf) != 11 or cpf == cpf[0] * 11:
+        return False
+    for i in range(9, 11):
+        val = sum((cpf_digit := int(cpf[num])) * ((i + 1) - num) for num in range(0, i))
+        digit = ((val * 10) % 11) % 10
+        if digit != int(cpf[i]):
+            return False
+    return True
+
+def validate_cnpj(cnpj: str) -> bool:
+    cnpj = re.sub(r'\D', '', cnpj)
+    if len(cnpj) != 14 or cnpj == cnpj[0] * 14:
+        return False
+    weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    sum1 = sum(int(cnpj[i]) * weights1[i] for i in range(12))
+    d1 = 11 - (sum1 % 11)
+    d1 = 0 if d1 >= 10 else d1
+    if int(cnpj[12]) != d1:
+        return False
+    sum2 = sum(int(cnpj[i]) * weights2[i] for i in range(13))
+    d2 = 11 - (sum2 % 11)
+    d2 = 0 if d2 >= 10 else d2
+    return int(cnpj[13]) == d2
+
+def clean_document(doc: str) -> str:
+    return re.sub(r'\D', '', doc)
+
+def validate_document(documento: str, tipo_pessoa: str) -> bool:
+    if tipo_pessoa == "pf":
+        return validate_cpf(documento)
+    elif tipo_pessoa == "pj":
+        return validate_cnpj(documento)
+    return False
+
+def validate_cep(cep: str) -> bool:
+    cleaned = re.sub(r'\D', '', cep)
+    return len(cleaned) == 8
+
+# ==================== MODELS ====================
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    role: UserRole = UserRole.atendente
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    created_at: Optional[datetime] = None
+
+# Client Models - expanded for Ta Telecom
+class ClientCreate(BaseModel):
+    nome: str
+    tipo_pessoa: TipoPessoa = TipoPessoa.pf
+    documento: str  # CPF or CNPJ
+    telefone: str
+    email: Optional[str] = None
+    data_nascimento: Optional[str] = None
+    cep: Optional[str] = None
+    endereco: Optional[str] = None
+    numero_endereco: Optional[str] = None
+    bairro: Optional[str] = None
+    cidade: Optional[str] = None
+    estado: Optional[str] = None
+    city_code: Optional[str] = None
+    complemento: Optional[str] = None
+    canal: Optional[str] = None  # Proprio, Shopee, Revendedor, Outro
+    observacoes: Optional[str] = None
+    status: ClientStatus = ClientStatus.ativo
+
+class ClientResponse(BaseModel):
+    id: str
+    nome: str = ""
+    tipo_pessoa: str = "PF"
+    documento: str = ""
+    telefone: str = ""
+    email: Optional[str] = None
+    data_nascimento: Optional[str] = None
+    cep: Optional[str] = None
+    endereco: Optional[str] = None
+    numero_endereco: Optional[str] = None
+    bairro: Optional[str] = None
+    cidade: Optional[str] = None
+    estado: Optional[str] = None
+    city_code: Optional[str] = None
+    complemento: Optional[str] = None
+    canal: Optional[str] = None
+    observacoes: Optional[str] = None
+    status: str = "ativo"
+    dados_completos: bool = False
+    created_at: Optional[datetime] = None
+    linhas_count: int = 0
+    linhas: list = []
+
+# Plan Models - with plan_code
+class PlanCreate(BaseModel):
+    nome: str
+    franquia: str
+    descricao: Optional[str] = None
+    plan_code: Optional[str] = None
+
+class PlanResponse(BaseModel):
+    id: str
+    nome: str
+    franquia: str
+    descricao: Optional[str] = None
+    plan_code: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class CategoriaOferta(str, Enum):
+    movel = "movel"
+    m2m = "m2m"
+
+# Offer Models
+class OfferCreate(BaseModel):
+    nome: str
+    plano_id: str
+    valor: float
+    custo: float = 0.0
+    descricao: Optional[str] = None
+    categoria: CategoriaOferta = CategoriaOferta.movel
+    ativo: bool = True
+
+class OfferResponse(BaseModel):
+    id: str
+    nome: str
+    plano_id: str
+    plano_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    plan_code: Optional[str] = None
+    valor: float
+    custo: float = 0.0
+    descricao: Optional[str] = None
+    categoria: str = "movel"
+    ativo: bool
+    created_at: Optional[datetime] = None
+
+# Chip Models - with msisdn
+class ChipCreate(BaseModel):
+    iccid: str
+    oferta_id: str
+
+class ChipUpdate(BaseModel):
+    oferta_id: str
+
+class ChipResponse(BaseModel):
+    id: str
+    iccid: str = ""
+    status: str = "disponivel"
+    msisdn: Optional[str] = None
+    oferta_id: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    categoria: Optional[str] = None
+    plano_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    plan_code: Optional[str] = None
+    valor: Optional[float] = None
+    cliente_id: Optional[str] = None
+    cliente_nome: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+# Line Models
+class LineResponse(BaseModel):
+    id: str
+    numero: str = ""
+    status: str = "desconhecido"
+    cliente_id: str = ""
+    chip_id: str = ""
+    plano_id: Optional[str] = None
+    oferta_id: Optional[str] = None
+    cliente_nome: Optional[str] = None
+    cliente_documento: Optional[str] = None
+    plano_nome: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    plan_code: Optional[str] = None
+    iccid: Optional[str] = None
+    msisdn: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+# Activation Models
+class ActivationRequest(BaseModel):
+    cliente_id: str
+    chip_id: str
+    ddd: Optional[str] = None
+    portability: bool = False
+    port_ddd: Optional[str] = None
+    port_number: Optional[str] = None
+
+class ActivationResponse(BaseModel):
+    success: bool
+    status: str
+    message: str
+    numero: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    plano_nome: Optional[str] = None
+    franquia: Optional[str] = None
+    valor: Optional[float] = None
+    response_time_ms: Optional[int] = None
+
+# Line action models
+class BlockTotalRequest(BaseModel):
+    reason: int  # 1-5
+
+class PlanChangeRequest(BaseModel):
+    oferta_id: str  # new offer -> new plan
+
+# Log Models
+class LogEntry(BaseModel):
+    id: str
+    action: str
+    details: str
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
+    created_at: Optional[datetime] = None
+    api_request: Optional[dict] = None
+    api_response: Optional[dict] = None
+    is_mock: Optional[bool] = None
+
+# ==================== CARTEIRA MOVEL MODELS ====================
+class CobrancaCreate(BaseModel):
+    cliente_id: str
+    linha_id: Optional[str] = None
+    billing_type: BillingType = BillingType.pix
+    valor: float
+    vencimento: str  # YYYY-MM-DD
+    descricao: Optional[str] = None
+    modalidade: str = "avista"  # avista, parcelado, assinatura
+    parcelas: int = 1  # numero de parcelas (para parcelado e assinatura)
+
+class CobrancaResponse(BaseModel):
+    id: str
+    cliente_id: str
+    cliente_nome: Optional[str] = None
+    linha_id: Optional[str] = None
+    msisdn: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    billing_type: str
+    valor: float
+    vencimento: str
+    descricao: Optional[str] = None
+    status: str
+    modalidade: str = "avista"
+    parcela_num: Optional[int] = None
+    parcela_total: Optional[int] = None
+    assinatura_id: Optional[str] = None
+    asaas_payment_id: Optional[str] = None
+    asaas_invoice_url: Optional[str] = None
+    asaas_bankslip_url: Optional[str] = None
+    asaas_pix_code: Optional[str] = None
+    asaas_pix_qrcode: Optional[str] = None
+    barcode: Optional[str] = None
+    paid_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class AssinaturaCreate(BaseModel):
+    cliente_id: str
+    linha_id: Optional[str] = None
+    billing_type: BillingType = BillingType.pix
+    valor: float
+    proximo_vencimento: str  # YYYY-MM-DD
+    ciclo: str = "MONTHLY"
+    descricao: Optional[str] = None
+
+class AssinaturaResponse(BaseModel):
+    id: str
+    cliente_id: str
+    cliente_nome: Optional[str] = None
+    linha_id: Optional[str] = None
+    msisdn: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    billing_type: str
+    valor: float
+    ciclo: str
+    proximo_vencimento: Optional[str] = None
+    descricao: Optional[str] = None
+    status: str
+    asaas_subscription_id: Optional[str] = None
+    asaas_customer_id: Optional[str] = None
+    invoice_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+# ==================== PASSWORD UTILS ====================
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+# ==================== JWT UTILS ====================
+def get_jwt_secret() -> str:
+    return JWT_SECRET
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(minutes=60), "type": "access"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+def create_refresh_token(user_id: str) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+async def get_current_user(request: Request) -> dict:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Nao autenticado")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Token invalido")
+        user = await db.usuarios.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="Usuario nao encontrado")
+        return {
+            "id": str(user["_id"]), "email": user["email"],
+            "name": user["name"], "role": user["role"],
+            "created_at": user.get("created_at", datetime.now(timezone.utc))
+        }
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+async def require_admin(request: Request) -> dict:
+    user = await get_current_user(request)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Acesso negado. Requer permissao de administrador.")
+    return user
+
+# ==================== LOG UTILS ====================
+async def create_log(action: str, details: str, user_id: Optional[str] = None, user_name: Optional[str] = None):
+    await db.logs.insert_one({
+        "action": action, "details": details,
+        "user_id": user_id, "user_name": user_name,
+        "created_at": datetime.now(timezone.utc)
+    })
+
+# ==================== HELPER: check client data completeness ====================
+def check_client_completeness(cliente: dict) -> tuple:
+    """Returns (is_complete, missing_fields)"""
+    required = ["nome", "documento", "telefone", "data_nascimento", "cep", "numero_endereco"]
+    missing = [f for f in required if not cliente.get(f)]
+    return len(missing) == 0, missing
+
+async def build_client_response(c: dict) -> ClientResponse:
+    is_complete, _ = check_client_completeness(c)
+    client_id = str(c["_id"])
+    # Fetch lines for this client
+    linhas_cursor = db.linhas.find({"cliente_id": client_id}, {"_id": 0, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1})
+    linhas_raw = await linhas_cursor.to_list(50)
+    linhas_data = []
+    for l in linhas_raw:
+        plano_nome = None
+        if l.get("plano_id"):
+            try:
+                plano = await db.planos.find_one({"_id": ObjectId(l["plano_id"])}, {"nome": 1})
+                if plano:
+                    plano_nome = plano["nome"]
+            except Exception:
+                pass
+        linhas_data.append({
+            "numero": l.get("numero") or l.get("msisdn", ""),
+            "status": l.get("status", ""),
+            "plano_nome": plano_nome,
+        })
+    return ClientResponse(
+        id=client_id, nome=c["nome"],
+        tipo_pessoa=c.get("tipo_pessoa", "pf"),
+        documento=c.get("documento", c.get("cpf", "")),
+        telefone=c.get("telefone", ""),
+        email=c.get("email"),
+        data_nascimento=c.get("data_nascimento"),
+        cep=c.get("cep"), endereco=c.get("endereco"),
+        numero_endereco=c.get("numero_endereco"),
+        bairro=c.get("bairro"), cidade=c.get("cidade"),
+        estado=c.get("estado"), city_code=c.get("city_code"),
+        complemento=c.get("complemento"),
+        canal=c.get("canal"), observacoes=c.get("observacoes"),
+        status=c["status"], dados_completos=is_complete,
+        created_at=c.get("created_at", datetime.now(timezone.utc)),
+        linhas_count=len(linhas_data),
+        linhas=linhas_data,
+    )
+
+# ==================== AUTH ROUTES ====================
+@api_router.post("/auth/register", response_model=UserResponse)
+async def register(data: UserCreate, response: Response):
+    email = data.email.lower()
+    existing = await db.usuarios.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email ja cadastrado")
+    user_doc = {
+        "email": email, "password_hash": hash_password(data.password),
+        "name": data.name, "role": data.role.value,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.usuarios.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
+    await create_log("cadastro", f"Novo usuario registrado: {email}", user_id, data.name)
+    return UserResponse(id=user_id, email=email, name=data.name, role=data.role.value, created_at=user_doc["created_at"])
+
+@api_router.post("/auth/login", response_model=UserResponse)
+@limiter.limit("10/minute")
+async def login(data: UserLogin, response: Response, request: Request):
+    email = data.email.lower()
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{email}"
+    attempts = await db.login_attempts.find_one({"identifier": identifier})
+    fail_count = attempts.get("count", 0) if attempts else 0
+    # Progressive lockout: 5 fails = 15min, 10 fails = 1h, 15+ fails = 24h
+    if attempts and fail_count >= 5:
+        if fail_count >= 15:
+            lockout_mins = 1440
+        elif fail_count >= 10:
+            lockout_mins = 60
+        else:
+            lockout_mins = 15
+        lockout_until = attempts.get("lockout_until")
+        if lockout_until and datetime.now(timezone.utc) < lockout_until:
+            raise HTTPException(status_code=429, detail=f"Conta bloqueada por {lockout_mins} minutos. Muitas tentativas falhas.")
+    user = await db.usuarios.find_one({"email": email})
+    if not user or not verify_password(data.password, user["password_hash"]):
+        new_count = fail_count + 1
+        if new_count >= 15:
+            lock_duration = timedelta(hours=24)
+        elif new_count >= 10:
+            lock_duration = timedelta(hours=1)
+        else:
+            lock_duration = timedelta(minutes=15)
+        await db.login_attempts.update_one(
+            {"identifier": identifier},
+            {"$set": {"count": new_count, "lockout_until": datetime.now(timezone.utc) + lock_duration, "last_attempt": datetime.now(timezone.utc)}},
+            upsert=True
+        )
+        await create_log("seguranca", f"Tentativa de login falha #{new_count}: {email} de IP {ip}", "system", "system")
+        raise HTTPException(status_code=401, detail="Credenciais invalidas")
+    await db.login_attempts.delete_one({"identifier": identifier})
+    user_id = str(user["_id"])
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
+    await create_log("login", f"Login realizado: {email}", user_id, user["name"])
+    return UserResponse(id=user_id, email=user["email"], name=user["name"], role=user["role"], created_at=user.get("created_at", datetime.now(timezone.utc)))
+
+@api_router.post("/auth/logout")
+async def logout(response: Response, request: Request):
+    user = None
+    try:
+        user = await get_current_user(request)
+    except Exception:
+        pass
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+    if user:
+        await create_log("logout", f"Logout realizado: {user['email']}", user['id'], user['name'])
+    return {"message": "Logout realizado com sucesso"}
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_me(request: Request):
+    user = await get_current_user(request)
+    return UserResponse(id=user["id"], email=user["email"], name=user["name"], role=user["role"], created_at=user["created_at"])
+
+@api_router.post("/auth/refresh")
+async def refresh_token(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Refresh token nao encontrado")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Token invalido")
+        user = await db.usuarios.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="Usuario nao encontrado")
+        user_id = str(user["_id"])
+        access_token = create_access_token(user_id, user["email"])
+        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
+        return {"message": "Token renovado com sucesso"}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+
+# ==================== PASSWORD CHANGE ====================
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.post("/auth/change-password")
+async def change_password(data: PasswordChangeRequest, request: Request):
+    user = await get_current_user(request)
+    db_user = await db.usuarios.find_one({"_id": ObjectId(user["id"])})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    if not verify_password(data.current_password, db_user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    if len(data.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Nova senha deve ter pelo menos 4 caracteres")
+    await db.usuarios.update_one({"_id": ObjectId(user["id"])}, {"$set": {"password_hash": hash_password(data.new_password)}})
+    await create_log("cadastro", f"Senha alterada: {user['email']}", user["id"], user["name"])
+    return {"message": "Senha alterada com sucesso"}
+
+# ==================== SECURITY: CONFIRM PASSWORD FOR DESTRUCTIVE ACTIONS ====================
+class ConfirmPasswordRequest(BaseModel):
+    password: str
+
+@api_router.post("/auth/confirm-password")
+async def confirm_password(data: ConfirmPasswordRequest, request: Request):
+    """Verifica a senha do usuario logado. Retorna um token temporario de confirmacao (10min)."""
+    user = await get_current_user(request)
+    db_user = await db.usuarios.find_one({"_id": ObjectId(user["id"])})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    if not verify_password(data.password, db_user["password_hash"]):
+        await create_log("seguranca", f"Confirmacao de senha falhou: {user['email']}", user["id"], user["name"])
+        raise HTTPException(status_code=401, detail="Senha incorreta")
+    # Generate a short-lived confirmation token
+    confirm_token = jwt.encode(
+        {"sub": user["id"], "type": "confirm", "exp": datetime.now(timezone.utc) + timedelta(minutes=10)},
+        get_jwt_secret(), algorithm=JWT_ALGORITHM,
+    )
+    await create_log("seguranca", f"Senha confirmada para acao critica: {user['email']}", user["id"], user["name"])
+    return {"confirmed": True, "confirm_token": confirm_token}
+
+
+async def verify_confirm_token(request: Request) -> bool:
+    """Verifica se o request tem um confirm_token valido no header X-Confirm-Token."""
+    token = request.headers.get("X-Confirm-Token")
+    if not token:
+        return False
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "confirm":
+            return False
+        user = await get_current_user(request)
+        return payload.get("sub") == user["id"]
+    except jwt.InvalidTokenError:
+        return False
+
+# ==================== USER MANAGEMENT (Admin Only) ====================
+class UserManageCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    role: UserRole = UserRole.atendente
+
+class UserManageUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[UserRole] = None
+    password: Optional[str] = None
+
+@api_router.get("/usuarios", response_model=List[UserResponse])
+async def list_users(request: Request):
+    await require_admin(request)
+    users = await db.usuarios.find({}).to_list(1000)
+    return [UserResponse(
+        id=str(u["_id"]), email=u["email"], name=u["name"],
+        role=u["role"], created_at=u.get("created_at", datetime.now(timezone.utc))
+    ) for u in users]
+
+@api_router.post("/usuarios", response_model=UserResponse)
+async def create_user(data: UserManageCreate, request: Request):
+    admin = await require_admin(request)
+    email = data.email.lower()
+    existing = await db.usuarios.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email ja cadastrado")
+    if len(data.password) < 4:
+        raise HTTPException(status_code=400, detail="Senha deve ter pelo menos 4 caracteres")
+    user_doc = {
+        "email": email, "password_hash": hash_password(data.password),
+        "name": data.name, "role": data.role.value,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.usuarios.insert_one(user_doc)
+    await create_log("cadastro", f"Usuario criado: {email} ({data.role.value})", admin["id"], admin["name"])
+    return UserResponse(id=str(result.inserted_id), email=email, name=data.name, role=data.role.value, created_at=user_doc["created_at"])
+
+@api_router.put("/usuarios/{user_id}", response_model=UserResponse)
+async def update_user(user_id: str, data: UserManageUpdate, request: Request):
+    admin = await require_admin(request)
+    u = await db.usuarios.find_one({"_id": ObjectId(user_id)})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    update_fields = {}
+    if data.name is not None:
+        update_fields["name"] = data.name
+    if data.role is not None:
+        update_fields["role"] = data.role.value
+    if data.password is not None:
+        if len(data.password) < 4:
+            raise HTTPException(status_code=400, detail="Senha deve ter pelo menos 4 caracteres")
+        update_fields["password_hash"] = hash_password(data.password)
+    if update_fields:
+        await db.usuarios.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    await create_log("cadastro", f"Usuario atualizado: {u['email']}", admin["id"], admin["name"])
+    updated = await db.usuarios.find_one({"_id": ObjectId(user_id)})
+    return UserResponse(id=str(updated["_id"]), email=updated["email"], name=updated["name"], role=updated["role"], created_at=updated.get("created_at", datetime.now(timezone.utc)))
+
+@api_router.delete("/usuarios/{user_id}")
+async def delete_user(user_id: str, request: Request):
+    admin = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    if admin["id"] == user_id:
+        raise HTTPException(status_code=400, detail="Nao e possivel remover seu proprio usuario")
+    u = await db.usuarios.find_one({"_id": ObjectId(user_id)})
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    await db.usuarios.delete_one({"_id": ObjectId(user_id)})
+    await create_log("seguranca", f"Usuario removido: {u['email']} (confirmacao de senha verificada)", admin["id"], admin["name"])
+    return {"message": "Usuario removido com sucesso"}
+
+# ==================== CLIENTS ROUTES ====================
+@api_router.get("/clientes", response_model=List[ClientResponse])
+async def list_clients(request: Request, search: Optional[str] = None):
+    await get_current_user(request)
+    query = {}
+    if search:
+        # Regex accent-insensitive: cada letra vira uma classe com suas variantes
+        accent_map = {
+            'a': 'aáàâãä', 'e': 'eéèêë', 'i': 'iíìîï',
+            'o': 'oóòôõö', 'u': 'uúùûü', 'c': 'cç', 'n': 'nñ',
+        }
+        import unicodedata
+        search_no_accent = ''.join(
+            c for c in unicodedata.normalize('NFD', search)
+            if unicodedata.category(c) != 'Mn'
+        ).lower()
+        regex_parts = []
+        for ch in search_no_accent:
+            if ch in accent_map:
+                regex_parts.append(f"[{accent_map[ch]}]")
+            elif ch.isalnum():
+                regex_parts.append(re.escape(ch))
+            else:
+                regex_parts.append(re.escape(ch))
+        nome_regex = ''.join(regex_parts)
+        query = {"$or": [
+            {"nome": {"$regex": nome_regex, "$options": "i"}},
+            {"documento": {"$regex": re.escape(search), "$options": "i"}},
+            {"cpf": {"$regex": re.escape(search), "$options": "i"}},
+            {"telefone": {"$regex": re.escape(search), "$options": "i"}},
+            {"email": {"$regex": re.escape(search), "$options": "i"}},
+        ]}
+    clients = await db.clientes.find(query).sort("nome", 1).to_list(1000)
+    # Pre-fetch all lines in bulk for performance
+    client_ids = [str(c["_id"]) for c in clients]
+    all_lines = await db.linhas.find({"cliente_id": {"$in": client_ids}}, {"_id": 0, "cliente_id": 1, "numero": 1, "status": 1, "plano_id": 1, "msisdn": 1, "chip_id": 1}).to_list(5000)
+    # Pre-fetch plan names
+    plano_ids = list(set(l["plano_id"] for l in all_lines if l.get("plano_id") and ObjectId.is_valid(l["plano_id"])))
+    planos_map = {}
+    if plano_ids:
+        planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}, {"nome": 1}).to_list(100)
+        planos_map = {str(p["_id"]): p["nome"] for p in planos}
+    # Pre-fetch chip ICCIDs
+    chip_ids = list(set(l["chip_id"] for l in all_lines if l.get("chip_id") and ObjectId.is_valid(l["chip_id"])))
+    chips_map = {}
+    if chip_ids:
+        chips = await db.chips.find({"_id": {"$in": [ObjectId(cid) for cid in chip_ids]}}, {"iccid": 1}).to_list(5000)
+        chips_map = {str(ch["_id"]): ch.get("iccid", "") for ch in chips}
+    # Group lines by client_id
+    lines_by_client = {}
+    for l in all_lines:
+        cid = l["cliente_id"]
+        if cid not in lines_by_client:
+            lines_by_client[cid] = []
+        lines_by_client[cid].append({
+            "numero": l.get("numero") or l.get("msisdn", ""),
+            "status": l.get("status", ""),
+            "plano_nome": planos_map.get(l.get("plano_id"), None),
+            "iccid": chips_map.get(l.get("chip_id"), ""),
+        })
+    results = []
+    for c in clients:
+        is_complete, _ = check_client_completeness(c)
+        cid = str(c["_id"])
+        linhas = lines_by_client.get(cid, [])
+        results.append(ClientResponse(
+            id=cid, nome=c["nome"],
+            tipo_pessoa=c.get("tipo_pessoa", "pf"),
+            documento=c.get("documento", c.get("cpf", "")),
+            telefone=c.get("telefone", ""),
+            email=c.get("email"),
+            data_nascimento=c.get("data_nascimento"),
+            cep=c.get("cep"), endereco=c.get("endereco"),
+            numero_endereco=c.get("numero_endereco"),
+            bairro=c.get("bairro"), cidade=c.get("cidade"),
+            estado=c.get("estado"), city_code=c.get("city_code"),
+            complemento=c.get("complemento"),
+            canal=c.get("canal"), observacoes=c.get("observacoes"),
+            status=c["status"], dados_completos=is_complete,
+            created_at=c.get("created_at", datetime.now(timezone.utc)),
+            linhas_count=len(linhas),
+            linhas=linhas,
+        ))
+    return results
+
+@api_router.post("/clientes", response_model=ClientResponse)
+async def create_client(data: ClientCreate, request: Request):
+    user = await get_current_user(request)
+    doc_clean = clean_document(data.documento)
+    if not validate_document(data.documento, data.tipo_pessoa.value):
+        tp = "CPF" if data.tipo_pessoa == TipoPessoa.pf else "CNPJ"
+        raise HTTPException(status_code=400, detail=f"{tp} invalido")
+    if data.cep and not validate_cep(data.cep):
+        raise HTTPException(status_code=400, detail="CEP invalido (deve ter 8 digitos)")
+    existing = await db.clientes.find_one({"documento": doc_clean})
+    if existing:
+        raise HTTPException(status_code=400, detail="Documento ja cadastrado")
+    client_doc = {
+        "nome": data.nome, "tipo_pessoa": data.tipo_pessoa.value,
+        "documento": doc_clean, "telefone": data.telefone,
+        "email": data.email,
+        "data_nascimento": data.data_nascimento,
+        "cep": re.sub(r'\D', '', data.cep) if data.cep else None,
+        "endereco": data.endereco, "numero_endereco": data.numero_endereco,
+        "bairro": data.bairro, "cidade": data.cidade,
+        "estado": data.estado, "city_code": data.city_code,
+        "complemento": data.complemento,
+        "canal": data.canal, "observacoes": data.observacoes,
+        "status": data.status.value,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.clientes.insert_one(client_doc)
+    client_doc["_id"] = result.inserted_id
+    await create_log("cadastro", f"Cliente cadastrado: {data.nome}", user["id"], user["name"])
+    return await build_client_response(client_doc)
+
+@api_router.get("/clientes/{client_id}", response_model=ClientResponse)
+async def get_client(client_id: str, request: Request):
+    await get_current_user(request)
+    c = await db.clientes.find_one({"_id": ObjectId(client_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+    return await build_client_response(c)
+
+
+CPFHUB_API_KEY = os.environ.get("CPFHUB_API_KEY", "")
+
+async def _consultar_cpfhub(cpf_clean: str) -> dict:
+    """Consulta CPFHub.io para obter nome e data de nascimento."""
+    if not CPFHUB_API_KEY or len(cpf_clean) != 11:
+        return {"found": False}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://api.cpfhub.io/cpf/{cpf_clean}",
+                headers={"x-api-key": CPFHUB_API_KEY, "Accept": "application/json"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success") and data.get("data"):
+                    d = data["data"]
+                    birth = d.get("birthDate", "")
+                    # Converter dd/mm/yyyy para yyyy-mm-dd
+                    data_nascimento = ""
+                    if birth and "/" in birth:
+                        parts = birth.split("/")
+                        if len(parts) == 3:
+                            data_nascimento = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+                    return {
+                        "found": True,
+                        "source": "cpfhub",
+                        "data": {
+                            "nome": d.get("name", ""),
+                            "documento": cpf_clean,
+                            "data_nascimento": data_nascimento,
+                        },
+                    }
+    except Exception as e:
+        logger.warning(f"CPFHub consulta falhou: {e}")
+    return {"found": False}
+
+@api_router.get("/clientes/buscar-cpf/{cpf}")
+async def buscar_cliente_por_cpf(cpf: str, request: Request):
+    """Busca cliente pelo CPF: primeiro no banco local, depois no CPFHub.io."""
+    await get_current_user(request)
+    doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
+    if len(doc_clean) < 11:
+        return {"found": False}
+    cliente = await db.clientes.find_one({"documento": doc_clean})
+    if cliente:
+        return {
+            "found": True,
+            "source": "local",
+            "data": {
+                "nome": cliente.get("nome", ""),
+                "documento": cliente.get("documento", ""),
+                "telefone": cliente.get("telefone", ""),
+                "email": cliente.get("email", ""),
+                "data_nascimento": cliente.get("data_nascimento", ""),
+                "cep": cliente.get("cep", ""),
+                "endereco": cliente.get("endereco", ""),
+                "numero_endereco": cliente.get("numero_endereco", ""),
+                "bairro": cliente.get("bairro", ""),
+                "cidade": cliente.get("cidade", ""),
+                "estado": cliente.get("estado", ""),
+            },
+        }
+    # Nao encontrou localmente, consultar CPFHub
+    return await _consultar_cpfhub(doc_clean)
+
+@api_router.get("/public/buscar-cpf/{cpf}")
+async def buscar_cpf_publico(cpf: str):
+    """Busca CPF: banco local primeiro, depois CPFHub.io (endpoint publico)."""
+    doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
+    if len(doc_clean) < 11:
+        return {"found": False}
+    cliente = await db.clientes.find_one({"documento": doc_clean})
+    if cliente:
+        return {
+            "found": True,
+            "source": "local",
+            "data": {
+                "nome": cliente.get("nome", ""),
+                "telefone": cliente.get("telefone", ""),
+                "email": cliente.get("email", ""),
+                "data_nascimento": cliente.get("data_nascimento", ""),
+                "cep": cliente.get("cep", ""),
+                "endereco": cliente.get("endereco", ""),
+                "numero_endereco": cliente.get("numero_endereco", ""),
+                "bairro": cliente.get("bairro", ""),
+                "cidade": cliente.get("cidade", ""),
+                "estado": cliente.get("estado", ""),
+            },
+        }
+    # Nao encontrou localmente, consultar CPFHub
+    return await _consultar_cpfhub(doc_clean)
+
+
+class TransferirTitularidadeRequest(BaseModel):
+    linha_id: str
+    cliente_destino_id: str
+    migrar_cobrancas_pendentes: bool = False
+    inativar_origem_se_vazio: bool = False
+
+
+@api_router.post("/linhas/transferir-titularidade")
+async def transferir_titularidade(data: TransferirTitularidadeRequest, request: Request):
+    """Transfere uma linha de um cliente para outro.
+    Ativa: move chip+linha. Opcional: migra cobrancas PENDENTES (nao mexe em pagas).
+    Auditoria completa em db.logs.
+    """
+    user = await require_admin(request)
+    if not ObjectId.is_valid(data.linha_id):
+        raise HTTPException(status_code=400, detail="linha_id invalido")
+    if not ObjectId.is_valid(data.cliente_destino_id):
+        raise HTTPException(status_code=400, detail="cliente_destino_id invalido")
+
+    linha = await db.linhas.find_one({"_id": ObjectId(data.linha_id)})
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+
+    cliente_destino = await db.clientes.find_one({"_id": ObjectId(data.cliente_destino_id)})
+    if not cliente_destino:
+        raise HTTPException(status_code=404, detail="Cliente destino nao encontrado")
+
+    cliente_origem_id = linha.get("cliente_id")
+    cliente_origem = None
+    if cliente_origem_id and ObjectId.is_valid(cliente_origem_id):
+        cliente_origem = await db.clientes.find_one({"_id": ObjectId(cliente_origem_id)})
+
+    if cliente_origem_id == data.cliente_destino_id:
+        raise HTTPException(status_code=400, detail="Linha ja pertence a esse cliente")
+
+    # Move a linha
+    await db.linhas.update_one(
+        {"_id": ObjectId(data.linha_id)},
+        {"$set": {
+            "cliente_id": data.cliente_destino_id,
+            "titularidade_transferida_at": datetime.now(timezone.utc),
+            "titularidade_transferida_by": user["id"],
+            "titularidade_transferida_de": cliente_origem_id,
+        }},
+    )
+
+    # Move o chip vinculado (se houver)
+    chip_id = linha.get("chip_id")
+    if chip_id and ObjectId.is_valid(chip_id):
+        await db.chips.update_one(
+            {"_id": ObjectId(chip_id)},
+            {"$set": {"cliente_id": data.cliente_destino_id}},
+        )
+
+    # Migra cobrancas pendentes (opcional)
+    cobrancas_migradas = 0
+    if data.migrar_cobrancas_pendentes and cliente_origem_id:
+        STATUS_PENDENTES = ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS", "pendente"]
+        r = await db.cobrancas.update_many(
+            {
+                "cliente_id": cliente_origem_id,
+                "linha_id": data.linha_id,
+                "status": {"$in": STATUS_PENDENTES},
+            },
+            {"$set": {"cliente_id": data.cliente_destino_id, "cliente_nome": cliente_destino.get("nome")}},
+        )
+        cobrancas_migradas = r.modified_count
+
+    # Inativar origem se vazio (opcional)
+    origem_inativado = False
+    if data.inativar_origem_se_vazio and cliente_origem_id:
+        outras_linhas = await db.linhas.count_documents({"cliente_id": cliente_origem_id})
+        if outras_linhas == 0:
+            await db.clientes.update_one(
+                {"_id": ObjectId(cliente_origem_id)},
+                {"$set": {"status": "inativo", "inativado_em": datetime.now(timezone.utc), "inativado_motivo": "Sem linhas apos transferencia"}},
+            )
+            origem_inativado = True
+
+    await create_log(
+        "transferir_titularidade",
+        f"linha={data.linha_id} numero={linha.get('numero','-')} "
+        f"de={cliente_origem.get('nome') if cliente_origem else '?'} ({cliente_origem_id}) "
+        f"para={cliente_destino.get('nome')} ({data.cliente_destino_id}) "
+        f"cobrancas_migradas={cobrancas_migradas} origem_inativado={origem_inativado}",
+        user["id"], user["name"],
+    )
+
+    return {
+        "success": True,
+        "linha_id": data.linha_id,
+        "cliente_origem": {
+            "id": cliente_origem_id,
+            "nome": cliente_origem.get("nome") if cliente_origem else None,
+        },
+        "cliente_destino": {
+            "id": data.cliente_destino_id,
+            "nome": cliente_destino.get("nome"),
+        },
+        "cobrancas_migradas": cobrancas_migradas,
+        "origem_inativado": origem_inativado,
+    }
+
+
+@api_router.put("/clientes/{client_id}", response_model=ClientResponse)
+async def update_client(client_id: str, data: ClientCreate, request: Request):
+    user = await get_current_user(request)
+    c = await db.clientes.find_one({"_id": ObjectId(client_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+    doc_clean = clean_document(data.documento)
+    if not validate_document(data.documento, data.tipo_pessoa.value):
+        tp = "CPF" if data.tipo_pessoa == TipoPessoa.pf else "CNPJ"
+        raise HTTPException(status_code=400, detail=f"{tp} invalido")
+    if data.cep and not validate_cep(data.cep):
+        raise HTTPException(status_code=400, detail="CEP invalido")
+    existing = await db.clientes.find_one({"documento": doc_clean, "_id": {"$ne": ObjectId(client_id)}})
+    if existing:
+        raise HTTPException(status_code=400, detail="Documento ja cadastrado para outro cliente")
+    update_data = {
+        "nome": data.nome, "tipo_pessoa": data.tipo_pessoa.value,
+        "documento": doc_clean, "telefone": data.telefone,
+        "email": data.email,
+        "data_nascimento": data.data_nascimento,
+        "cep": re.sub(r'\D', '', data.cep) if data.cep else None,
+        "endereco": data.endereco, "numero_endereco": data.numero_endereco,
+        "bairro": data.bairro, "cidade": data.cidade,
+        "estado": data.estado, "city_code": data.city_code,
+        "complemento": data.complemento,
+        "canal": data.canal, "observacoes": data.observacoes,
+        "status": data.status.value,
+    }
+    await db.clientes.update_one({"_id": ObjectId(client_id)}, {"$set": update_data})
+    await create_log("cadastro", f"Cliente atualizado: {data.nome}", user["id"], user["name"])
+    updated = await db.clientes.find_one({"_id": ObjectId(client_id)})
+    return await build_client_response(updated)
+
+@api_router.delete("/clientes/{client_id}")
+async def delete_client(client_id: str, request: Request):
+    user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    c = await db.clientes.find_one({"_id": ObjectId(client_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+    await db.clientes.delete_one({"_id": ObjectId(client_id)})
+    await create_log("seguranca", f"Cliente removido: {c['nome']} (confirmacao verificada)", user["id"], user["name"])
+    return {"message": "Cliente removido com sucesso"}
+
+# ==================== PLANS ROUTES ====================
+@api_router.get("/planos", response_model=List[PlanResponse])
+async def list_plans(request: Request):
+    await get_current_user(request)
+    plans = await db.planos.find({}).to_list(1000)
+    return [PlanResponse(
+        id=str(p["_id"]), nome=p["nome"], franquia=p["franquia"],
+        descricao=p.get("descricao"), plan_code=p.get("plan_code"),
+        created_at=p.get("created_at", datetime.now(timezone.utc))
+    ) for p in plans]
+
+@api_router.post("/planos", response_model=PlanResponse)
+async def create_plan(data: PlanCreate, request: Request):
+    user = await require_admin(request)
+    plan_doc = {
+        "nome": data.nome, "franquia": data.franquia,
+        "descricao": data.descricao, "plan_code": data.plan_code,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.planos.insert_one(plan_doc)
+    await create_log("cadastro", f"Plano cadastrado: {data.nome} (plan_code: {data.plan_code})", user["id"], user["name"])
+    return PlanResponse(
+        id=str(result.inserted_id), nome=data.nome, franquia=data.franquia,
+        descricao=data.descricao, plan_code=data.plan_code, created_at=plan_doc["created_at"]
+    )
+
+@api_router.put("/planos/{plan_id}", response_model=PlanResponse)
+async def update_plan(plan_id: str, data: PlanCreate, request: Request):
+    user = await require_admin(request)
+    plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano nao encontrado")
+    await db.planos.update_one({"_id": ObjectId(plan_id)}, {"$set": {
+        "nome": data.nome, "franquia": data.franquia,
+        "descricao": data.descricao, "plan_code": data.plan_code,
+    }})
+    await create_log("cadastro", f"Plano atualizado: {data.nome}", user["id"], user["name"])
+    return PlanResponse(
+        id=plan_id, nome=data.nome, franquia=data.franquia,
+        descricao=data.descricao, plan_code=data.plan_code,
+        created_at=plan.get("created_at", datetime.now(timezone.utc))
+    )
+
+@api_router.delete("/planos/{plan_id}")
+async def delete_plan(plan_id: str, request: Request):
+    user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    plan = await db.planos.find_one({"_id": ObjectId(plan_id)})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano nao encontrado")
+    offer_using = await db.ofertas.find_one({"plano_id": plan_id})
+    if offer_using:
+        raise HTTPException(status_code=400, detail="Plano esta vinculado a ofertas e nao pode ser removido")
+    await db.planos.delete_one({"_id": ObjectId(plan_id)})
+    await create_log("seguranca", f"Plano removido: {plan['nome']} (confirmacao verificada)", user["id"], user["name"])
+    return {"message": "Plano removido com sucesso"}
+
+# ==================== OFFERS ROUTES ====================
+async def build_offer_response(o: dict) -> OfferResponse:
+    plano_nome, franquia, plan_code = None, None, None
+    if o.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(o["plano_id"])})
+        if plano:
+            plano_nome = plano["nome"]
+            franquia = plano["franquia"]
+            plan_code = plano.get("plan_code")
+    return OfferResponse(
+        id=str(o["_id"]), nome=o["nome"], plano_id=o["plano_id"],
+        plano_nome=plano_nome, franquia=franquia, plan_code=plan_code,
+        valor=o["valor"], custo=o.get("custo", 0.0), descricao=o.get("descricao"),
+        categoria=o.get("categoria", "movel"),
+        ativo=o.get("ativo", True),
+        created_at=o.get("created_at", datetime.now(timezone.utc))
+    )
+
+@api_router.get("/ofertas", response_model=List[OfferResponse])
+async def list_offers(request: Request, ativo: Optional[bool] = None, categoria: Optional[str] = None):
+    await get_current_user(request)
+    query = {}
+    if ativo is not None:
+        query["ativo"] = ativo
+    if categoria:
+        query["categoria"] = categoria
+    offers = await db.ofertas.find(query).to_list(1000)
+
+    # Batch load planos
+    plano_ids = list(set(o["plano_id"] for o in offers if o.get("plano_id")))
+    planos_lookup = {}
+    if plano_ids:
+        planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}).to_list(len(plano_ids))
+        planos_lookup = {str(p["_id"]): p for p in planos}
+
+    result = []
+    for o in offers:
+        plano = planos_lookup.get(o.get("plano_id"))
+        result.append(OfferResponse(
+            id=str(o["_id"]), nome=o["nome"], plano_id=o["plano_id"],
+            plano_nome=plano["nome"] if plano else None,
+            franquia=plano["franquia"] if plano else None,
+            plan_code=plano.get("plan_code") if plano else None,
+            valor=o["valor"], custo=o.get("custo", 0.0), descricao=o.get("descricao"),
+            categoria=o.get("categoria", "movel"),
+            ativo=o.get("ativo", True),
+            created_at=o.get("created_at", datetime.now(timezone.utc))
+        ))
+    return result
+
+@api_router.get("/ofertas/{offer_id}", response_model=OfferResponse)
+async def get_offer(offer_id: str, request: Request):
+    await get_current_user(request)
+    offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Oferta nao encontrada")
+    return await build_offer_response(offer)
+
+@api_router.post("/ofertas", response_model=OfferResponse)
+async def create_offer(data: OfferCreate, request: Request):
+    user = await require_admin(request)
+    plano = await db.planos.find_one({"_id": ObjectId(data.plano_id)})
+    if not plano:
+        raise HTTPException(status_code=400, detail="Plano nao encontrado")
+    offer_doc = {
+        "nome": data.nome, "plano_id": data.plano_id,
+        "valor": data.valor, "custo": data.custo,
+        "descricao": data.descricao,
+        "categoria": data.categoria.value,
+        "ativo": data.ativo, "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.ofertas.insert_one(offer_doc)
+    await create_log("cadastro", f"Oferta cadastrada: {data.nome} - R$ {data.valor:.2f}", user["id"], user["name"])
+    offer_doc["_id"] = result.inserted_id
+    return await build_offer_response(offer_doc)
+
+@api_router.put("/ofertas/{offer_id}", response_model=OfferResponse)
+async def update_offer(offer_id: str, data: OfferCreate, request: Request):
+    user = await require_admin(request)
+    offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Oferta nao encontrada")
+    plano = await db.planos.find_one({"_id": ObjectId(data.plano_id)})
+    if not plano:
+        raise HTTPException(status_code=400, detail="Plano nao encontrado")
+    await db.ofertas.update_one({"_id": ObjectId(offer_id)}, {"$set": {
+        "nome": data.nome, "plano_id": data.plano_id,
+        "valor": data.valor, "custo": data.custo,
+        "descricao": data.descricao,
+        "categoria": data.categoria.value, "ativo": data.ativo,
+    }})
+    await create_log("cadastro", f"Oferta atualizada: {data.nome}", user["id"], user["name"])
+    updated = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    return await build_offer_response(updated)
+
+@api_router.delete("/ofertas/{offer_id}")
+async def delete_offer(offer_id: str, request: Request):
+    user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    offer = await db.ofertas.find_one({"_id": ObjectId(offer_id)})
+    if not offer:
+        raise HTTPException(status_code=404, detail="Oferta nao encontrada")
+    chip_using = await db.chips.find_one({"oferta_id": offer_id})
+    if chip_using:
+        raise HTTPException(status_code=400, detail="Oferta esta vinculada a chips e nao pode ser removida")
+    await db.ofertas.delete_one({"_id": ObjectId(offer_id)})
+    await create_log("seguranca", f"Oferta removida: {offer['nome']} (confirmacao verificada)", user["id"], user["name"])
+    return {"message": "Oferta removida com sucesso"}
+
+# ==================== CHIPS ROUTES ====================
+async def build_chip_response(chip: dict) -> ChipResponse:
+    cliente_nome, oferta_nome, plano_nome, franquia, valor, plan_code, categoria = None, None, None, None, None, None, None
+    if chip.get("cliente_id"):
+        cl = await db.clientes.find_one({"_id": ObjectId(chip["cliente_id"])})
+        if cl:
+            cliente_nome = cl["nome"]
+    if chip.get("oferta_id"):
+        oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+        if oferta:
+            oferta_nome = oferta["nome"]
+            valor = oferta["valor"]
+            categoria = oferta.get("categoria", "movel")
+            if oferta.get("plano_id"):
+                plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+                if plano:
+                    plano_nome = plano["nome"]
+                    franquia = plano["franquia"]
+                    plan_code = plano.get("plan_code")
+    return ChipResponse(
+        id=str(chip["_id"]), iccid=chip["iccid"], status=chip["status"],
+        msisdn=chip.get("msisdn"), oferta_id=chip.get("oferta_id"),
+        oferta_nome=oferta_nome, categoria=categoria,
+        plano_nome=plano_nome, franquia=franquia,
+        plan_code=plan_code, valor=valor,
+        cliente_id=chip.get("cliente_id"), cliente_nome=cliente_nome,
+        created_at=chip.get("created_at", datetime.now(timezone.utc))
+    )
+
+@api_router.get("/chips", response_model=List[ChipResponse])
+async def list_chips(request: Request, status: Optional[str] = None, oferta_id: Optional[str] = None):
+    await get_current_user(request)
+    query = {}
+    if status:
+        query["status"] = status
+    if oferta_id:
+        query["oferta_id"] = oferta_id
+    chips = await db.chips.find(query).to_list(1000)
+
+    # Batch load related data
+    cliente_ids = list(set(c["cliente_id"] for c in chips if c.get("cliente_id")))
+    oferta_ids = list(set(c["oferta_id"] for c in chips if c.get("oferta_id")))
+
+    clientes_lookup = {}
+    if cliente_ids:
+        clientes = await db.clientes.find({"_id": {"$in": [ObjectId(cid) for cid in cliente_ids]}}).to_list(len(cliente_ids))
+        clientes_lookup = {str(cl["_id"]): cl for cl in clientes}
+
+    ofertas_lookup = {}
+    planos_lookup = {}
+    if oferta_ids:
+        ofertas = await db.ofertas.find({"_id": {"$in": [ObjectId(oid) for oid in oferta_ids]}}).to_list(len(oferta_ids))
+        ofertas_lookup = {str(o["_id"]): o for o in ofertas}
+        plano_ids = list(set(o["plano_id"] for o in ofertas if o.get("plano_id")))
+        if plano_ids:
+            planos = await db.planos.find({"_id": {"$in": [ObjectId(pid) for pid in plano_ids]}}).to_list(len(plano_ids))
+            planos_lookup = {str(p["_id"]): p for p in planos}
+
+    result = []
+    for chip in chips:
+        cliente_nome = None
+        oferta_nome, plano_nome, franquia, valor, plan_code, categoria = None, None, None, None, None, None
+
+        cl = clientes_lookup.get(chip.get("cliente_id"))
+        if cl:
+            cliente_nome = cl["nome"]
+
+        oferta = ofertas_lookup.get(chip.get("oferta_id"))
+        if oferta:
+            oferta_nome = oferta["nome"]
+            valor = oferta["valor"]
+            categoria = oferta.get("categoria", "movel")
+            plano = planos_lookup.get(oferta.get("plano_id"))
+            if plano:
+                plano_nome = plano["nome"]
+                franquia = plano["franquia"]
+                plan_code = plano.get("plan_code")
+
+        result.append(ChipResponse(
+            id=str(chip["_id"]), iccid=chip["iccid"], status=chip["status"],
+            msisdn=chip.get("msisdn"), oferta_id=chip.get("oferta_id"),
+            oferta_nome=oferta_nome, categoria=categoria,
+            plano_nome=plano_nome, franquia=franquia,
+            plan_code=plan_code, valor=valor,
+            cliente_id=chip.get("cliente_id"), cliente_nome=cliente_nome,
+            created_at=chip.get("created_at", datetime.now(timezone.utc))
+        ))
+    return result
+
+@api_router.post("/chips", response_model=ChipResponse)
+async def create_chip(data: ChipCreate, request: Request):
+    user = await require_admin(request)
+    existing = await db.chips.find_one({"iccid": data.iccid})
+    if existing:
+        raise HTTPException(status_code=400, detail="ICCID ja cadastrado")
+    oferta = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta nao encontrada")
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta nao esta ativa")
+    chip_doc = {
+        "iccid": data.iccid, "status": ChipStatus.disponivel.value,
+        "oferta_id": data.oferta_id, "cliente_id": None, "msisdn": None,
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.chips.insert_one(chip_doc)
+    chip_doc["_id"] = result.inserted_id
+    await create_log("cadastro", f"Chip cadastrado: {data.iccid}", user["id"], user["name"])
+    return await build_chip_response(chip_doc)
+
+@api_router.delete("/chips/{chip_id}")
+async def delete_chip(chip_id: str, request: Request):
+    user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip["status"] == ChipStatus.ativado.value:
+        raise HTTPException(status_code=400, detail="Nao e possivel remover um chip ativado")
+    await db.chips.delete_one({"_id": ObjectId(chip_id)})
+    await create_log("seguranca", f"Chip removido: {chip['iccid']} (confirmacao verificada)", user["id"], user["name"])
+    return {"message": "Chip removido com sucesso"}
+
+@api_router.put("/chips/{chip_id}", response_model=ChipResponse)
+async def update_chip(chip_id: str, data: ChipUpdate, request: Request):
+    user = await require_admin(request)
+    chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip["status"] == ChipStatus.ativado.value:
+        raise HTTPException(status_code=400, detail="Nao e possivel alterar oferta de um chip ativado")
+    if chip["status"] not in [ChipStatus.disponivel.value, ChipStatus.reservado.value]:
+        raise HTTPException(status_code=400, detail=f"Chip com status '{chip['status']}' nao pode ter a oferta alterada")
+    oferta = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta nao encontrada")
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta nao esta ativa")
+    await db.chips.update_one({"_id": ObjectId(chip_id)}, {"$set": {"oferta_id": data.oferta_id}})
+    await create_log("cadastro", f"Oferta do chip {chip['iccid']} alterada para: {oferta['nome']}", user["id"], user["name"])
+    updated = await db.chips.find_one({"_id": ObjectId(chip_id)})
+    return await build_chip_response(updated)
+
+# ==================== ACTIVATION ROUTE ====================
+@api_router.post("/ativacao", response_model=ActivationResponse)
+async def activate_line(data: ActivationRequest, request: Request):
+    user = await get_current_user(request)
+
+    # Get client
+    cliente = await db.clientes.find_one({"_id": ObjectId(data.cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+    if cliente["status"] != ClientStatus.ativo.value:
+        raise HTTPException(status_code=400, detail="Cliente nao esta ativo")
+
+    # Validate client data completeness
+    is_complete, missing = check_client_completeness(cliente)
+    if not is_complete:
+        field_names = {"nome": "Nome", "documento": "CPF/CNPJ", "telefone": "Telefone",
+                       "data_nascimento": "Data de Nascimento", "cep": "CEP", "numero_endereco": "Numero do Endereco"}
+        missing_labels = [field_names.get(f, f) for f in missing]
+        raise HTTPException(status_code=400, detail=f"Dados incompletos do cliente. Faltam: {', '.join(missing_labels)}")
+
+    # Get chip
+    chip = await db.chips.find_one({"_id": ObjectId(data.chip_id)})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip["status"] != ChipStatus.disponivel.value:
+        status_msg = {
+            ChipStatus.ativado.value: "Chip ja esta ativado",
+            ChipStatus.bloqueado.value: "Chip esta bloqueado",
+            ChipStatus.reservado.value: "Chip esta reservado",
+            ChipStatus.cancelado.value: "Chip esta cancelado",
+        }
+        raise HTTPException(status_code=400, detail=status_msg.get(chip["status"], f"Chip com status invalido: {chip['status']}"))
+
+    # Get offer from chip
+    if not chip.get("oferta_id"):
+        raise HTTPException(status_code=400, detail="Chip nao possui oferta vinculada")
+    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta do chip nao encontrada")
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta do chip nao esta ativa")
+
+    # Get plan from offer
+    if not oferta.get("plano_id"):
+        raise HTTPException(status_code=400, detail="Oferta nao possui plano vinculado")
+    plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+    if not plano:
+        raise HTTPException(status_code=400, detail="Plano da oferta nao encontrado")
+    if not plano.get("plan_code"):
+        raise HTTPException(status_code=400, detail="Plano nao possui plan_code configurado. Sincronize os planos da operadora primeiro.")
+
+    # Build activation payload for Ta Telecom
+    tipo_pessoa = cliente.get("tipo_pessoa", "pf")
+    # Ta Telecom espera 'F' (Fisica) ou 'J' (Juridica)
+    person_type_map = {"pf": "F", "pj": "J", "F": "F", "J": "J"}
+    person_type = person_type_map.get(tipo_pessoa, "F")
+
+    telefone_clean = re.sub(r'\D', '', cliente.get("telefone", ""))
+    ddd = data.ddd if data.ddd and len(data.ddd) == 2 else (telefone_clean[:2] if len(telefone_clean) >= 2 else "11")
+
+    # Converter data_nascimento para dd/mm/YYYY
+    raw_dob = cliente.get("data_nascimento", "")
+    dob_formatted = ""
+    if raw_dob:
+        try:
+            # Tenta YYYY-MM-DD (ISO)
+            if "-" in raw_dob and len(raw_dob) >= 10:
+                parts = raw_dob[:10].split("-")
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    dob_formatted = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                else:
+                    dob_formatted = raw_dob
+            elif "/" in raw_dob:
+                dob_formatted = raw_dob  # Ja esta em dd/mm/YYYY
+            else:
+                dob_formatted = raw_dob
+        except Exception:
+            dob_formatted = raw_dob
+
+    activation_payload = {
+        "person_type": person_type,
+        "person_name": cliente["nome"],
+        "document_number": clean_document(cliente.get("documento", "")),
+        "phone_number": telefone_clean,
+        "date_of_birth": dob_formatted,
+        "type_of_street": "",
+        "address": cliente.get("endereco", ""),
+        "address_number": cliente.get("numero_endereco", ""),
+        "neighborhood": cliente.get("bairro", ""),
+        "state": cliente.get("estado", ""),
+        "city_code": cliente.get("city_code", ""),
+        "postcode": re.sub(r'\D', '', cliente.get("cep", "")),
+        "plan_code": plano["plan_code"],
+        "portability": data.portability,
+        "cn_contract_line": data.port_ddd if data.portability and data.port_ddd else ddd,
+        "contract_line": data.port_number if data.portability and data.port_number else "",
+    }
+
+    # Call operadora service
+    result = await operadora_service.ativar_chip(
+        iccid=chip["iccid"],
+        activation_payload=activation_payload,
+        db=db, user_id=user["id"], user_name=user["name"]
+    )
+
+    # Normalizar status e message para strings
+    if isinstance(result.status, str):
+        status_str = result.status
+    elif hasattr(result.status, 'value'):
+        status_str = result.status.value
+    else:
+        status_str = str(result.status)
+    # Mapear "ok" para "ativo" (Ta Telecom retorna "ok" quando sucesso)
+    # Para portabilidade, manter como pendente ate conclusao
+    if result.success and status_str == "ok":
+        if data.portability:
+            status_str = "portabilidade_em_andamento"
+        else:
+            status_str = "ativo"
+
+    msg = result.message
+    if isinstance(msg, list):
+        msg = "; ".join(str(m) for m in msg)
+    msg = str(msg) if msg else "Resultado da ativacao"
+
+    if result.success:
+        if status_str in ("ativo",):
+            chip_status = ChipStatus.ativado.value
+        else:
+            chip_status = ChipStatus.reservado.value
+        msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
+
+        # Se nao veio o numero na resposta de ativacao, consultar o chip na Ta Telecom
+        if not msisdn:
+            try:
+                await asyncio.sleep(2)  # Aguardar processamento na operadora
+                detail_resp = await operadora_service.consultar_linha(
+                    chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+                )
+                if detail_resp.success and detail_resp.data:
+                    msisdn = str(detail_resp.data.get("numero") or detail_resp.data.get("msisdn") or "")
+                    if msisdn:
+                        logger.info(f"Numero obtido via consulta pos-ativacao: {msisdn} para ICCID {chip['iccid']}")
+            except Exception as e:
+                logger.warning(f"Nao foi possivel consultar numero pos-ativacao: {e}")
+
+        await db.chips.update_one({"_id": ObjectId(data.chip_id)}, {"$set": {
+            "status": chip_status, "cliente_id": data.cliente_id, "msisdn": msisdn,
+        }})
+
+        line_doc = {
+            "numero": msisdn or "Pendente",
+            "status": status_str,
+            "cliente_id": data.cliente_id,
+            "chip_id": data.chip_id,
+            "plano_id": oferta["plano_id"],
+            "oferta_id": chip["oferta_id"],
+            "msisdn": msisdn,
+            "portability": data.portability,
+            "port_number": f"{data.port_ddd}{data.port_number}" if data.portability and data.port_ddd and data.port_number else None,
+            "created_at": datetime.now(timezone.utc)
+        }
+        await db.linhas.insert_one(line_doc)
+
+        # Enviar email de ativacao ao cliente
+        if status_str == "ativo" and email_service.is_configured:
+            cliente_email = cliente.get("email")
+            if cliente_email:
+                try:
+                    await email_service.send_ativacao_sucesso(
+                        to_email=cliente_email,
+                        cliente_nome=cliente["nome"],
+                        numero=msisdn,
+                        plano_nome=plano.get("nome"),
+                        iccid=chip["iccid"],
+                    )
+                except Exception as e:
+                    logger.warning(f"Erro ao enviar email de ativacao admin: {e}")
+
+    try:
+        return ActivationResponse(
+            success=result.success,
+            status=status_str,
+            message=msg,
+            numero=msisdn if result.success else None,
+            oferta_nome=str(oferta["nome"]),
+            plano_nome=str(plano["nome"]),
+            franquia=str(plano["franquia"]),
+            valor=float(oferta["valor"]),
+            response_time_ms=int(result.response_time_ms or 0),
+        )
+    except Exception as e:
+        logger.error(f"Erro ao construir ActivationResponse: {e}")
+        return ActivationResponse(
+            success=result.success,
+            status=status_str,
+            message=msg,
+            numero=None,
+            oferta_nome=str(oferta.get("nome", "")),
+            plano_nome=str(plano.get("nome", "")),
+            franquia=str(plano.get("franquia", "")),
+            valor=float(oferta.get("valor", 0)),
+            response_time_ms=0,
+        )
+
+
+# ==================== PORTABILITY STATUS ====================
+@api_router.get("/portabilidade/status/{numero_ou_iccid}")
+async def get_portability_status(numero_ou_iccid: str, request: Request):
+    user = await get_current_user(request)
+    result = await operadora_service.consultar_status_portabilidade(
+        numero_ou_iccid, db=db, user_id=user["id"], user_name=user["name"]
+    )
+    return {
+        "success": result.success,
+        "status": result.data.get("status") if result.data else None,
+        "message": result.data.get("msg_usuario") if result.data else result.message,
+        "janela": result.data.get("janela") if result.data else None,
+        "chip_status": result.data.get("chip_status") if result.data else None,
+    }
+
+@api_router.post("/chips/{iccid}/verificar-portabilidade")
+async def verificar_portabilidade_chip(iccid: str, request: Request):
+    """Consulta status da portabilidade na Ta Telecom e atualiza chip/linha no banco."""
+    user = await require_admin(request)
+    iccid_clean = re.sub(r'\D', '', iccid)
+
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+
+    # Consultar Ta Telecom
+    result = await operadora_service.consultar_status_portabilidade(
+        iccid_clean, db=db, user_id=user["id"], user_name=user["name"]
+    )
+
+    port_status = ""
+    port_data = {}
+    if result.success and result.data:
+        port_data = result.data
+        port_status = (port_data.get("status") or "").upper()
+
+    # Tambem consultar a linha na operadora para pegar msisdn atualizado
+    line_result = await operadora_service.consultar_linha(
+        iccid_clean, db=db, user_id=user["id"], user_name=user["name"]
+    )
+    line_data = line_result.data or {} if line_result.success else {}
+    operadora_msisdn = line_data.get("msisdn") or line_data.get("subscriber_number")
+    operadora_status_raw = line_data.get("status")
+    # status 3 = ativado/em uso na Ta Telecom
+    operadora_ativo = operadora_status_raw == 3 or str(operadora_status_raw) == "3" or "EM USO" in port_status or "CONCLUIDA" in port_status or "CONCLUÍDA" in port_status
+
+    updates_chip = {}
+    updates_linha = {}
+    new_chip_status = chip.get("status")
+
+    if operadora_ativo:
+        new_chip_status = ChipStatus.ativado.value
+        updates_chip["status"] = new_chip_status
+        if operadora_msisdn:
+            updates_chip["msisdn"] = str(operadora_msisdn)
+            updates_linha["msisdn"] = str(operadora_msisdn)
+            updates_linha["numero"] = str(operadora_msisdn)
+        updates_linha["status"] = "ativo"
+    elif "AGUARDANDO" in port_status or "PENDENTE" in port_status:
+        new_chip_status = ChipStatus.reservado.value
+        updates_chip["status"] = new_chip_status
+
+    if updates_chip:
+        await db.chips.update_one({"_id": chip["_id"]}, {"$set": updates_chip})
+    if updates_linha:
+        await db.linhas.update_one({"chip_id": str(chip["_id"])}, {"$set": updates_linha})
+
+    # Atualizar ativacao selfservice se existir
+    ss = await db.ativacoes_selfservice.find_one({"iccid": iccid_clean})
+    if ss and ss.get("status") in ("ativando", "portabilidade_em_andamento") and operadora_ativo:
+        msisdn = operadora_msisdn or ss.get("port_number") or ss.get("msisdn")
+        await db.ativacoes_selfservice.update_one({"_id": ss["_id"]}, {"$set": {"status": "ativo", "msisdn": msisdn}})
+
+    await create_log("portabilidade", f"Verificacao portabilidade ICCID {iccid_clean}: {port_status or 'sem info'} | Chip: {new_chip_status}", user["id"], user["name"])
+
+    return {
+        "iccid": iccid_clean,
+        "chip_status_anterior": chip.get("status"),
+        "chip_status_novo": new_chip_status,
+        "portabilidade_status": port_data.get("status", ""),
+        "portabilidade_janela": port_data.get("janela", ""),
+        "portabilidade_msg": port_data.get("msg_usuario", ""),
+        "operadora_msisdn": operadora_msisdn,
+        "operadora_status": operadora_status_raw,
+        "atualizado": bool(updates_chip or updates_linha),
+    }
+
+@api_router.post("/chips/{iccid}/resetar")
+async def resetar_chip(iccid: str, request: Request):
+    """Reseta um chip de 'reservado' para 'disponivel', removendo vinculo com cliente e linha."""
+    user = await require_admin(request)
+    iccid_clean = re.sub(r'\D', '', iccid)
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip.get("status") == ChipStatus.ativado.value:
+        raise HTTPException(status_code=400, detail="Chip ativado nao pode ser resetado. Use bloqueio/desbloqueio.")
+    old_status = chip.get("status", "?")
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+        "status": ChipStatus.disponivel.value,
+        "cliente_id": None, "msisdn": None,
+    }})
+    # Remover linha vinculada
+    await db.linhas.delete_many({"chip_id": str(chip["_id"])})
+    # Cancelar ativacao selfservice pendente
+    await db.ativacoes_selfservice.update_many(
+        {"iccid": iccid_clean, "status": {"$in": ["ativando", "portabilidade_em_andamento", "pago"]}},
+        {"$set": {"status": "cancelado"}}
+    )
+    await create_log("cadastro", f"Chip {iccid_clean} resetado: {old_status} -> disponivel", user["id"], user["name"])
+    return {"message": f"Chip resetado com sucesso ({old_status} -> disponivel)", "iccid": iccid_clean}
+
+# ==================== LINES ROUTES ====================
+async def build_line_response(line: dict) -> LineResponse:
+    cliente_nome, cliente_documento, plano_nome, oferta_nome, franquia, plan_code, iccid, msisdn = None, None, None, None, None, None, None, None
+    if line.get("cliente_id"):
+        try:
+            cl = await db.clientes.find_one({"_id": ObjectId(line["cliente_id"])})
+            if cl:
+                cliente_nome = cl.get("nome")
+                cliente_documento = cl.get("documento")
+        except Exception:
+            pass
+    if line.get("plano_id") and ObjectId.is_valid(line["plano_id"]):
+        plano = await db.planos.find_one({"_id": ObjectId(line["plano_id"])})
+        if plano:
+            plano_nome = plano.get("nome")
+            franquia = plano.get("franquia")
+            plan_code = plano.get("plan_code")
+    if line.get("oferta_id") and ObjectId.is_valid(line["oferta_id"]):
+        oferta = await db.ofertas.find_one({"_id": ObjectId(line["oferta_id"])})
+        if oferta:
+            oferta_nome = oferta.get("nome")
+    if line.get("chip_id") and ObjectId.is_valid(line["chip_id"]):
+        chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+        if chip:
+            iccid = chip.get("iccid")
+            msisdn = chip.get("msisdn")
+    return LineResponse(
+        id=str(line["_id"]), numero=line.get("numero", ""), status=line.get("status", "desconhecido"),
+        cliente_id=line.get("cliente_id", ""), chip_id=line.get("chip_id", ""),
+        plano_id=line.get("plano_id"), oferta_id=line.get("oferta_id"),
+        cliente_nome=cliente_nome, cliente_documento=cliente_documento,
+        plano_nome=plano_nome, oferta_nome=oferta_nome, franquia=franquia, plan_code=plan_code,
+        iccid=iccid, msisdn=msisdn or line.get("msisdn"),
+        created_at=line.get("created_at")
+    )
+
+@api_router.get("/linhas", response_model=List[LineResponse])
+async def list_lines(request: Request, status: Optional[str] = None):
+    await get_current_user(request)
+    query = {}
+    if status:
+        query["status"] = status
+    lines = await db.linhas.find(query).to_list(1000)
+
+    # Batch load related data
+    cliente_ids = list(set(l.get("cliente_id") for l in lines if l.get("cliente_id") and ObjectId.is_valid(l.get("cliente_id"))))
+    plano_ids = list(set(l.get("plano_id") for l in lines if l.get("plano_id") and ObjectId.is_valid(l.get("plano_id"))))
+    oferta_ids = list(set(l.get("oferta_id") for l in lines if l.get("oferta_id") and ObjectId.is_valid(l.get("oferta_id"))))
+    chip_ids = list(set(l.get("chip_id") for l in lines if l.get("chip_id") and ObjectId.is_valid(l.get("chip_id"))))
+
+    clientes_lookup, planos_lookup, ofertas_lookup, chips_lookup = {}, {}, {}, {}
+    if cliente_ids:
+        docs = await db.clientes.find({"_id": {"$in": [ObjectId(i) for i in cliente_ids]}}).to_list(len(cliente_ids))
+        clientes_lookup = {str(d["_id"]): d for d in docs}
+    if plano_ids:
+        docs = await db.planos.find({"_id": {"$in": [ObjectId(i) for i in plano_ids]}}).to_list(len(plano_ids))
+        planos_lookup = {str(d["_id"]): d for d in docs}
+    if oferta_ids:
+        docs = await db.ofertas.find({"_id": {"$in": [ObjectId(i) for i in oferta_ids]}}).to_list(len(oferta_ids))
+        ofertas_lookup = {str(d["_id"]): d for d in docs}
+    if chip_ids:
+        docs = await db.chips.find({"_id": {"$in": [ObjectId(i) for i in chip_ids]}}).to_list(len(chip_ids))
+        chips_lookup = {str(d["_id"]): d for d in docs}
+
+    result = []
+    for line in lines:
+        cl = clientes_lookup.get(line.get("cliente_id"))
+        plano = planos_lookup.get(line.get("plano_id"))
+        oferta = ofertas_lookup.get(line.get("oferta_id"))
+        chip = chips_lookup.get(line.get("chip_id"))
+
+        result.append(LineResponse(
+            id=str(line["_id"]), numero=line.get("numero", ""), status=line.get("status", "desconhecido"),
+            cliente_id=line.get("cliente_id", ""), chip_id=line.get("chip_id", ""),
+            plano_id=line.get("plano_id"), oferta_id=line.get("oferta_id"),
+            cliente_nome=cl.get("nome") if cl else None,
+            cliente_documento=cl.get("documento") if cl else None,
+            plano_nome=plano.get("nome") if plano else None,
+            oferta_nome=oferta.get("nome") if oferta else None,
+            franquia=plano.get("franquia") if plano else None,
+            plan_code=plano.get("plan_code") if plano else None,
+            iccid=chip.get("iccid") if chip else None,
+            msisdn=(chip.get("msisdn") if chip else None) or line.get("msisdn"),
+            created_at=line.get("created_at")
+        ))
+    return result
+
+@api_router.get("/linhas/{line_id}/consultar")
+async def query_line_from_operator(line_id: str, request: Request):
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip da linha nao encontrado")
+    result = await operadora_service.consultar_linha(
+        iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+    )
+
+    # Atualizar plano automaticamente se mudou na operadora
+    updated_plan = None
+    updated_numero = None
+    if result.success and result.data:
+        line_updates = {}
+
+        # Atualizar plano se mudou
+        if result.data.get("plano"):
+            plano_operadora = result.data["plano"]
+            plano_atual = await db.planos.find_one({"_id": ObjectId(line["plano_id"])}) if line.get("plano_id") else None
+            if not plano_atual or plano_atual.get("nome") != plano_operadora:
+                novo_plano = await db.planos.find_one({"nome": plano_operadora})
+                if novo_plano:
+                    line_updates["plano_id"] = str(novo_plano["_id"])
+                    updated_plan = plano_operadora
+                    logger.info(f"Plano atualizado: {plano_atual.get('nome') if plano_atual else '?'} -> {plano_operadora}")
+
+        # Atualizar numero se estava "Pendente" ou vazio
+        numero_operadora = result.data.get("numero") or result.data.get("msisdn")
+        if numero_operadora and (not line.get("numero") or line.get("numero") == "Pendente"):
+            line_updates["numero"] = numero_operadora
+            line_updates["msisdn"] = numero_operadora
+            updated_numero = numero_operadora
+            logger.info(f"Numero atualizado: Pendente -> {numero_operadora}")
+            # Atualizar chip tambem
+            await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"msisdn": numero_operadora}})
+
+        if line_updates:
+            await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": line_updates})
+
+    return {
+        "success": result.success,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
+        "message": result.message,
+        "data": result.data,
+        "response_time_ms": result.response_time_ms,
+        "updated_plan": updated_plan,
+        "updated_numero": updated_numero,
+    }
+
+@api_router.post("/linhas/{line_id}/bloquear-parcial")
+async def block_line_partial(line_id: str, request: Request):
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    if line["status"] == LineStatus.bloqueado.value:
+        raise HTTPException(status_code=400, detail="Linha ja esta bloqueada")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    result = await operadora_service.bloquear_parcial(
+        iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if result.success:
+        await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"status": LineStatus.bloqueado.value}})
+        await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"status": ChipStatus.bloqueado.value}})
+    return {
+        "success": result.success, "message": result.message,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
+        "response_time_ms": result.response_time_ms,
+    }
+
+@api_router.post("/linhas/{line_id}/bloquear-total")
+async def block_line_total(line_id: str, data: BlockTotalRequest, request: Request):
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    if data.reason not in BLOCK_REASONS:
+        raise HTTPException(status_code=400, detail=f"Motivo invalido. Opcoes: {BLOCK_REASONS}")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    result = await operadora_service.bloquear_total(
+        iccid=chip["iccid"], reason=data.reason, db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if result.success:
+        await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"status": LineStatus.bloqueado.value}})
+        await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"status": ChipStatus.bloqueado.value}})
+    return {
+        "success": result.success, "message": result.message,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
+        "response_time_ms": result.response_time_ms,
+    }
+
+@api_router.post("/linhas/{line_id}/desbloquear")
+async def unblock_line(line_id: str, request: Request):
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    if line["status"] != LineStatus.bloqueado.value:
+        raise HTTPException(status_code=400, detail="Linha nao esta bloqueada")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    result = await operadora_service.desbloquear(
+        iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if result.success:
+        await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"status": LineStatus.ativo.value}})
+        await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"status": ChipStatus.ativado.value}})
+    return {
+        "success": result.success, "message": result.message,
+        "status": result.status if isinstance(result.status, str) else result.status.value,
+        "response_time_ms": result.response_time_ms,
+    }
+
+@api_router.post("/linhas/{line_id}/alterar-plano")
+async def change_plan(line_id: str, data: PlanChangeRequest, request: Request):
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    if line["status"] != LineStatus.ativo.value:
+        raise HTTPException(status_code=400, detail="Linha precisa estar ativa para alterar plano")
+    # Get new offer -> plan -> plan_code
+    new_oferta = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+    if not new_oferta:
+        raise HTTPException(status_code=400, detail="Nova oferta nao encontrada")
+    new_plano = await db.planos.find_one({"_id": ObjectId(new_oferta["plano_id"])})
+    if not new_plano:
+        raise HTTPException(status_code=400, detail="Plano da nova oferta nao encontrado")
+    if not new_plano.get("plan_code"):
+        raise HTTPException(status_code=400, detail="Plano nao possui plan_code configurado")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    result = await operadora_service.alterar_plano(
+        iccid=chip["iccid"], plan_code=new_plano["plan_code"],
+        db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if result.success:
+        await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {
+            "plano_id": str(new_plano["_id"]), "oferta_id": data.oferta_id,
+        }})
+        await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {
+            "oferta_id": data.oferta_id,
+        }})
+    return {
+        "success": result.success, "message": result.message,
+        "new_plan": new_plano["nome"] if result.success else None,
+        "new_offer": new_oferta["nome"] if result.success else None,
+        "response_time_ms": result.response_time_ms,
+    }
+
+@api_router.post("/linhas/{line_id}/cancelar")
+async def cancel_line(line_id: str, request: Request):
+    """Cancela uma linha na operadora e atualiza o sistema."""
+    user = await require_admin(request)
+    line = await db.linhas.find_one({"_id": ObjectId(line_id)})
+    if not line:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    if line["status"] == "cancelado":
+        raise HTTPException(status_code=400, detail="Linha ja esta cancelada")
+    chip = await db.chips.find_one({"_id": ObjectId(line["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    result = await operadora_service.cancelar_linha(
+        iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if result.success:
+        await db.linhas.update_one({"_id": ObjectId(line_id)}, {"$set": {"status": "cancelado"}})
+        await db.chips.update_one({"_id": chip["_id"]}, {"$set": {"status": "cancelado"}})
+        await create_log("cancelamento", f"Linha cancelada: {line.get('numero', '?')} - ICCID {chip['iccid']}", user["id"], user["name"])
+    return {
+        "success": result.success,
+        "message": result.message,
+        "response_time_ms": result.response_time_ms,
+    }
+
+# ==================== OPERADORA SYNC ROUTES ====================
+@api_router.post("/operadora/sincronizar-planos")
+async def sync_plans_from_operator(request: Request):
+    user = await require_admin(request)
+    result = await operadora_service.listar_planos(db=db, user_id=user["id"], user_name=user["name"])
+    if not result.success:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar planos da operadora: {result.message}")
+    plans_data = result.data.get("items", result.data.get("plans", result.data.get("data", [])))
+    if isinstance(plans_data, dict):
+        plans_data = plans_data.get("items", plans_data.get("plans", []))
+    synced = 0
+    created = 0
+    for plan_item in plans_data:
+        # Ta Telecom format: {id: 15, quantity: {dados: 2000, sms: 100, telefonia: 100}, description: "..."}
+        pc = plan_item.get("id") or plan_item.get("plan_code") or plan_item.get("code")
+        if not pc:
+            continue
+        pc_str = str(pc)
+        desc = plan_item.get("description") or plan_item.get("nome") or plan_item.get("name") or pc_str
+        # Extract franquia from quantity.dados (in MB) or direct field
+        quantity = plan_item.get("quantity")
+        if isinstance(quantity, dict) and quantity.get("dados"):
+            dados_mb = quantity["dados"]
+            if dados_mb >= 1000:
+                franquia = f"{dados_mb // 1000}GB"
+            else:
+                franquia = f"{dados_mb}MB"
+        else:
+            franquia = plan_item.get("data_limit") or plan_item.get("franquia") or ""
+        existing = await db.planos.find_one({"plan_code": pc_str})
+        if existing:
+            await db.planos.update_one({"_id": existing["_id"]}, {"$set": {
+                "nome": desc, "franquia": franquia, "descricao": desc,
+            }})
+            synced += 1
+        else:
+            await db.planos.insert_one({
+                "nome": desc, "franquia": franquia,
+                "descricao": desc,
+                "plan_code": pc_str,
+                "created_at": datetime.now(timezone.utc),
+            })
+            created += 1
+    await create_log("sincronizacao", f"Planos sincronizados: {synced} atualizados, {created} criados", user["id"], user["name"])
+    return {"success": True, "message": f"Sincronizacao concluida: {synced} atualizados, {created} criados", "synced": synced, "created": created}
+
+@api_router.post("/operadora/sincronizar-estoque")
+async def sync_stock_from_operator(request: Request):
+    user = await require_admin(request)
+    result = await operadora_service.listar_estoque_completo(db=db, user_id=user["id"], user_name=user["name"])
+    if not result.success:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar estoque da operadora: {result.message}")
+    # Ta Telecom estoque format: {codigo_status_tip, results: [{data, sim_card, status}]}
+    items = result.data.get("results", result.data.get("items", result.data.get("data", [])))
+    if isinstance(items, dict):
+        items = items.get("results", items.get("items", []))
+    # Status text mapping
+    status_text_map = {
+        "DISPONÍVEL": "disponivel", "DISPONIVEL": "disponivel",
+        "CANCELADO": "cancelado", "CANCELADA": "cancelado",
+        "EM USO": "ativado", "ATIVADO": "ativado", "ATIVA": "ativado", "ATIVO": "ativado",
+        "BLOQUEADO": "bloqueado", "BLOQUEADA": "bloqueado",
+        "SUSPENSA": "bloqueado", "SUSPENSO": "bloqueado",
+    }
+    synced = 0
+    created = 0
+    for item in items:
+        # Try different field names for ICCID
+        iccid = item.get("sim_card") or item.get("iccid") or item.get("ICCID")
+        if not iccid:
+            continue
+        # Map status - can be text string or numeric
+        raw_status = item.get("status", "")
+        if isinstance(raw_status, str):
+            local_status = status_text_map.get(raw_status.upper().strip(), "disponivel")
+        elif isinstance(raw_status, int):
+            local_status = STOCK_STATUS_MAP.get(raw_status, "disponivel")
+        else:
+            local_status = "disponivel"
+        msisdn = item.get("msisdn") or item.get("MSISDN") or item.get("telefone")
+        existing = await db.chips.find_one({"iccid": str(iccid)})
+        if existing:
+            update_fields = {"status": local_status}
+            if msisdn:
+                update_fields["msisdn"] = str(msisdn)
+            await db.chips.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+            synced += 1
+        else:
+            await db.chips.insert_one({
+                "iccid": str(iccid), "status": local_status,
+                "oferta_id": None, "cliente_id": None,
+                "msisdn": str(msisdn) if msisdn else None,
+                "created_at": datetime.now(timezone.utc),
+            })
+            created += 1
+    await create_log("sincronizacao", f"Estoque sincronizado: {synced} atualizados, {created} importados", user["id"], user["name"])
+    return {"success": True, "message": f"Sincronizacao concluida: {synced} atualizados, {created} importados", "synced": synced, "created": created}
+
+@api_router.post("/operadora/sincronizar-clientes")
+async def sync_clients_from_operator(request: Request):
+    user = await require_admin(request)
+    # 1. Get stock from Tá Telecom (all statuses)
+    result = await operadora_service.listar_estoque_completo(db=db, user_id=user["id"], user_name=user["name"])
+    if not result.success:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar estoque: {result.message}")
+    items = result.data.get("results", result.data.get("items", []))
+    if isinstance(items, dict):
+        items = items.get("results", items.get("items", []))
+    # Filter only active chips (EM USO / ATIVADO / ATIVO)
+    # Include EM USO (active) and BLOQUEADO (blocked) - both have contracts
+    sync_statuses = {"EM USO", "ATIVADO", "ATIVA", "ATIVO", "BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA"}
+    contract_chips = [
+        item for item in items
+        if isinstance(item.get("status"), str) and item["status"].upper().strip() in sync_statuses
+    ]
+    clients_created = 0
+    clients_updated = 0
+    lines_created = 0
+    chips_linked = 0
+    errors = []
+    for idx, item in enumerate(contract_chips):
+        stock_status = (item.get("status") or "").upper().strip()
+        iccid = item.get("sim_card") or item.get("iccid")
+        if not iccid:
+            continue
+        iccid = str(iccid)
+        # Rate limit: delay between chips (increased to avoid 429)
+        if idx > 0:
+            await asyncio.sleep(0.6)
+        # 2. Query subscriber details from Tá Telecom (with retry for rate limit)
+        d = None
+        for attempt in range(5):
+            try:
+                detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+                if detail_resp.success and detail_resp.data:
+                    d = detail_resp.data
+                    break
+                # Detect 429 rate limit specifically
+                is_rate_limit = (
+                    getattr(detail_resp, 'http_status_code', 0) == 429 or
+                    (hasattr(detail_resp, 'error_code') and str(detail_resp.error_code) == 'ERR_RATE_LIMIT')
+                )
+                if is_rate_limit:
+                    wait_time = 3.0 * (2 ** attempt)  # 3s, 6s, 12s, 24s, 48s
+                    logger.warning(f"429 Rate Limit para ICCID {iccid}, aguardando {wait_time}s (tentativa {attempt+1}/5)")
+                    await asyncio.sleep(wait_time)
+                    continue
+            except Exception as e:
+                if attempt == 4:
+                    errors.append(f"Erro ao consultar {iccid}: {str(e)}")
+            # Exponential backoff between retries
+            await asyncio.sleep(1.5 * (attempt + 1))
+        if not d:
+            errors.append(f"Sem dados para ICCID {iccid}")
+            continue
+        cpf = d.get("cpf") or d.get("document_number") or ""
+        nome = d.get("nome") or d.get("subscriber_name") or ""
+        if not cpf or not nome:
+            continue
+        cpf_clean = re.sub(r'\D', '', cpf)
+        telefone = d.get("numero") or d.get("msisdn") or ""
+        telefone_clean = re.sub(r'\D', '', str(telefone))
+        cidade = d.get("cidade") or ""
+        data_ativacao = d.get("data_ativacao") or ""
+        plano_nome = d.get("plano") or ""
+        numero_contrato = d.get("numero_contrato") or ""
+        status_ta = (d.get("status") or "").lower().strip()
+        msisdn = str(d.get("numero") or "")
+        # Determine local status based on both stock status and individual status
+        blocked_statuses = {"bloqueado", "bloqueada", "suspenso", "suspensa"}
+        if stock_status in ("BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA") or status_ta in blocked_statuses:
+            local_status = "bloqueado"
+        else:
+            local_status = "ativo"
+        # 3. Create or update client by CPF
+        existing_client = await db.clientes.find_one({"documento": cpf_clean})
+        if existing_client:
+            update_fields = {}
+            if not existing_client.get("telefone") and telefone_clean:
+                update_fields["telefone"] = telefone_clean
+            if not existing_client.get("cidade") and cidade:
+                update_fields["cidade"] = cidade
+            # Sempre atualizar o status do cliente conforme a operadora
+            if existing_client.get("status") != local_status:
+                update_fields["status"] = local_status
+            if update_fields:
+                await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": update_fields})
+            client_id = str(existing_client["_id"])
+            clients_updated += 1
+        else:
+            client_doc = {
+                "nome": nome.title(),
+                "tipo_pessoa": "pf",
+                "documento": cpf_clean,
+                "telefone": telefone_clean,
+                "data_nascimento": None,
+                "cep": None,
+                "endereco": None,
+                "numero_endereco": None,
+                "bairro": None,
+                "cidade": cidade.title() if cidade else None,
+                "estado": None,
+                "city_code": None,
+                "complemento": None,
+                "status": local_status,
+                "created_at": datetime.now(timezone.utc),
+            }
+            insert_result = await db.clientes.insert_one(client_doc)
+            client_id = str(insert_result.inserted_id)
+            clients_created += 1
+        # 4. Update chip in local DB
+        local_chip = await db.chips.find_one({"iccid": iccid})
+        chip_status = "ativado" if local_status == "ativo" else "bloqueado"
+        if local_chip:
+            chip_update = {"status": chip_status, "cliente_id": client_id}
+            if msisdn:
+                chip_update["msisdn"] = msisdn
+            await db.chips.update_one({"_id": local_chip["_id"]}, {"$set": chip_update})
+            chip_id = str(local_chip["_id"])
+            chips_linked += 1
+        else:
+            chip_doc = {
+                "iccid": iccid, "status": chip_status,
+                "oferta_id": None, "cliente_id": client_id,
+                "msisdn": msisdn or None,
+                "created_at": datetime.now(timezone.utc),
+            }
+            insert_result = await db.chips.insert_one(chip_doc)
+            chip_id = str(insert_result.inserted_id)
+            chips_linked += 1
+        # 5. Create or update line
+        existing_line = await db.linhas.find_one({"chip_id": chip_id})
+        if existing_line:
+            # Update status if changed
+            if existing_line.get("status") != local_status:
+                await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {"status": local_status}})
+        elif msisdn:
+            # Try to find matching plan
+            plano_id = None
+            if plano_nome:
+                plano = await db.planos.find_one({"nome": {"$regex": re.escape(plano_nome), "$options": "i"}})
+                if plano:
+                    plano_id = str(plano["_id"])
+            line_doc = {
+                "numero": msisdn,
+                "status": local_status,
+                "cliente_id": client_id,
+                "chip_id": chip_id,
+                "plano_id": plano_id,
+                "oferta_id": local_chip.get("oferta_id") if local_chip else None,
+                "msisdn": msisdn,
+                "created_at": datetime.now(timezone.utc),
+            }
+            await db.linhas.insert_one(line_doc)
+            lines_created += 1
+    msg = f"Clientes: {clients_created} criados, {clients_updated} atualizados. Linhas: {lines_created} criadas. Chips vinculados: {chips_linked}."
+    if errors:
+        msg += f" Erros: {len(errors)}"
+    await create_log("sincronizacao", f"Sincronizacao de clientes: {msg}", user["id"], user["name"])
+    return {
+        "success": True, "message": msg,
+        "clients_created": clients_created, "clients_updated": clients_updated,
+        "lines_created": lines_created, "chips_linked": chips_linked,
+        "total_with_contract": len(contract_chips), "errors": errors[:10],
+    }
+
+@api_router.post("/operadora/reparar-clientes")
+async def repair_clients_missing_data(request: Request):
+    """
+    Encontra clientes com dados incompletos (sem linha, sem ICCID, sem numero)
+    e tenta recuperar via consulta ao estoque da Ta Telecom.
+    Roda em background e retorna o status via GET /operadora/reparar-status.
+    """
+    user = await require_admin(request)
+
+    # Check if already running
+    existing = await db.system_config.find_one({"key": "repair_status"})
+    if existing and existing.get("status") == "running":
+        return {"success": False, "message": "Reparo ja esta em andamento. Acompanhe pelo status."}
+
+    # Mark as running
+    await db.system_config.update_one(
+        {"key": "repair_status"},
+        {"$set": {"key": "repair_status", "status": "running", "started_at": datetime.now(timezone.utc).isoformat(), "message": "Iniciando...", "repaired": 0, "errors": []}},
+        upsert=True,
+    )
+
+    # Launch background task
+    asyncio.create_task(_run_repair_background(user))
+    return {"success": True, "message": "Reparo iniciado em background. Acompanhe pelo botao de status."}
+
+
+async def _run_repair_background(user: dict):
+    try:
+        # 1. Find clients with missing data
+        all_clients = await db.clientes.find({}, {"_id": 1, "nome": 1, "documento": 1, "telefone": 1}).to_list(2000)
+        cpf_to_client = {}
+        clients_to_repair = []
+        for c in all_clients:
+            cid = str(c["_id"])
+            lines = await db.linhas.find({"cliente_id": cid}).to_list(100)
+            needs_repair = False
+            if not lines:
+                needs_repair = True
+            else:
+                for l in lines:
+                    chip_id = l.get("chip_id")
+                    has_numero = bool(l.get("numero") or l.get("msisdn"))
+                    has_chip = False
+                    if chip_id and ObjectId.is_valid(chip_id):
+                        chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+                        has_chip = bool(chip and chip.get("iccid"))
+                    if not has_numero or not has_chip:
+                        needs_repair = True
+                        break
+            if needs_repair:
+                cpf_clean = re.sub(r'\D', '', c.get("documento", ""))
+                if cpf_clean:
+                    cpf_to_client[cpf_clean] = c
+                    clients_to_repair.append(c)
+
+        if not clients_to_repair:
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"status": "done", "message": "Nenhum cliente com dados faltando.", "repaired": 0}},
+            )
+            return
+
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"message": f"Encontrados {len(clients_to_repair)} clientes incompletos. Buscando estoque..."}},
+        )
+
+        # 2. Fetch stock
+        result = await operadora_service.listar_estoque_completo(db=db, user_id=user["id"], user_name=user["name"])
+        if not result.success:
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"status": "error", "message": f"Erro ao buscar estoque: {result.message}"}},
+            )
+            return
+
+        items = result.data.get("results", result.data.get("items", []))
+        if isinstance(items, dict):
+            items = items.get("results", items.get("items", []))
+
+        # 3. Filter unlinked ICCIDs
+        sync_statuses = {"EM USO", "ATIVADO", "ATIVA", "ATIVO", "BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA"}
+        all_chips = await db.chips.find({}, {"iccid": 1, "cliente_id": 1}).to_list(5000)
+        linked_iccids = set()
+        for ch in all_chips:
+            iccid_val = ch.get("iccid")
+            if iccid_val and ch.get("cliente_id"):
+                cid = ch["cliente_id"]
+                line = await db.linhas.find_one({"cliente_id": cid, "chip_id": str(ch["_id"])})
+                if line and (line.get("numero") or line.get("msisdn")):
+                    linked_iccids.add(iccid_val)
+
+        unlinked_items = []
+        for item in items:
+            iccid = item.get("sim_card") or item.get("iccid")
+            if not iccid:
+                continue
+            iccid = str(iccid)
+            stock_status = (item.get("status") or "").upper().strip()
+            if stock_status not in sync_statuses:
+                continue
+            if iccid not in linked_iccids:
+                unlinked_items.append({"iccid": iccid, "stock_status": stock_status})
+
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"message": f"{len(unlinked_items)} ICCIDs nao vinculados. Aguardando rate limit..."}},
+        )
+
+        # Wait for rate limit to reset after heavy stock listing
+        await asyncio.sleep(10)
+
+        repaired = 0
+        errors = []
+
+        for idx, ui in enumerate(unlinked_items):
+            if not cpf_to_client:
+                break
+            iccid = ui["iccid"]
+            stock_status = ui["stock_status"]
+
+            await asyncio.sleep(1.0)
+
+            d = None
+            for attempt in range(5):
+                try:
+                    detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+                    if detail_resp.success and detail_resp.data:
+                        d = detail_resp.data
+                        break
+                    is_rate_limit = (
+                        getattr(detail_resp, 'http_status_code', 0) == 429 or
+                        (hasattr(detail_resp, 'error_code') and str(detail_resp.error_code) == 'ERR_RATE_LIMIT')
+                    )
+                    if is_rate_limit:
+                        wait_time = 5.0 * (2 ** attempt)
+                        logger.warning(f"429 para ICCID {iccid}, aguardando {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+                except Exception as e:
+                    if attempt == 4:
+                        errors.append(f"Erro {iccid}: {str(e)}")
+                await asyncio.sleep(2.0 * (attempt + 1))
+
+            if not d:
+                continue
+
+            item_cpf = re.sub(r'\D', '', d.get("cpf") or d.get("document_number") or "")
+            if not item_cpf or item_cpf not in cpf_to_client:
+                continue
+
+            c = cpf_to_client[item_cpf]
+            cid = str(c["_id"])
+            msisdn = str(d.get("numero") or "")
+            status_ta = (d.get("status") or "").lower().strip()
+            blocked_statuses = {"bloqueado", "bloqueada", "suspenso", "suspensa"}
+            if stock_status in ("BLOQUEADO", "BLOQUEADA", "SUSPENSO", "SUSPENSA") or status_ta in blocked_statuses:
+                local_status = "bloqueado"
+            else:
+                local_status = "ativo"
+            chip_status = "ativado" if local_status == "ativo" else "bloqueado"
+
+            existing_chip = await db.chips.find_one({"iccid": iccid})
+            if existing_chip:
+                chip_update = {"status": chip_status, "cliente_id": cid}
+                if msisdn:
+                    chip_update["msisdn"] = msisdn
+                await db.chips.update_one({"_id": existing_chip["_id"]}, {"$set": chip_update})
+                chip_id = str(existing_chip["_id"])
+            else:
+                chip_doc = {
+                    "iccid": iccid, "status": chip_status,
+                    "oferta_id": None, "cliente_id": cid,
+                    "msisdn": msisdn or None,
+                    "created_at": datetime.now(timezone.utc),
+                }
+                insert_result = await db.chips.insert_one(chip_doc)
+                chip_id = str(insert_result.inserted_id)
+
+            existing_line = await db.linhas.find_one({"cliente_id": cid})
+            plano_nome = d.get("plano") or ""
+            plano_id = None
+            if plano_nome:
+                plano = await db.planos.find_one({"nome": {"$regex": re.escape(plano_nome), "$options": "i"}})
+                if plano:
+                    plano_id = str(plano["_id"])
+
+            if existing_line:
+                update_fields = {"chip_id": chip_id, "status": local_status}
+                if msisdn and not existing_line.get("numero"):
+                    update_fields["numero"] = msisdn
+                if msisdn and not existing_line.get("msisdn"):
+                    update_fields["msisdn"] = msisdn
+                if plano_id and not existing_line.get("plano_id"):
+                    update_fields["plano_id"] = plano_id
+                await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": update_fields})
+            elif msisdn:
+                line_doc = {
+                    "numero": msisdn, "status": local_status,
+                    "cliente_id": cid, "chip_id": chip_id,
+                    "plano_id": plano_id,
+                    "oferta_id": existing_chip.get("oferta_id") if existing_chip else None,
+                    "msisdn": msisdn,
+                    "created_at": datetime.now(timezone.utc),
+                }
+                await db.linhas.insert_one(line_doc)
+
+            await db.clientes.update_one({"_id": c["_id"]}, {"$set": {"status": local_status}})
+            repaired += 1
+            del cpf_to_client[item_cpf]
+            logger.info(f"Reparado: {c.get('nome')} ({item_cpf}) -> ICCID {iccid}, MSISDN {msisdn}")
+
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"message": f"Progresso: {idx+1}/{len(unlinked_items)} consultados, {repaired} reparados", "repaired": repaired}},
+            )
+
+        skipped = len(clients_to_repair) - repaired
+        msg = f"Reparados: {repaired}. Sem correspondencia: {skipped}. Total analisados: {len(clients_to_repair)}."
+        if errors:
+            msg += f" Erros: {len(errors)}"
+        await create_log("sincronizacao", f"Reparo de dados: {msg}", user["id"], user["name"])
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "done", "message": msg, "repaired": repaired, "errors": errors[:10]}},
+        )
+    except Exception as e:
+        logger.error(f"Erro no reparo em background: {e}")
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "error", "message": f"Erro inesperado: {str(e)}"}},
+        )
+
+
+@api_router.get("/operadora/reparar-status")
+async def get_repair_status(request: Request):
+    await require_admin(request)
+    status = await db.system_config.find_one({"key": "repair_status"}, {"_id": 0})
+    if not status:
+        return {"status": "idle", "message": "Nenhum reparo executado."}
+    return status
+
+
+@api_router.post("/operadora/completar-planos")
+async def complete_client_plans(request: Request):
+    """
+    Percorre todas as linhas que nao tem plano vinculado,
+    consulta a Ta Telecom pelo ICCID e vincula o plano correto.
+    Roda em background.
+    """
+    user = await require_admin(request)
+
+    existing = await db.system_config.find_one({"key": "repair_status"})
+    if existing and existing.get("status") == "running":
+        return {"success": False, "message": "Ja existe um reparo em andamento."}
+
+    await db.system_config.update_one(
+        {"key": "repair_status"},
+        {"$set": {"key": "repair_status", "status": "running", "started_at": datetime.now(timezone.utc).isoformat(), "message": "Completando planos...", "repaired": 0, "errors": []}},
+        upsert=True,
+    )
+    asyncio.create_task(_run_complete_plans_background(user))
+    return {"success": True, "message": "Atualizacao de planos iniciada em background."}
+
+
+async def _run_complete_plans_background(user: dict):
+    try:
+        # 1. Pre-load all plans into a dict for fast lookup
+        all_planos = await db.planos.find({}).to_list(200)
+        plan_name_map = {}
+        for p in all_planos:
+            nome = (p.get("nome") or "").strip().lower()
+            plan_name_map[nome] = str(p["_id"])
+            # Also map without accent variations
+            nome_simple = nome.replace("á", "a").replace("ã", "a").replace("é", "e").replace("ç", "c")
+            plan_name_map[nome_simple] = str(p["_id"])
+
+        # 2. Find all lines missing plano or with invalid plano
+        all_lines = await db.linhas.find({}).to_list(5000)
+        lines_to_fix = []
+        for l in all_lines:
+            plano_id = l.get("plano_id")
+            has_valid_plan = False
+            if plano_id and ObjectId.is_valid(plano_id):
+                plano = await db.planos.find_one({"_id": ObjectId(plano_id)})
+                if plano and plano.get("plan_code") and not str(plano["plan_code"]).startswith("PLAN_"):
+                    has_valid_plan = True
+            if not has_valid_plan:
+                chip_id = l.get("chip_id")
+                if chip_id and ObjectId.is_valid(chip_id):
+                    chip = await db.chips.find_one({"_id": ObjectId(chip_id)})
+                    if chip and chip.get("iccid"):
+                        lines_to_fix.append({"line": l, "iccid": chip["iccid"]})
+
+        if not lines_to_fix:
+            await db.system_config.update_one(
+                {"key": "repair_status"},
+                {"$set": {"status": "done", "message": "Todos os planos ja estao corretos.", "repaired": 0}},
+            )
+            return
+
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"message": f"{len(lines_to_fix)} linhas sem plano. Consultando Ta Telecom..."}},
+        )
+
+        # Wait after previous API calls
+        await asyncio.sleep(5)
+
+        updated = 0
+        errors = []
+
+        for idx, item in enumerate(lines_to_fix):
+            iccid = item["iccid"]
+            line = item["line"]
+
+            await asyncio.sleep(1.0)
+
+            d = None
+            for attempt in range(5):
+                try:
+                    detail_req, detail_resp = await operadora_service.adapter.consultar_linha(iccid)
+                    if detail_resp.success and detail_resp.data:
+                        d = detail_resp.data
+                        break
+                    is_rate_limit = (
+                        getattr(detail_resp, 'http_status_code', 0) == 429 or
+                        (hasattr(detail_resp, 'error_code') and str(detail_resp.error_code) == 'ERR_RATE_LIMIT')
+                    )
+                    if is_rate_limit:
+                        wait_time = 5.0 * (2 ** attempt)
+                        logger.warning(f"429 para ICCID {iccid}, aguardando {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+                except Exception as e:
+                    if attempt == 4:
+                        errors.append(f"Erro {iccid}: {str(e)}")
+                await asyncio.sleep(2.0 * (attempt + 1))
+
+            if not d:
+                continue
+
+            plano_nome = (d.get("plano") or "").strip()
+            if not plano_nome:
+                continue
+
+            # Match plan by name
+            plano_id = plan_name_map.get(plano_nome.lower())
+            if not plano_id:
+                # Try partial match
+                for key, pid in plan_name_map.items():
+                    if plano_nome.lower() in key or key in plano_nome.lower():
+                        plano_id = pid
+                        break
+
+            if not plano_id:
+                errors.append(f"Plano '{plano_nome}' nao encontrado para ICCID {iccid}")
+                continue
+
+            # Also grab msisdn if line doesn't have it
+            update_fields = {"plano_id": plano_id}
+            msisdn = str(d.get("numero") or d.get("msisdn") or "")
+            if msisdn and (not line.get("numero") or line.get("numero") == "Pendente"):
+                update_fields["numero"] = msisdn
+                update_fields["msisdn"] = msisdn
+                # Also update chip
+                if line.get("chip_id") and ObjectId.is_valid(line["chip_id"]):
+                    await db.chips.update_one({"_id": ObjectId(line["chip_id"])}, {"$set": {"msisdn": msisdn}})
+
+            await db.linhas.update_one({"_id": line["_id"]}, {"$set": update_fields})
+            updated += 1
+            logger.info(f"Plano atualizado: ICCID {iccid} -> {plano_nome} (plano_id: {plano_id})")
+
+            if (idx + 1) % 5 == 0:
+                await db.system_config.update_one(
+                    {"key": "repair_status"},
+                    {"$set": {"message": f"Progresso: {idx+1}/{len(lines_to_fix)} consultados, {updated} atualizados", "repaired": updated}},
+                )
+
+        msg = f"Planos atualizados: {updated}/{len(lines_to_fix)}."
+        if errors:
+            msg += f" Erros: {len(errors)}"
+        await create_log("sincronizacao", f"Completar planos: {msg}", user["id"], user["name"])
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "done", "message": msg, "repaired": updated, "errors": errors[:10]}},
+        )
+    except Exception as e:
+        logger.error(f"Erro ao completar planos: {e}")
+        await db.system_config.update_one(
+            {"key": "repair_status"},
+            {"$set": {"status": "error", "message": f"Erro: {str(e)}"}},
+        )
+
+
+@api_router.get("/operadora/config")
+async def get_operadora_config(request: Request):
+    await require_admin(request)
+    return operadora_service.get_config_status()
+
+@api_router.post("/operadora/test")
+async def test_operadora_connection(request: Request):
+    user = await require_admin(request)
+    result = await operadora_service.listar_planos(db=db, user_id=user["id"], user_name=user["name"])
+    return {
+        "mode": "mock" if operadora_service.use_mock else "real",
+        "test_success": result.success,
+        "response_time_ms": result.response_time_ms,
+        "message": result.message if result.success else f"Erro: {result.message}",
+    }
+
+# ==================== LOGS ROUTES ====================
+@api_router.get("/logs", response_model=List[LogEntry])
+async def list_logs(request: Request, action: Optional[str] = None, limit: int = 100):
+    await require_admin(request)
+    query = {}
+    if action:
+        query["action"] = action
+    logs = await db.logs.find(query).sort("created_at", -1).limit(limit).to_list(limit)
+    return [LogEntry(
+        id=str(log["_id"]), action=log["action"], details=log["details"],
+        user_id=log.get("user_id"), user_name=log.get("user_name"),
+        created_at=log.get("created_at", datetime.now(timezone.utc)),
+        api_request=log.get("api_request"), api_response=log.get("api_response"),
+        is_mock=log.get("is_mock"),
+    ) for log in logs]
+
+# ==================== CARTEIRA MOVEL ROUTES ====================
+
+async def _get_asaas_customer_id(cliente: dict, user: dict) -> str:
+    """Obtem ou cria o customer_id do Asaas para o cliente."""
+    cached_id = cliente.get("asaas_customer_id")
+    if cached_id:
+        # Verify it exists in current environment
+        try:
+            existing = await asaas_service._request("GET", f"/customers/{cached_id}")
+            # Garante que notificacoes estao desabilitadas
+            if not existing.get("notificationDisabled"):
+                try:
+                    await asaas_service.disable_customer_notifications(cached_id)
+                except Exception:
+                    pass
+            return cached_id
+        except Exception:
+            logger.info(f"Customer {cached_id} nao encontrado no ambiente atual. Recriando.")
+            await db.clientes.update_one({"_id": cliente["_id"]}, {"$unset": {"asaas_customer_id": ""}})
+
+    result = await asaas_service.get_or_create_customer(
+        name=cliente["nome"],
+        cpf_cnpj=cliente.get("documento", ""),
+        email=cliente.get("email"),
+        phone=cliente.get("telefone"),
+        address=cliente.get("endereco"),
+        address_number=cliente.get("numero_endereco"),
+        province=cliente.get("bairro"),
+        postal_code=cliente.get("cep"),
+    )
+    asaas_id = result.get("id")
+    await db.clientes.update_one({"_id": cliente["_id"]}, {"$set": {"asaas_customer_id": asaas_id}})
+    await create_log("financeiro", f"Cliente sincronizado com Asaas: {cliente['nome']} -> {asaas_id}", user["id"], user["name"])
+    return asaas_id
+
+async def _build_cobranca_response(doc: dict) -> CobrancaResponse:
+    cliente_nome, msisdn, oferta_nome = None, None, None
+    if doc.get("cliente_id"):
+        cl = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+        if cl:
+            cliente_nome = cl["nome"]
+    if doc.get("linha_id"):
+        ln = await db.linhas.find_one({"_id": ObjectId(doc["linha_id"])})
+        if ln:
+            msisdn = ln.get("msisdn")
+            if ln.get("oferta_id"):
+                of = await db.ofertas.find_one({"_id": ObjectId(ln["oferta_id"])})
+                if of:
+                    oferta_nome = of["nome"]
+    return CobrancaResponse(
+        id=str(doc["_id"]), cliente_id=doc.get("cliente_id", ""),
+        cliente_nome=cliente_nome, linha_id=doc.get("linha_id"),
+        msisdn=msisdn, oferta_nome=oferta_nome,
+        billing_type=doc.get("billing_type", "BOLETO"), valor=doc.get("valor", 0),
+        vencimento=doc.get("vencimento", ""), descricao=doc.get("descricao"),
+        status=doc.get("status", "PENDING"),
+        modalidade=doc.get("modalidade", "avista"),
+        parcela_num=doc.get("parcela_num"),
+        parcela_total=doc.get("parcela_total"),
+        assinatura_id=doc.get("assinatura_id"),
+        asaas_payment_id=doc.get("asaas_payment_id"),
+        asaas_invoice_url=doc.get("asaas_invoice_url"),
+        asaas_bankslip_url=doc.get("asaas_bankslip_url"),
+        asaas_pix_code=doc.get("asaas_pix_code"),
+        asaas_pix_qrcode=doc.get("asaas_pix_qrcode"),
+        barcode=doc.get("barcode"),
+        paid_at=doc.get("paid_at"),
+        created_at=doc.get("created_at"),
+    )
+
+async def _build_assinatura_response(doc: dict) -> AssinaturaResponse:
+    cliente_nome, msisdn, oferta_nome = None, None, None
+    if doc.get("cliente_id"):
+        cl = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+        if cl:
+            cliente_nome = cl["nome"]
+    if doc.get("linha_id"):
+        ln = await db.linhas.find_one({"_id": ObjectId(doc["linha_id"])})
+        if ln:
+            msisdn = ln.get("msisdn")
+            if ln.get("oferta_id"):
+                of = await db.ofertas.find_one({"_id": ObjectId(ln["oferta_id"])})
+                if of:
+                    oferta_nome = of["nome"]
+    return AssinaturaResponse(
+        id=str(doc["_id"]), cliente_id=doc["cliente_id"],
+        cliente_nome=cliente_nome, linha_id=doc.get("linha_id"),
+        msisdn=msisdn, oferta_nome=oferta_nome,
+        billing_type=doc["billing_type"], valor=doc["valor"],
+        ciclo=doc.get("ciclo", "MONTHLY"),
+        proximo_vencimento=doc.get("proximo_vencimento"),
+        descricao=doc.get("descricao"),
+        status=doc.get("status", "ACTIVE"),
+        asaas_subscription_id=doc.get("asaas_subscription_id"),
+        asaas_customer_id=doc.get("asaas_customer_id"),
+        invoice_url=doc.get("invoice_url"),
+        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+    )
+
+@api_router.get("/carteira/config")
+async def get_carteira_config(request: Request):
+    await get_current_user(request)
+    config = asaas_service.get_config_status()
+    key = asaas_service.api_key
+    config["key_prefix"] = key[:15] + "..." if len(key) > 15 else "(vazia)"
+    config["key_length"] = len(key)
+    config["key_starts_with_dollar"] = key.startswith("$")
+    return config
+
+class AsaasKeyUpdate(BaseModel):
+    api_key: str
+    environment: str = "sandbox"
+
+@api_router.post("/carteira/config")
+async def update_asaas_config(data: AsaasKeyUpdate, request: Request):
+    """Atualiza a chave do Asaas no .env e recarrega o servico."""
+    await require_admin(request)
+    new_key = data.api_key.strip()
+    new_env = data.environment.strip()
+    if not new_key or len(new_key) < 20:
+        raise HTTPException(status_code=400, detail="Chave API invalida. Deve ter pelo menos 20 caracteres.")
+    if new_env == "production" and not (new_key.startswith("$aact_prod_") or new_key.startswith("aact_prod_")):
+        raise HTTPException(status_code=400, detail="Chave de producao deve comecar com $aact_prod_")
+
+    # Sanitize key - ensure $ prefix
+    if not new_key.startswith("$") and (new_key.startswith("aact_") or new_key.startswith("aach_")):
+        new_key = "$" + new_key
+
+    # Update .env file
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    lines = []
+    key_found = False
+    env_found = False
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            for line in f:
+                if line.startswith("ASAAS_API_KEY"):
+                    lines.append(f"ASAAS_API_KEY='{new_key}'\n")
+                    key_found = True
+                elif line.startswith("ASAAS_ENVIRONMENT"):
+                    lines.append(f"ASAAS_ENVIRONMENT={new_env}\n")
+                    env_found = True
+                else:
+                    lines.append(line)
+    if not key_found:
+        lines.append(f"ASAAS_API_KEY='{new_key}'\n")
+    if not env_found:
+        lines.append(f"ASAAS_ENVIRONMENT={new_env}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(lines)
+
+    # Reload service in memory
+    asaas_service.api_key = new_key
+    asaas_service.environment = new_env
+    asaas_service.base_url = "https://www.asaas.com/api/v3" if new_env == "production" else "https://sandbox.asaas.com/api/v3"
+
+    # Persist to MongoDB (survives restarts/redeploys)
+    await asaas_service.save_config_to_db(db)
+
+    # Test connection
+    try:
+        await asaas_service._request("GET", "/customers?limit=1")
+        return {"success": True, "message": "Chave atualizada e conexao verificada com sucesso!", "configured": True, "environment": new_env}
+    except Exception as e:
+        return {"success": False, "message": f"Chave salva mas erro ao testar: {str(e)}", "configured": True, "environment": new_env}
+
+@api_router.post("/carteira/diagnostico")
+async def diagnostico_asaas(request: Request):
+    """Diagnostico completo da integracao Asaas. Testa a chave real."""
+    await require_admin(request)
+    key = asaas_service.api_key
+    result = {
+        "key_length": len(key),
+        "key_valid_format": asaas_service._is_valid_key(key),
+        "key_prefix": key[:20] + "..." if len(key) > 20 else "(curta)",
+        "key_has_dollar": key.startswith("$") if key else False,
+        "environment": asaas_service.environment,
+        "base_url": asaas_service.base_url,
+        "is_production": asaas_service.is_production(),
+    }
+    # Testar chamada real a API
+    try:
+        test = await asaas_service._request("GET", "/customers?limit=1")
+        result["api_test"] = "OK"
+        result["api_response_keys"] = list(test.keys()) if isinstance(test, dict) else str(type(test))
+    except Exception as e:
+        result["api_test"] = "ERRO"
+        result["api_error"] = str(e)
+    # Verificar MongoDB
+    try:
+        db_config = await db.system_config.find_one({"key": "asaas_config"}, {"_id": 0})
+        if db_config:
+            db_key = db_config.get("api_key", "")
+            result["db_key_length"] = len(db_key)
+            result["db_key_valid"] = asaas_service._is_valid_key(asaas_service._normalize_key(db_key))
+            result["db_env"] = db_config.get("environment", "?")
+            result["db_keys_match"] = (asaas_service._normalize_key(db_key) == key)
+        else:
+            result["db_config"] = "NAO ENCONTRADA"
+    except Exception as e:
+        result["db_error"] = str(e)
+    return result
+
+
+@api_router.post("/carteira/sincronizar-asaas")
+async def sincronizar_cobrancas_asaas(request: Request):
+    """Importa cobrancas do Asaas que nao existem no sistema local."""
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    # Buscar todos payments do Asaas
+    all_asaas = []
+    offset = 0
+    while True:
+        result = await asaas_service._request("GET", f"/payments?limit=100&offset={offset}")
+        data = result.get("data", [])
+        all_asaas.extend(data)
+        if not data or not result.get("hasMore"):
+            break
+        offset += 100
+
+    # IDs locais
+    local_ids = set()
+    async for c in db.cobrancas.find({"asaas_payment_id": {"$exists": True, "$ne": None}}, {"asaas_payment_id": 1}):
+        local_ids.add(c["asaas_payment_id"])
+
+    # Map Asaas customer_id -> cliente local
+    customer_map = {}
+    async for cl in db.clientes.find({"asaas_customer_id": {"$exists": True, "$ne": None}}, {"asaas_customer_id": 1, "nome": 1}):
+        customer_map[cl["asaas_customer_id"]] = {"id": str(cl["_id"]), "nome": cl.get("nome", "")}
+
+    imported = 0
+    skipped = 0
+    no_client = 0
+
+    for p in all_asaas:
+        if p["id"] in local_ids:
+            skipped += 1
+            continue
+        if p["status"] in ("REFUNDED", "REFUND_REQUESTED"):
+            skipped += 1
+            continue
+
+        customer_id = p.get("customer")
+        local_cliente = customer_map.get(customer_id)
+
+        if not local_cliente:
+            # Tentar encontrar por CPF
+            try:
+                cust_data = await asaas_service._request("GET", f"/customers/{customer_id}")
+                cpf = cust_data.get("cpfCnpj", "")
+                if cpf:
+                    cl = await db.clientes.find_one({"documento": cpf})
+                    if cl:
+                        local_cliente = {"id": str(cl["_id"]), "nome": cl.get("nome", "")}
+                        # Salvar asaas_customer_id para futuro
+                        await db.clientes.update_one({"_id": cl["_id"]}, {"$set": {"asaas_customer_id": customer_id}})
+                        customer_map[customer_id] = local_cliente
+            except Exception:
+                pass
+
+        if not local_cliente:
+            no_client += 1
+            continue
+
+        # Criar cobranca local
+        doc = {
+            "cliente_id": local_cliente["id"],
+            "billing_type": p.get("billingType", "BOLETO"),
+            "valor": p.get("value", 0),
+            "vencimento": p.get("dueDate", ""),
+            "descricao": p.get("description", "Importado do Asaas"),
+            "status": p.get("status", "PENDING"),
+            "asaas_payment_id": p["id"],
+            "asaas_invoice_url": p.get("invoiceUrl"),
+            "asaas_bankslip_url": p.get("bankSlipUrl"),
+            "asaas_installment_id": p.get("installment"),
+            "modalidade": "avista",
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        # Verificar parcelas
+        inst_number = p.get("installmentNumber")
+        if inst_number:
+            doc["parcela_num"] = inst_number
+            doc["modalidade"] = "parcelado"
+
+        # Buscar barcode se boleto
+        try:
+            if doc["billing_type"] == "BOLETO":
+                barcode_data = await asaas_service.get_boleto_barcode(p["id"])
+                doc["barcode"] = barcode_data.get("identificationField")
+            elif doc["billing_type"] == "PIX":
+                pix_data = await asaas_service.get_pix_qrcode(p["id"])
+                doc["asaas_pix_code"] = pix_data.get("payload")
+        except Exception:
+            pass
+
+        await db.cobrancas.insert_one(doc)
+        imported += 1
+
+    await create_log("sync", f"Sincronizacao Asaas: {imported} importados, {skipped} ja existiam, {no_client} sem cliente local", user["id"], user["name"])
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "no_client": no_client,
+        "total_asaas": len(all_asaas),
+        "message": f"{imported} cobrancas importadas do Asaas",
+    }
+
+
+# ==================== EMAIL CONFIG ====================
+class EmailTestRequest(BaseModel):
+    to_email: str
+
+@api_router.get("/email/config")
+async def get_email_config(request: Request):
+    """Retorna status da configuracao de email."""
+    await require_admin(request)
+    return email_service.get_status()
+
+@api_router.post("/email/test")
+async def send_test_email(data: EmailTestRequest, request: Request):
+    """Envia email de teste."""
+    await require_admin(request)
+    result = await email_service.send_test(data.to_email)
+    if result["success"]:
+        await create_log("email", f"Email de teste enviado para {data.to_email}", None, "admin")
+    return result
+
+
+@api_router.get("/carteira/carne/{cliente_id}")
+async def get_carne_pdf(cliente_id: str, request: Request):
+    """Busca PDF do carne do Asaas (3 boletos por pagina) para um cliente parcelado."""
+    await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    # Buscar cobranca com installment_id
+    cobranca = await db.cobrancas.find_one({
+        "cliente_id": cliente_id,
+        "asaas_installment_id": {"$exists": True, "$ne": None},
+    })
+
+    if not cobranca:
+        # Tentar buscar installment_id via API do Asaas
+        cobranca_any = await db.cobrancas.find_one({
+            "cliente_id": cliente_id,
+            "asaas_payment_id": {"$exists": True, "$ne": None, "$not": {"$regex": "^mock_"}},
+            "parcela_total": {"$gt": 1},
+        })
+        if cobranca_any:
+            try:
+                inst_id = await asaas_service.get_payment_installment_id(cobranca_any["asaas_payment_id"])
+                if inst_id:
+                    # Salvar para futuro
+                    await db.cobrancas.update_many(
+                        {"cliente_id": cliente_id, "parcela_total": cobranca_any.get("parcela_total")},
+                        {"$set": {"asaas_installment_id": inst_id}}
+                    )
+                    cobranca = {"asaas_installment_id": inst_id}
+            except Exception as e:
+                logger.warning(f"Erro ao buscar installment_id: {e}")
+
+    if not cobranca or not cobranca.get("asaas_installment_id"):
+        raise HTTPException(
+            status_code=404,
+            detail="Este cliente nao possui parcelamento (installment) no Asaas. O carne PDF so funciona para cobrancas parceladas criadas apos esta atualizacao. Para cobrancas anteriores, use os boletos individuais."
+        )
+
+    try:
+        from fastapi.responses import Response
+        pdf_bytes = await asaas_service.get_installment_payment_book(cobranca["asaas_installment_id"])
+        return Response(content=pdf_bytes, media_type="application/pdf",
+                       headers={"Content-Disposition": f"inline; filename=carne-{cliente_id}.pdf"})
+    except Exception as e:
+        logger.error(f"Erro ao buscar carne PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar carne: {str(e)}")
+
+
+@api_router.post("/carteira/cobrancas/{cobranca_id}/enviar-email")
+async def send_cobranca_email(cobranca_id: str, request: Request):
+    """Envia email da cobranca para o cliente. Atualiza dados do Asaas antes de enviar."""
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+
+    cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    cliente_email = cliente.get("email")
+    if not cliente_email:
+        raise HTTPException(status_code=400, detail="Cliente nao possui email cadastrado. Atualize o cadastro do cliente com um email.")
+
+    if not email_service.is_configured:
+        raise HTTPException(status_code=400, detail="Servico de email nao configurado. Adicione GMAIL_USER e GMAIL_APP_PASSWORD no .env")
+
+    # Se tem payment_id real, garantir que todos os dados de pagamento estao atualizados
+    # Se NAO tem payment_id, criar pagamento no Asaas primeiro
+    payment_id = doc.get("asaas_payment_id")
+
+    if (not payment_id or payment_id.startswith("mock_")) and asaas_service.is_configured:
+        # Criar pagamento no Asaas
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            result_pay = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=doc.get("billing_type", "BOLETO"),
+                value=doc.get("valor", 0),
+                due_date=doc.get("vencimento"),
+                description=_append_portal_link(doc.get("descricao", "Cobranca")),
+            )
+            updates = {
+                "asaas_payment_id": result_pay.get("id"),
+                "asaas_invoice_url": result_pay.get("invoiceUrl"),
+                "asaas_bankslip_url": result_pay.get("bankSlipUrl"),
+                "status": result_pay.get("status", doc.get("status", "PENDING")),
+            }
+            new_payment_id = result_pay.get("id")
+            if new_payment_id:
+                try:
+                    if doc.get("billing_type") == "BOLETO":
+                        barcode_data = await asaas_service.get_boleto_barcode(new_payment_id)
+                        if barcode_data.get("identificationField"):
+                            updates["barcode"] = barcode_data["identificationField"]
+                    elif doc.get("billing_type") == "PIX":
+                        pix_data = await asaas_service.get_pix_qrcode(new_payment_id)
+                        if pix_data.get("payload"):
+                            updates["asaas_pix_code"] = pix_data["payload"]
+                        if pix_data.get("encodedImage"):
+                            updates["asaas_pix_qrcode"] = pix_data["encodedImage"]
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar detalhes do pagamento recem-criado: {e}")
+
+            await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": updates})
+            doc.update(updates)
+            payment_id = new_payment_id
+            logger.info(f"Pagamento Asaas criado antes do envio de email: {new_payment_id}")
+        except Exception as e:
+            logger.warning(f"Erro ao criar pagamento Asaas antes do envio de email: {e}")
+
+    elif payment_id and not payment_id.startswith("mock_") and asaas_service.is_configured:
+        try:
+            payment_data = await asaas_service.get_payment(payment_id)
+            updates = {}
+            if payment_data.get("invoiceUrl"):
+                updates["asaas_invoice_url"] = payment_data["invoiceUrl"]
+            if payment_data.get("bankSlipUrl"):
+                updates["asaas_bankslip_url"] = payment_data["bankSlipUrl"]
+
+            if doc.get("billing_type") == "BOLETO" and not doc.get("barcode"):
+                try:
+                    barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                    if barcode_data.get("identificationField"):
+                        updates["barcode"] = barcode_data["identificationField"]
+                except Exception:
+                    pass
+
+            if doc.get("billing_type") == "PIX" and not doc.get("asaas_pix_code"):
+                try:
+                    pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                    if pix_data.get("payload"):
+                        updates["asaas_pix_code"] = pix_data["payload"]
+                    if pix_data.get("encodedImage"):
+                        updates["asaas_pix_qrcode"] = pix_data["encodedImage"]
+                except Exception:
+                    pass
+
+            if updates:
+                await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": updates})
+                doc.update(updates)
+                logger.info(f"Dados Asaas atualizados antes do envio de email: {list(updates.keys())}")
+        except Exception as e:
+            logger.warning(f"Erro ao atualizar dados Asaas antes do envio: {e}")
+
+    # Formatar vencimento
+    venc_raw = doc.get("vencimento", "")
+    try:
+        parts = venc_raw.split("-")
+        venc_fmt = f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else venc_raw
+    except Exception:
+        venc_fmt = venc_raw
+
+    result = await email_service.send_cobranca(
+        to_email=cliente_email,
+        cliente_nome=cliente.get("nome", "Cliente"),
+        valor=doc.get("valor", 0),
+        vencimento=venc_fmt,
+        descricao=doc.get("descricao", "Cobranca"),
+        billing_type=doc.get("billing_type", "BOLETO"),
+        invoice_url=doc.get("asaas_invoice_url"),
+        pix_code=doc.get("asaas_pix_code"),
+        barcode=doc.get("barcode"),
+        bankslip_url=doc.get("asaas_bankslip_url"),
+    )
+
+    if result["success"]:
+        await create_log("email", f"Email de cobranca enviado para {cliente_email} ({cliente.get('nome')})", user["id"], user["name"])
+        return {"success": True, "message": f"Email enviado para {cliente_email}"}
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "Erro ao enviar email"))
+
+@api_router.get("/carteira/resumo")
+async def get_carteira_resumo(request: Request):
+    await get_current_user(request)
+    total_cobrancas = await db.cobrancas.count_documents({})
+    cobrancas_pendentes = await db.cobrancas.count_documents({"status": "PENDING"})
+    cobrancas_pagas = await db.cobrancas.count_documents({"status": {"$in": ["CONFIRMED", "RECEIVED"]}})
+    cobrancas_vencidas = await db.cobrancas.count_documents({"status": "OVERDUE"})
+    total_assinaturas = await db.assinaturas.count_documents({})
+    assinaturas_ativas = await db.assinaturas.count_documents({"status": "ACTIVE"})
+
+    pipeline_receita = [
+        {"$match": {"status": {"$in": ["CONFIRMED", "RECEIVED"]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$valor"}}}
+    ]
+    receita = await db.cobrancas.aggregate(pipeline_receita).to_list(1)
+    receita_total = receita[0]["total"] if receita else 0
+
+    pipeline_pendente = [
+        {"$match": {"status": "PENDING"}},
+        {"$group": {"_id": None, "total": {"$sum": "$valor"}}}
+    ]
+    pendente = await db.cobrancas.aggregate(pipeline_pendente).to_list(1)
+    pendente_total = pendente[0]["total"] if pendente else 0
+
+    pipeline_vencido = [
+        {"$match": {"status": "OVERDUE"}},
+        {"$group": {"_id": None, "total": {"$sum": "$valor"}}}
+    ]
+    vencido = await db.cobrancas.aggregate(pipeline_vencido).to_list(1)
+    vencido_total = vencido[0]["total"] if vencido else 0
+
+    return {
+        "cobrancas": {
+            "total": total_cobrancas,
+            "pendentes": cobrancas_pendentes,
+            "pagas": cobrancas_pagas,
+            "vencidas": cobrancas_vencidas,
+        },
+        "assinaturas": {
+            "total": total_assinaturas,
+            "ativas": assinaturas_ativas,
+        },
+        "financeiro": {
+            "receita_total": receita_total,
+            "pendente_total": pendente_total,
+            "vencido_total": vencido_total,
+        },
+        "asaas": asaas_service.get_config_status(),
+    }
+
+# --- Cobrancas ---
+@api_router.get("/carteira/cobrancas", response_model=List[CobrancaResponse])
+async def list_cobrancas(request: Request, cliente_id: Optional[str] = None,
+                         status: Optional[str] = None, limit: int = 5000):
+    await get_current_user(request)
+    query = {}
+    if cliente_id:
+        query["cliente_id"] = cliente_id
+    if status:
+        query["status"] = status
+    docs = await db.cobrancas.find(query).sort("created_at", -1).limit(limit).to_list(limit)
+    return [await _build_cobranca_response(d) for d in docs]
+
+@api_router.post("/carteira/cobrancas", response_model=List[CobrancaResponse])
+async def create_cobranca(data: CobrancaCreate, request: Request):
+    user = await require_admin(request)
+    cliente = await db.clientes.find_one({"_id": ObjectId(data.cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    parcelas = max(1, data.parcelas)
+    modalidade = data.modalidade or "avista"
+    base_date = datetime.strptime(data.vencimento, "%Y-%m-%d")
+    results = []
+
+    # Para assinatura: cria no Asaas e depois gera as cobranças locais
+    assinatura_id = None
+    if modalidade == "assinatura" and asaas_service.is_configured:
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            sub_result = await asaas_service.create_subscription(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type.value,
+                value=data.valor,
+                next_due_date=data.vencimento,
+                cycle="MONTHLY",
+                description=_append_portal_link(data.descricao or f"Assinatura - {cliente.get('nome', 'Cliente')}"),
+            )
+            assinatura_id = sub_result.get("id")
+            # Salvar assinatura localmente
+            await db.assinaturas.insert_one({
+                "cliente_id": data.cliente_id,
+                "linha_id": data.linha_id,
+                "asaas_subscription_id": assinatura_id,
+                "billing_type": data.billing_type.value,
+                "valor": data.valor,
+                "ciclo": "MONTHLY",
+                "status": "ACTIVE",
+                "created_at": datetime.now(timezone.utc),
+            })
+        except Exception as e:
+            logger.warning(f"Erro ao criar assinatura Asaas: {e}")
+
+    # Para parcelado: cria todas as parcelas de uma vez no Asaas (installment)
+    installment_id = None
+    installment_payments = []
+
+    if parcelas > 1 and asaas_service.is_configured and modalidade != "assinatura":
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            base_desc = data.descricao or f"Cobranca - {cliente.get('nome', 'Cliente')}"
+            result = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type.value,
+                value=data.valor * parcelas,
+                due_date=data.vencimento,
+                description=_append_portal_link(base_desc),
+                external_reference=f"cob-{data.cliente_id}-installment",
+                installment_count=parcelas,
+                installment_value=data.valor,
+            )
+            installment_id = result.get("installment")
+            logger.info(f"Installment criado no Asaas: {installment_id} ({parcelas} parcelas)")
+
+            # Buscar todos os pagamentos do installment
+            if installment_id:
+                try:
+                    inst_data = await asaas_service.get_installment_payments(installment_id)
+                    installment_payments = inst_data.get("data", [])
+                    # Ordenar por dueDate para garantir que parcela 1 = primeiro vencimento
+                    installment_payments.sort(key=lambda p: p.get("dueDate", ""))
+                    logger.info(f"Installment payments: {len(installment_payments)} (ordenados por dueDate)")
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar payments do installment: {e}")
+        except Exception as e:
+            logger.warning(f"Asaas installment error: {e}. Criando individualmente.")
+            installment_id = None
+
+    for i in range(parcelas):
+        from dateutil.relativedelta import relativedelta
+        venc_date = base_date + relativedelta(months=i)
+        vencimento_str = venc_date.strftime("%Y-%m-%d")
+
+        desc = data.descricao or f"Cobranca - {cliente.get('nome', 'Cliente')}"
+        if parcelas > 1:
+            desc = f"{desc} ({i+1}/{parcelas})"
+
+        doc = {
+            "cliente_id": data.cliente_id,
+            "linha_id": data.linha_id,
+            "billing_type": data.billing_type.value,
+            "valor": data.valor,
+            "vencimento": vencimento_str,
+            "descricao": desc,
+            "status": "PENDING",
+            "modalidade": modalidade,
+            "parcela_num": i + 1 if parcelas > 1 else None,
+            "parcela_total": parcelas if parcelas > 1 else None,
+            "assinatura_id": assinatura_id,
+            "asaas_payment_id": None,
+            "asaas_invoice_url": None,
+            "asaas_pix_code": None,
+            "paid_at": None,
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        # Cria pagamento no Asaas (para avista e parcelado individual)
+        if asaas_service.is_configured and modalidade != "assinatura":
+            if installment_id and i < len(installment_payments):
+                # Usar payment ja criado pelo installment
+                ip = installment_payments[i]
+                doc["asaas_payment_id"] = ip.get("id")
+                doc["asaas_invoice_url"] = ip.get("invoiceUrl")
+                doc["asaas_bankslip_url"] = ip.get("bankSlipUrl")
+                doc["asaas_installment_id"] = installment_id
+                doc["status"] = ip.get("status", "PENDING")
+                payment_id = ip.get("id")
+                if payment_id:
+                    try:
+                        if data.billing_type.value == "BOLETO":
+                            barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                            doc["barcode"] = barcode_data.get("identificationField")
+                        elif data.billing_type.value == "PIX":
+                            pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                            doc["asaas_pix_code"] = pix_data.get("payload")
+                            doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar detalhes do pagamento installment: {e}")
+            else:
+                # Fallback: criar payment individual (se installment falhou ou avulso)
+                try:
+                    asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                    ref = f"cob-{data.cliente_id}-{i+1}"
+                    if data.linha_id:
+                        ref += f"-{data.linha_id}"
+                    result = await asaas_service.create_payment(
+                        customer_id=asaas_customer_id,
+                        billing_type=data.billing_type.value,
+                        value=data.valor,
+                        due_date=vencimento_str,
+                        description=_append_portal_link(desc),
+                        external_reference=ref,
+                    )
+                    doc["asaas_payment_id"] = result.get("id")
+                    doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                    doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
+                    doc["status"] = result.get("status", "PENDING")
+                    # Verificar se tem installment no resultado
+                    if result.get("installment") and not installment_id:
+                        installment_id = result.get("installment")
+                        doc["asaas_installment_id"] = installment_id
+                    elif installment_id:
+                        doc["asaas_installment_id"] = installment_id
+                    payment_id = result.get("id")
+                    if payment_id:
+                        try:
+                            if data.billing_type.value == "BOLETO":
+                                barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                                doc["barcode"] = barcode_data.get("identificationField")
+                            elif data.billing_type.value == "PIX":
+                                pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                                doc["asaas_pix_code"] = pix_data.get("payload")
+                                doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                        except Exception as e:
+                            logger.warning(f"Erro ao buscar detalhes do pagamento: {e}")
+                except Exception as e:
+                    logger.warning(f"Asaas API error ao criar cobranca {i+1}: {e}")
+
+        inserted = await db.cobrancas.insert_one(doc)
+        doc["_id"] = inserted.inserted_id
+        results.append(await _build_cobranca_response(doc))
+
+        # Enviar email de cobranca ao cliente
+        cliente_email = cliente.get("email")
+        if cliente_email and email_service.is_configured:
+            try:
+                venc_fmt = venc_date.strftime("%d/%m/%Y")
+                await email_service.send_cobranca(
+                    to_email=cliente_email,
+                    cliente_nome=cliente.get("nome", "Cliente"),
+                    valor=data.valor,
+                    vencimento=venc_fmt,
+                    descricao=desc,
+                    billing_type=data.billing_type.value,
+                    invoice_url=doc.get("asaas_invoice_url"),
+                    pix_code=doc.get("asaas_pix_code"),
+                    barcode=doc.get("barcode"),
+                    bankslip_url=doc.get("asaas_bankslip_url"),
+                )
+            except Exception as e:
+                logger.warning(f"Erro ao enviar email de cobranca: {e}")
+
+    label = "Cobranca" if parcelas == 1 else f"{parcelas} parcelas"
+    await create_log("financeiro", f"{label} criada: R$ {data.valor:.2f} x{parcelas} para {cliente.get('nome', 'Cliente')}", user["id"], user["name"])
+    return results
+
+@api_router.delete("/carteira/cobrancas/{cobranca_id}")
+async def delete_cobranca(cobranca_id: str, request: Request):
+    user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+    if doc.get("status") in ["CONFIRMED", "RECEIVED"]:
+        raise HTTPException(status_code=400, detail="Nao e possivel remover cobranca ja paga")
+    if asaas_service.is_configured and doc.get("asaas_payment_id"):
+        try:
+            await asaas_service.delete_payment(doc["asaas_payment_id"])
+        except AsaasApiError as e:
+            logger.warning(f"Erro ao remover cobranca no Asaas: {e}")
+        except Exception as e:
+            logger.warning(f"Erro inesperado ao remover no Asaas: {e}")
+    await db.cobrancas.delete_one({"_id": ObjectId(cobranca_id)})
+    await create_log("financeiro", f"Cobranca removida: R$ {doc['valor']:.2f}", user["id"], user["name"])
+    return {"message": "Cobranca removida"}
+
+@api_router.post("/carteira/cobrancas/{cobranca_id}/refresh")
+async def refresh_cobranca_asaas(cobranca_id: str, request: Request):
+    """Consulta o Asaas para atualizar dados da cobranca. Se nao tem payment_id, gera no Asaas."""
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado. Verifique ASAAS_API_KEY no .env")
+
+    payment_id = doc.get("asaas_payment_id")
+
+    # Se nao tem payment real, redireciona para gerar
+    if not payment_id or payment_id.startswith("mock_"):
+        return await generate_asaas_payment(cobranca_id, request)
+
+    try:
+        payment = await asaas_service.get_payment(payment_id)
+        update_fields = {
+            "status": payment.get("status", doc["status"]),
+            "asaas_invoice_url": payment.get("invoiceUrl"),
+            "asaas_bankslip_url": payment.get("bankSlipUrl"),
+        }
+        if payment.get("confirmedDate"):
+            update_fields["paid_at"] = payment["confirmedDate"]
+
+        try:
+            billing_type = doc.get("billing_type", "BOLETO")
+            if billing_type == "BOLETO":
+                barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                update_fields["barcode"] = barcode_data.get("identificationField")
+            elif billing_type == "PIX":
+                pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                update_fields["asaas_pix_code"] = pix_data.get("payload")
+                update_fields["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+        except Exception as e:
+            logger.warning(f"Erro ao buscar detalhes pagamento: {e}")
+
+        await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+        updated = await db.cobrancas.find_one({"_id": doc["_id"]})
+        return await _build_cobranca_response(updated)
+    except (AsaasNotConfiguredError, AsaasApiError) as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao consultar Asaas: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+
+
+@api_router.post("/carteira/cobrancas/{cobranca_id}/gerar-asaas")
+async def generate_asaas_payment(cobranca_id: str, request: Request):
+    """Cria o pagamento no Asaas para uma cobranca que foi criada localmente (sem asaas_payment_id)."""
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+
+    if doc.get("asaas_payment_id") and not doc["asaas_payment_id"].startswith("mock_"):
+        # Verify payment exists in current environment
+        try:
+            await asaas_service.get_payment(doc["asaas_payment_id"])
+            raise HTTPException(status_code=400, detail="Cobranca ja possui pagamento no Asaas. Use o botao de atualizar.")
+        except (AsaasApiError, Exception) as check_err:
+            if "404" in str(check_err):
+                logger.info(f"Payment {doc['asaas_payment_id']} nao encontrado no ambiente atual. Recriando.")
+            else:
+                raise HTTPException(status_code=400, detail="Cobranca ja possui pagamento no Asaas. Use o botao de atualizar.")
+
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado. Verifique ASAAS_API_KEY no .env")
+
+    cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    try:
+        asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+        result = await asaas_service.create_payment(
+            customer_id=asaas_customer_id,
+            billing_type=doc["billing_type"],
+            value=doc["valor"],
+            due_date=doc["vencimento"],
+            description=_append_portal_link(doc.get("descricao") or f"Cobranca movel - {cliente['nome']}"),
+        )
+
+        update_fields = {
+            "asaas_payment_id": result.get("id"),
+            "asaas_invoice_url": result.get("invoiceUrl"),
+            "asaas_bankslip_url": result.get("bankSlipUrl"),
+            "status": result.get("status", "PENDING"),
+        }
+
+        payment_id = result.get("id")
+        if payment_id:
+            try:
+                if doc["billing_type"] == "BOLETO":
+                    barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                    update_fields["barcode"] = barcode_data.get("identificationField")
+                elif doc["billing_type"] == "PIX":
+                    pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                    update_fields["asaas_pix_code"] = pix_data.get("payload")
+                    update_fields["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+            except Exception as e:
+                logger.warning(f"Erro ao buscar detalhes pagamento apos criacao: {e}")
+
+        await db.cobrancas.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+        updated = await db.cobrancas.find_one({"_id": doc["_id"]})
+        await create_log("financeiro", f"Pagamento Asaas gerado para cobranca de {cliente['nome']}: {payment_id}", user["id"], user["name"])
+        return await _build_cobranca_response(updated)
+    except (AsaasNotConfiguredError, AsaasApiError) as e:
+        detail_msg = f"Erro ao criar pagamento no Asaas: {str(e)}"
+        if hasattr(e, 'details') and e.details:
+            detail_msg += f" | Detalhes: {json.dumps(e.details, ensure_ascii=False)}"
+        raise HTTPException(status_code=502, detail=detail_msg)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+
+
+
+
+@api_router.put("/carteira/cobrancas/{cobranca_id}")
+async def update_cobranca(cobranca_id: str, data: CobrancaCreate, request: Request):
+    user = await require_admin(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+    if doc.get("status") in ["CONFIRMED", "RECEIVED"]:
+        raise HTTPException(status_code=400, detail="Nao e possivel editar cobranca ja paga")
+    update_fields = {
+        "cliente_id": data.cliente_id,
+        "linha_id": data.linha_id,
+        "billing_type": data.billing_type.value,
+        "valor": data.valor,
+        "vencimento": data.vencimento,
+        "descricao": data.descricao,
+    }
+    if asaas_service.is_configured and doc.get("asaas_payment_id"):
+        try:
+            await asaas_service.update_payment(doc["asaas_payment_id"], {
+                "value": data.valor,
+                "dueDate": data.vencimento,
+                "description": data.descricao or "",
+            })
+        except AsaasApiError as e:
+            logger.warning(f"Erro ao atualizar cobranca no Asaas: {e}")
+        except Exception as e:
+            logger.warning(f"Erro inesperado ao atualizar no Asaas: {e}")
+    await db.cobrancas.update_one({"_id": ObjectId(cobranca_id)}, {"$set": update_fields})
+    await create_log("financeiro", f"Cobranca editada: R$ {data.valor:.2f}", user["id"], user["name"])
+    updated = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    return await _build_cobranca_response(updated)
+
+class CobrancaLoteItem(BaseModel):
+    cliente_id: str
+    linha_id: Optional[str] = None
+    billing_type: str = "BOLETO"
+    valor: float
+    vencimento: str
+    descricao: Optional[str] = None
+
+class CobrancaLoteRequest(BaseModel):
+    cobrancas: List[CobrancaLoteItem]
+
+@api_router.post("/carteira/cobrancas/lote")
+async def create_cobrancas_lote(data: CobrancaLoteRequest, request: Request):
+    user = await require_admin(request)
+    created = 0
+    errors = []
+    for idx, item in enumerate(data.cobrancas):
+        try:
+            cliente = await db.clientes.find_one({"_id": ObjectId(item.cliente_id)})
+            if not cliente:
+                errors.append(f"Item {idx+1}: Cliente nao encontrado")
+                continue
+            doc = {
+                "cliente_id": item.cliente_id,
+                "linha_id": item.linha_id,
+                "billing_type": item.billing_type,
+                "valor": item.valor,
+                "vencimento": item.vencimento,
+                "descricao": item.descricao,
+                "status": "PENDING",
+                "asaas_payment_id": None,
+                "asaas_invoice_url": None,
+                "asaas_pix_code": None,
+                "paid_at": None,
+                "created_at": datetime.now(timezone.utc),
+            }
+            if asaas_service.is_configured:
+                try:
+                    asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                    result = await asaas_service.create_payment(
+                        customer_id=asaas_customer_id,
+                        billing_type=item.billing_type,
+                        value=item.valor,
+                        due_date=item.vencimento,
+                        description=_append_portal_link(item.descricao or f"Cobranca - {cliente['nome']}"),
+                        external_reference=f"lote-{item.cliente_id}",
+                    )
+                    doc["asaas_payment_id"] = result.get("id")
+                    doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                    doc["status"] = result.get("status", "PENDING")
+                except (AsaasNotConfiguredError, AsaasApiError) as e:
+                    logger.warning(f"Asaas lote error item {idx+1}: {e}")
+                except Exception as e:
+                    logger.warning(f"Asaas lote erro inesperado item {idx+1}: {e}")
+            created += 1
+            await db.cobrancas.insert_one(doc)
+        except Exception as e:
+            errors.append(f"Item {idx+1}: {str(e)}")
+    await create_log("financeiro", f"Lote de cobrancas: {created} criadas de {len(data.cobrancas)}", user["id"], user["name"])
+    return {"success": True, "created": created, "total": len(data.cobrancas), "errors": errors}
+
+@api_router.post("/carteira/cobrancas/{cobranca_id}/consultar")
+async def consultar_cobranca(cobranca_id: str, request: Request):
+    user = await get_current_user(request)
+    doc = await db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Cobranca nao encontrada")
+    if not doc.get("asaas_payment_id"):
+        return {"message": "Cobranca sem ID Asaas vinculado", "status": doc.get("status", "PENDING")}
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+    try:
+        result = await asaas_service.get_payment(doc["asaas_payment_id"])
+        new_status = result.get("status", doc.get("status"))
+        update_fields = {"status": new_status}
+        if new_status in ["CONFIRMED", "RECEIVED"] and not doc.get("paid_at"):
+            update_fields["paid_at"] = result.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+        await db.cobrancas.update_one({"_id": ObjectId(cobranca_id)}, {"$set": update_fields})
+        return {"status": new_status, "asaas_data": result}
+    except AsaasApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+# --- Assinaturas ---
+@api_router.get("/carteira/assinaturas", response_model=List[AssinaturaResponse])
+async def list_assinaturas(request: Request, cliente_id: Optional[str] = None,
+                           status: Optional[str] = None, limit: int = 5000):
+    await get_current_user(request)
+    query = {}
+    if cliente_id:
+        query["cliente_id"] = cliente_id
+    if status and status not in ("all", "todos"):
+        query["status"] = status
+    docs = await db.assinaturas.find(query).sort("created_at", -1).limit(limit).to_list(limit)
+    return [await _build_assinatura_response(d) for d in docs]
+
+@api_router.post("/carteira/assinaturas", response_model=AssinaturaResponse)
+async def create_assinatura(data: AssinaturaCreate, request: Request):
+    user = await require_admin(request)
+    cliente = await db.clientes.find_one({"_id": ObjectId(data.cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    doc = {
+        "cliente_id": data.cliente_id,
+        "linha_id": data.linha_id,
+        "billing_type": data.billing_type.value,
+        "valor": data.valor,
+        "ciclo": data.ciclo,
+        "proximo_vencimento": data.proximo_vencimento,
+        "descricao": data.descricao,
+        "status": "ACTIVE",
+        "asaas_subscription_id": None,
+        "asaas_customer_id": None,
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    if asaas_service.is_configured:
+        try:
+            asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+            doc["asaas_customer_id"] = asaas_customer_id
+            result = await asaas_service.create_subscription(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type.value,
+                value=data.valor,
+                next_due_date=data.proximo_vencimento,
+                cycle=data.ciclo,
+                description=_append_portal_link(data.descricao or f"Assinatura movel - {cliente['nome']}"),
+                external_reference=f"ass-{data.cliente_id}",
+            )
+            doc["asaas_subscription_id"] = result.get("id")
+            doc["status"] = result.get("status", "ACTIVE")
+            # Para CREDIT_CARD: buscar a URL da primeira cobranca (onde o cliente cadastra o cartao)
+            if data.billing_type == BillingType.credit_card and doc["asaas_subscription_id"]:
+                try:
+                    payments = await asaas_service.list_subscription_payments(doc["asaas_subscription_id"])
+                    first = (payments.get("data") or [None])[0]
+                    if first:
+                        doc["invoice_url"] = first.get("invoiceUrl")
+                except AsaasApiError as e:
+                    logger.warning(f"Nao foi possivel obter invoice_url da assinatura: {e}")
+        except (AsaasNotConfiguredError, AsaasApiError) as e:
+            logger.warning(f"Asaas API error ao criar assinatura: {e}")
+
+    inserted = await db.assinaturas.insert_one(doc)
+    doc["_id"] = inserted.inserted_id
+    await create_log("financeiro", f"Assinatura criada: R$ {data.valor:.2f}/mes para {cliente['nome']}", user["id"], user["name"])
+    return await _build_assinatura_response(doc)
+
+@api_router.post("/carteira/assinaturas/{assinatura_id}/cancelar")
+async def cancelar_assinatura(assinatura_id: str, request: Request):
+    user = await require_admin(request)
+    doc = await db.assinaturas.find_one({"_id": ObjectId(assinatura_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Assinatura nao encontrada")
+    if doc.get("status") == "CANCELLED":
+        raise HTTPException(status_code=400, detail="Assinatura ja esta cancelada")
+
+    if asaas_service.is_configured and doc.get("asaas_subscription_id"):
+        try:
+            await asaas_service.cancel_subscription(doc["asaas_subscription_id"])
+        except AsaasApiError as e:
+            logger.warning(f"Erro ao cancelar assinatura no Asaas: {e}")
+
+    await db.assinaturas.update_one({"_id": ObjectId(assinatura_id)}, {"$set": {"status": "CANCELLED"}})
+    await create_log("financeiro", f"Assinatura cancelada: {assinatura_id}", user["id"], user["name"])
+    return {"message": "Assinatura cancelada"}
+
+# --- Sincronizar cliente com Asaas ---
+@api_router.post("/carteira/clientes/{cliente_id}/sync-asaas")
+async def sync_cliente_asaas(cliente_id: str, request: Request):
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado. Defina ASAAS_API_KEY no .env")
+    cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+    try:
+        asaas_id = await _get_asaas_customer_id(cliente, user)
+        return {"message": f"Cliente sincronizado com Asaas", "asaas_customer_id": asaas_id}
+    except AsaasApiError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+@api_router.post("/carteira/desabilitar-notificacoes")
+async def disable_asaas_notifications_bulk(request: Request):
+    """Desabilita notificacoes do Asaas para TODOS os clientes que ja possuem asaas_customer_id."""
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+    clientes_cursor = db.clientes.find({"asaas_customer_id": {"$exists": True, "$ne": ""}})
+    clientes_list = await clientes_cursor.to_list(length=5000)
+    total = len(clientes_list)
+    updated = 0
+    errors = []
+    for cli in clientes_list:
+        try:
+            await asaas_service.disable_customer_notifications(cli["asaas_customer_id"])
+            updated += 1
+        except Exception as e:
+            errors.append({"cliente": cli.get("nome", "?"), "error": str(e)})
+    await create_log("financeiro", f"Notificacoes Asaas desabilitadas: {updated}/{total}", user["id"], user["name"])
+    return {"total": total, "updated": updated, "errors": errors}
+
+# --- Webhook Asaas ---
+@api_router.post("/webhooks/asaas")
+async def asaas_webhook(request: Request):
+    """Recebe notificacoes de pagamento do Asaas."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payload invalido")
+
+    event = body.get("event")
+    payment = body.get("payment", {})
+    payment_id = payment.get("id")
+    status = payment.get("status")
+
+    logger.info(f"Asaas webhook: event={event} payment_id={payment_id} status={status}")
+
+    if payment_id and status:
+        cobranca = await db.cobrancas.find_one({"asaas_payment_id": payment_id})
+        if cobranca:
+            update_fields = {"status": status}
+            if status in ["CONFIRMED", "RECEIVED"]:
+                update_fields["paid_at"] = payment.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+            await db.cobrancas.update_one({"_id": cobranca["_id"]}, {"$set": update_fields})
+            await create_log("financeiro", f"Webhook Asaas: cobranca {payment_id} -> {status}", None, "Sistema")
+            logger.info(f"Cobranca {payment_id} atualizada para {status}")
+
+    return {"received": True}
+
+# --- Sync status from Asaas ---
+@api_router.post("/carteira/sincronizar-status")
+async def sync_cobrancas_status(request: Request):
+    """Consulta o Asaas e atualiza o status de todas as cobrancas pendentes."""
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    pendentes = await db.cobrancas.find({
+        "asaas_payment_id": {"$ne": None, "$exists": True},
+        "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
+    }).to_list(200)
+
+    updated_count = 0
+    errors = []
+    for cob in pendentes:
+        try:
+            payment_data = await asaas_service.get_payment(cob["asaas_payment_id"])
+            new_status = payment_data.get("status")
+            if new_status and new_status != cob.get("status"):
+                update_fields = {"status": new_status}
+                if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
+                    update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                await db.cobrancas.update_one({"_id": cob["_id"]}, {"$set": update_fields})
+                updated_count += 1
+        except Exception as e:
+            errors.append(f"{cob['asaas_payment_id']}: {str(e)}")
+
+    await create_log("financeiro", f"Sync Asaas: {updated_count} cobrancas atualizadas de {len(pendentes)} pendentes", user["id"], user["name"])
+    return {"total_checked": len(pendentes), "updated": updated_count, "errors": errors}
+
+
+
+# ==================== REVENDEDORES ====================
+class RevendedorCreate(BaseModel):
+    nome: str
+    contato: Optional[str] = None
+    telefone: Optional[str] = None
+    desconto_valor: float = 0
+    observacoes: Optional[str] = None
+
+class RevendedorResponse(BaseModel):
+    id: str
+    nome: str
+    contato: Optional[str] = None
+    telefone: Optional[str] = None
+    desconto_valor: float
+    observacoes: Optional[str] = None
+    total_chips: int = 0
+    chips_ativados: int = 0
+    created_at: Optional[datetime] = None
+
+async def _build_revendedor_response(doc: dict) -> RevendedorResponse:
+    rev_id = str(doc["_id"])
+    total_chips = await db.chips.count_documents({"revendedor_id": rev_id})
+    chips_ativados = await db.chips.count_documents({"revendedor_id": rev_id, "status": "ativado"})
+    return RevendedorResponse(
+        id=rev_id, nome=doc["nome"], contato=doc.get("contato"),
+        telefone=doc.get("telefone"), desconto_valor=doc.get("desconto_valor", 0),
+        observacoes=doc.get("observacoes"), total_chips=total_chips,
+        chips_ativados=chips_ativados,
+        created_at=doc.get("created_at", datetime.now(timezone.utc)),
+    )
+
+@api_router.get("/revendedores")
+async def list_revendedores(request: Request):
+    await get_current_user(request)
+    docs = await db.revendedores.find().sort("nome", 1).to_list(500)
+    return [await _build_revendedor_response(d) for d in docs]
+
+@api_router.post("/revendedores")
+async def create_revendedor(data: RevendedorCreate, request: Request):
+    user = await require_admin(request)
+    doc = {
+        "nome": data.nome,
+        "contato": data.contato,
+        "telefone": data.telefone,
+        "desconto_valor": data.desconto_valor,
+        "observacoes": data.observacoes,
+        "created_at": datetime.now(timezone.utc),
+    }
+    inserted = await db.revendedores.insert_one(doc)
+    doc["_id"] = inserted.inserted_id
+    await create_log("revendedor", f"Revendedor criado: {data.nome}", user["id"], user["name"])
+    return await _build_revendedor_response(doc)
+
+@api_router.put("/revendedores/{rev_id}")
+async def update_revendedor(rev_id: str, data: RevendedorCreate, request: Request):
+    user = await require_admin(request)
+    doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
+    update = {
+        "nome": data.nome, "contato": data.contato, "telefone": data.telefone,
+        "desconto_valor": data.desconto_valor, "observacoes": data.observacoes,
+    }
+    await db.revendedores.update_one({"_id": ObjectId(rev_id)}, {"$set": update})
+    updated = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    await create_log("revendedor", f"Revendedor editado: {data.nome}", user["id"], user["name"])
+    return await _build_revendedor_response(updated)
+
+@api_router.delete("/revendedores/{rev_id}")
+async def delete_revendedor(rev_id: str, request: Request):
+    user = await require_admin(request)
+    if not await verify_confirm_token(request):
+        raise HTTPException(status_code=403, detail="Confirmacao de senha necessaria para esta acao")
+    doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
+    await db.chips.update_many({"revendedor_id": rev_id}, {"$unset": {"revendedor_id": ""}})
+    await db.revendedores.delete_one({"_id": ObjectId(rev_id)})
+    await create_log("seguranca", f"Revendedor removido: {doc['nome']} (confirmacao verificada)", user["id"], user["name"])
+    return {"message": "Revendedor removido"}
+
+class VincularChipsRequest(BaseModel):
+    iccids: List[str]
+
+@api_router.post("/revendedores/{rev_id}/vincular-chips")
+async def vincular_chips_revendedor(rev_id: str, data: VincularChipsRequest, request: Request):
+    user = await require_admin(request)
+    doc = await db.revendedores.find_one({"_id": ObjectId(rev_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Revendedor nao encontrado")
+    linked = 0
+    for iccid in data.iccids:
+        result = await db.chips.update_one(
+            {"iccid": iccid, "status": "disponivel"},
+            {"$set": {"revendedor_id": rev_id}}
+        )
+        if result.modified_count:
+            linked += 1
+    await create_log("revendedor", f"{linked} chips vinculados ao revendedor {doc['nome']}", user["id"], user["name"])
+    return {"success": True, "linked": linked, "total": len(data.iccids)}
+
+@api_router.post("/revendedores/{rev_id}/desvincular-chips")
+async def desvincular_chips_revendedor(rev_id: str, data: VincularChipsRequest, request: Request):
+    user = await require_admin(request)
+    unlinked = 0
+    for iccid in data.iccids:
+        result = await db.chips.update_one(
+            {"iccid": iccid, "revendedor_id": rev_id},
+            {"$unset": {"revendedor_id": ""}}
+        )
+        if result.modified_count:
+            unlinked += 1
+    await create_log("revendedor", f"{unlinked} chips desvinculados do revendedor", user["id"], user["name"])
+    return {"success": True, "unlinked": unlinked}
+
+@api_router.get("/revendedores/{rev_id}/chips")
+async def get_chips_revendedor(rev_id: str, request: Request):
+    await get_current_user(request)
+    chips = await db.chips.find({"revendedor_id": rev_id}, {"_id": 0, "iccid": 1, "status": 1, "msisdn": 1, "cliente_id": 1}).to_list(1000)
+    return chips
+
+
+
+# ==================== PORTAL DO CLIENTE ====================
+class PortalLoginRequest(BaseModel):
+    documento: str
+    telefone: str
+
+@api_router.post("/portal/login")
+@limiter.limit("10/minute")
+async def portal_login(data: PortalLoginRequest, request: Request):
+    """Login do cliente por CPF + telefone."""
+    try:
+        doc_clean = clean_document(data.documento)
+        tel_clean = re.sub(r'\D', '', data.telefone)
+
+        cliente = await db.clientes.find_one({"documento": doc_clean})
+        if not cliente:
+            raise HTTPException(status_code=401, detail="CPF nao encontrado. Entre em contato com a operadora para verificar seu cadastro.")
+
+        cliente_id_str = str(cliente["_id"])
+
+        # Find line matching the phone number
+        linhas = await db.linhas.find({"cliente_id": cliente_id_str}).to_list(100)
+        chip_match = None
+        linha_match = None
+        for l in linhas:
+            msisdn = l.get("msisdn") or l.get("numero") or ""
+            msisdn_clean = re.sub(r'\D', '', msisdn)
+            if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+                linha_match = l
+                if l.get("chip_id"):
+                    try:
+                        chip_match = await db.chips.find_one({"_id": ObjectId(l["chip_id"])})
+                    except Exception:
+                        pass
+                break
+
+        if not linha_match:
+            # Try matching via chips
+            chips = await db.chips.find({"cliente_id": cliente_id_str}).to_list(100)
+            for c in chips:
+                msisdn = c.get("msisdn", "")
+                msisdn_clean = re.sub(r'\D', '', msisdn)
+                if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+                    chip_match = c
+                    linha_match = await db.linhas.find_one({"chip_id": str(c["_id"])})
+                    break
+
+        if not linha_match and not chip_match:
+            raise HTTPException(status_code=401, detail="Telefone nao encontrado para este CPF.")
+
+        # Generate portal token (simple JWT with limited scope)
+        portal_token = jwt.encode({
+            "sub": cliente_id_str,
+            "type": "portal",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+        }, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+        return {
+            "token": portal_token,
+            "cliente": {
+                "nome": cliente.get("nome", "Cliente"),
+                "documento": doc_clean,
+                "telefone": data.telefone,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro no portal login: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Erro interno ao processar login. Tente novamente.")
+
+async def _get_portal_cliente(request: Request) -> dict:
+    """Extrai e valida o token do portal do cliente."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token nao fornecido")
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "portal":
+            raise HTTPException(status_code=401, detail="Token invalido")
+        cliente = await db.clientes.find_one({"_id": ObjectId(payload["sub"])})
+        if not cliente:
+            raise HTTPException(status_code=401, detail="Cliente nao encontrado")
+        return cliente
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Sessao expirada. Faca login novamente.")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token invalido")
+
+@api_router.get("/portal/dashboard")
+async def portal_dashboard(request: Request):
+    """Retorna dados completos do cliente: linhas, plano, saldo, consumo, boletos."""
+    try:
+        cliente = await _get_portal_cliente(request)
+        cliente_id = str(cliente["_id"])
+
+        # Linhas do cliente
+        linhas = await db.linhas.find({"cliente_id": cliente_id}).to_list(50)
+        chips = await db.chips.find({"cliente_id": cliente_id}).to_list(50)
+
+        # Planos e ofertas (com proteção para ObjectId inválido)
+        plano_ids = list(set(l.get("plano_id") for l in linhas if l.get("plano_id")))
+        oferta_ids = list(set(l.get("oferta_id") for l in linhas if l.get("oferta_id")))
+        planos_lookup = {}
+        ofertas_lookup = {}
+        if plano_ids:
+            try:
+                valid_ids = [ObjectId(p) for p in plano_ids if ObjectId.is_valid(p)]
+                if valid_ids:
+                    docs = await db.planos.find({"_id": {"$in": valid_ids}}).to_list(len(valid_ids))
+                    planos_lookup = {str(d["_id"]): d for d in docs}
+            except Exception as e:
+                logger.warning(f"Portal dashboard: erro ao buscar planos: {e}")
+        if oferta_ids:
+            try:
+                valid_ids = [ObjectId(o) for o in oferta_ids if ObjectId.is_valid(o)]
+                if valid_ids:
+                    docs = await db.ofertas.find({"_id": {"$in": valid_ids}}).to_list(len(valid_ids))
+                    ofertas_lookup = {str(d["_id"]): d for d in docs}
+            except Exception as e:
+                logger.warning(f"Portal dashboard: erro ao buscar ofertas: {e}")
+
+        linhas_data = []
+        for l in linhas:
+            numero = l.get("msisdn") or l.get("numero") or ""
+            plano = planos_lookup.get(l.get("plano_id"))
+            oferta = ofertas_lookup.get(l.get("oferta_id"))
+            chip = next((c for c in chips if str(c["_id"]) == l.get("chip_id")), None)
+
+            linhas_data.append({
+                "id": str(l["_id"]),
+                "numero": numero,
+                "status": l.get("status", "desconhecido"),
+                "plano_nome": plano.get("nome") if plano else None,
+                "franquia": plano.get("franquia") if plano else None,
+                "plan_code": plano.get("plan_code") if plano else None,
+                "oferta_nome": oferta.get("nome") if oferta else None,
+                "valor": oferta.get("valor") if oferta else None,
+                "iccid": chip.get("iccid") if chip else None,
+            })
+
+        # Cobranças do cliente (Asaas) - com sync de status em tempo real
+        cobrancas = await db.cobrancas.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(50)
+        cobrancas_data = []
+        for c in cobrancas:
+            status = c.get("status", "PENDING")
+            if c.get("asaas_payment_id") and status not in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "REFUNDED"]:
+                try:
+                    if asaas_service.is_configured:
+                        payment_data = await asaas_service.get_payment(c["asaas_payment_id"])
+                        new_status = payment_data.get("status")
+                        if new_status and new_status != status:
+                            update_fields = {"status": new_status}
+                            if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
+                                update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                            await db.cobrancas.update_one({"_id": c["_id"]}, {"$set": update_fields})
+                            status = new_status
+                except Exception as e:
+                    logger.warning(f"Portal: erro ao sync status cobranca {c.get('asaas_payment_id')}: {e}")
+
+            cobrancas_data.append({
+                "id": str(c["_id"]),
+                "valor": c.get("valor", 0),
+                "vencimento": c.get("vencimento", ""),
+                "billing_type": c.get("billing_type", "UNDEFINED"),
+                "status": status,
+                "descricao": c.get("descricao"),
+                "asaas_invoice_url": c.get("asaas_invoice_url"),
+                "asaas_bankslip_url": c.get("asaas_bankslip_url"),
+                "asaas_pix_code": c.get("asaas_pix_code"),
+                "barcode": c.get("barcode"),
+                "paid_at": c.get("paid_at"),
+            })
+
+        # Ativações self-service
+        ss_ativacoes = await db.ativacoes_selfservice.find({"cliente_id": cliente_id}).sort("created_at", -1).to_list(10)
+        ss_data = []
+        for s in ss_ativacoes:
+            created = s.get("created_at")
+            if hasattr(created, "isoformat"):
+                created = created.isoformat()
+            elif not isinstance(created, str):
+                created = datetime.now(timezone.utc).isoformat()
+            ss_data.append({
+                "id": str(s["_id"]),
+                "iccid": s.get("iccid"),
+                "status": s.get("status"),
+                "valor_final": s.get("valor_final", 0),
+                "asaas_invoice_url": s.get("asaas_invoice_url"),
+                "asaas_pix_code": s.get("asaas_pix_code"),
+                "barcode": s.get("barcode"),
+                "created_at": created,
+            })
+
+        return {
+            "cliente": {
+                "nome": cliente.get("nome", "Cliente"),
+                "documento": cliente.get("documento"),
+                "email": cliente.get("email"),
+                "telefone": cliente.get("telefone"),
+            },
+            "linhas": linhas_data,
+            "cobrancas": cobrancas_data,
+            "ativacoes_selfservice": ss_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro no portal dashboard: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Erro interno ao carregar dashboard.")
+
+@api_router.get("/portal/saldo/{numero}")
+async def portal_saldo(numero: str, request: Request):
+    """Consulta saldo de dados na Ta Telecom."""
+    cliente = await _get_portal_cliente(request)
+    numero_clean = re.sub(r'\D', '', numero)
+    try:
+        resp = await operadora_service.consultar_saldo_dados(numero_clean, db=db, user_id=str(cliente["_id"]), user_name=cliente["nome"])
+        if resp.success and resp.data:
+            return {
+                "success": True,
+                "balance_mb": resp.data.get("balance", 0),
+                "codigo_status_tip": resp.data.get("codigo_status_tip"),
+            }
+        return {"success": False, "message": resp.message, "balance_mb": 0}
+    except Exception as e:
+        return {"success": False, "message": str(e), "balance_mb": 0}
+
+@api_router.get("/portal/consumo/{numero}")
+async def portal_consumo(numero: str, request: Request, periodo: Optional[str] = None):
+    """Consulta consumo consolidado do mes."""
+    cliente = await _get_portal_cliente(request)
+    numero_clean = re.sub(r'\D', '', numero)
+    if not periodo:
+        periodo = datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        resp = await operadora_service.consultar_consumo_consolidado(
+            periodo=periodo,
+            cpf_cnpj=cliente.get("documento"),
+            linha=numero_clean,
+            db=db, user_id=str(cliente["_id"]), user_name=cliente["nome"]
+        )
+        if resp.success and resp.data:
+            results = resp.data.get("results", [])
+            if results:
+                r = results[0]
+                return {
+                    "success": True,
+                    "consumo_dados_mb": float(r.get("consumo_dados", 0)),
+                    "consumo_dados_gb": float(r.get("consumo_dados", 0)) / 1024,
+                    "consumo_sms": int(r.get("consumo_sms", 0)),
+                    "consumo_minutos": float(r.get("consumo_segundos", 0)) / 60,
+                    "consumo_segundos": int(r.get("consumo_segundos", 0)),
+                    "plano": r.get("plano"),
+                    "contrato_status": r.get("contrato_status"),
+                    "simcard_status": r.get("simcard_status"),
+                    "periodo": r.get("periodo"),
+                    "cliente_nome": r.get("cliente_nome"),
+                }
+            return {"success": True, "consumo_dados_gb": 0, "consumo_sms": 0, "consumo_minutos": 0, "periodo": periodo, "message": "Sem dados para o periodo"}
+        return {"success": False, "message": resp.message}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+# ==================== PUBLIC SELF-SERVICE ACTIVATION ====================
+class SelfServiceActivationRequest(BaseModel):
+    iccid: str
+    nome: str
+    tipo_pessoa: TipoPessoa = TipoPessoa.pf
+    documento: str
+    telefone: str
+    data_nascimento: str
+    cep: str
+    endereco: str
+    numero_endereco: str
+    bairro: Optional[str] = None
+    cidade: Optional[str] = None
+    estado: Optional[str] = None
+    city_code: Optional[str] = None
+    complemento: Optional[str] = None
+    email: Optional[str] = None
+    billing_type: str = "PIX"  # PIX or BOLETO
+    portability: bool = False
+    port_ddd: Optional[str] = None
+    port_number: Optional[str] = None
+    ddd: Optional[str] = None
+
+class SelfServiceActivationResponse(BaseModel):
+    id: str
+    status: str  # aguardando_pagamento, pago, ativando, ativo, erro
+    chip_iccid: str
+    plano_nome: Optional[str] = None
+    oferta_nome: Optional[str] = None
+    valor_original: float
+    desconto: float = 0
+    valor_final: float
+    billing_type: str
+    asaas_invoice_url: Optional[str] = None
+    asaas_pix_code: Optional[str] = None
+    asaas_pix_qrcode: Optional[str] = None
+    barcode: Optional[str] = None
+    message: str = ""
+
+@api_router.get("/public/validar-chip/{iccid}")
+async def public_validate_chip(iccid: str):
+    """Valida um ICCID e retorna info do chip, oferta, plano e desconto do revendedor."""
+    iccid_clean = re.sub(r'\D', '', iccid)
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado. Verifique o ICCID informado.")
+    if chip["status"] != "disponivel":
+        status_msgs = {
+            "ativado": "Este chip ja foi ativado.",
+            "bloqueado": "Este chip esta bloqueado.",
+            "reservado": "Este chip esta reservado.",
+            "cancelado": "Este chip foi cancelado.",
+        }
+        raise HTTPException(status_code=400, detail=status_msgs.get(chip["status"], f"Chip indisponivel (status: {chip['status']})"))
+
+    if not chip.get("oferta_id"):
+        raise HTTPException(status_code=400, detail="Chip nao possui oferta vinculada. Contate o administrador.")
+
+    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    if not oferta or not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta deste chip nao esta disponivel.")
+
+    plano = None
+    if oferta.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+
+    desconto = 0.0
+    revendedor_nome = None
+    if chip.get("revendedor_id"):
+        rev = await db.revendedores.find_one({"_id": ObjectId(chip["revendedor_id"])})
+        if rev:
+            desconto = rev.get("desconto_valor", 0)
+            revendedor_nome = rev.get("nome")
+
+    valor_original = oferta.get("valor", 0)
+    valor_final = max(0, valor_original - desconto)
+
+    return {
+        "chip_id": str(chip["_id"]),
+        "iccid": chip["iccid"],
+        "oferta_id": str(oferta["_id"]),
+        "oferta_nome": oferta["nome"],
+        "plano_nome": plano["nome"] if plano else None,
+        "franquia": plano["franquia"] if plano else None,
+        "descricao": oferta.get("descricao") or (plano["descricao"] if plano else None),
+        "valor_original": valor_original,
+        "desconto": desconto,
+        "valor_final": valor_final,
+        "revendedor_nome": revendedor_nome,
+        "tem_revendedor": bool(chip.get("revendedor_id")),
+    }
+
+@api_router.get("/public/ofertas")
+async def public_list_offers():
+    """Lista ofertas ativas com dados do plano para a pagina publica."""
+    ofertas = await db.ofertas.find({"ativo": True}).to_list(100)
+    result = []
+    for o in ofertas:
+        plano = None
+        if o.get("plano_id"):
+            plano = await db.planos.find_one({"_id": ObjectId(o["plano_id"])})
+        result.append({
+            "id": str(o["_id"]),
+            "nome": o["nome"],
+            "plano_nome": plano["nome"] if plano else None,
+            "franquia": plano["franquia"] if plano else None,
+            "descricao": o.get("descricao") or (plano.get("descricao") if plano else None),
+            "valor": o.get("valor", 0),
+            "categoria": o.get("categoria", "movel"),
+        })
+    return result
+
+@api_router.post("/public/ativacao", response_model=SelfServiceActivationResponse)
+async def public_self_service_activation(data: SelfServiceActivationRequest):
+    """Fluxo completo de ativacao self-service: valida chip, cria/encontra cliente, gera cobranca."""
+    iccid_clean = re.sub(r'\D', '', data.iccid)
+
+    # 1. Validate chip
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    if chip["status"] != "disponivel":
+        raise HTTPException(status_code=400, detail="Chip nao esta disponivel para ativacao")
+
+    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta do chip nao encontrada")
+    plano = None
+    if oferta.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(oferta["plano_id"])})
+
+    # 2. Calculate discount
+    desconto = 0.0
+    if chip.get("revendedor_id"):
+        rev = await db.revendedores.find_one({"_id": ObjectId(chip["revendedor_id"])})
+        if rev:
+            desconto = rev.get("desconto_valor", 0)
+    valor_original = oferta.get("valor", 0)
+    valor_final = max(0, valor_original - desconto)
+
+    # 3. Validate document
+    doc_clean = clean_document(data.documento)
+    if data.tipo_pessoa == TipoPessoa.pf:
+        if not validate_cpf(doc_clean):
+            raise HTTPException(status_code=400, detail="CPF invalido")
+    else:
+        if not validate_cnpj(doc_clean):
+            raise HTTPException(status_code=400, detail="CNPJ invalido")
+
+    # 4. Create or find cliente
+    existing_client = await db.clientes.find_one({"documento": doc_clean})
+    if existing_client:
+        cliente_id = str(existing_client["_id"])
+        # Update client data
+        await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": {
+            "nome": data.nome, "telefone": data.telefone,
+            "data_nascimento": data.data_nascimento, "cep": re.sub(r'\D', '', data.cep),
+            "endereco": data.endereco, "numero_endereco": data.numero_endereco,
+            "bairro": data.bairro, "cidade": data.cidade, "estado": data.estado,
+            "city_code": data.city_code, "complemento": data.complemento,
+        }})
+        cliente = await db.clientes.find_one({"_id": existing_client["_id"]})
+    else:
+        cliente_doc = {
+            "nome": data.nome, "tipo_pessoa": data.tipo_pessoa.value,
+            "documento": doc_clean, "telefone": data.telefone,
+            "data_nascimento": data.data_nascimento,
+            "cep": re.sub(r'\D', '', data.cep), "endereco": data.endereco,
+            "numero_endereco": data.numero_endereco, "bairro": data.bairro,
+            "cidade": data.cidade, "estado": data.estado,
+            "city_code": data.city_code, "complemento": data.complemento,
+            "email": data.email, "status": "ativo",
+            "created_at": datetime.now(timezone.utc),
+        }
+        result = await db.clientes.insert_one(cliente_doc)
+        cliente_id = str(result.inserted_id)
+        cliente_doc["_id"] = result.inserted_id
+        cliente = cliente_doc
+
+    # 5. Reserve chip
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {"status": "reservado", "cliente_id": cliente_id}})
+
+    # 6. Create activation record
+    vencimento = (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
+    activation_doc = {
+        "cliente_id": cliente_id,
+        "chip_id": str(chip["_id"]),
+        "iccid": iccid_clean,
+        "oferta_id": str(oferta["_id"]),
+        "plano_id": oferta.get("plano_id"),
+        "valor_original": valor_original,
+        "desconto": desconto,
+        "valor_final": valor_final,
+        "billing_type": data.billing_type,
+        "status": "aguardando_pagamento",
+        "asaas_payment_id": None,
+        "asaas_invoice_url": None,
+        "asaas_pix_code": None,
+        "asaas_pix_qrcode": None,
+        "barcode": None,
+        "revendedor_id": chip.get("revendedor_id"),
+        "portability": data.portability,
+        "port_ddd": data.port_ddd if data.portability else None,
+        "port_number": data.port_number if data.portability else None,
+        "ddd": data.ddd,
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    # 7. Create Asaas payment
+    if asaas_service.is_configured and valor_final > 0:
+        try:
+            asaas_customer = await asaas_service.get_or_create_customer(
+                name=data.nome,
+                cpf_cnpj=doc_clean,
+                email=data.email,
+                phone=data.telefone,
+                address=data.endereco,
+                address_number=data.numero_endereco,
+                province=data.bairro,
+                postal_code=re.sub(r'\D', '', data.cep),
+            )
+            asaas_customer_id = asaas_customer.get("id")
+            if asaas_customer_id:
+                await db.clientes.update_one({"_id": ObjectId(cliente_id)}, {"$set": {"asaas_customer_id": asaas_customer_id}})
+
+            payment_result = await asaas_service.create_payment(
+                customer_id=asaas_customer_id,
+                billing_type=data.billing_type,
+                value=valor_final,
+                due_date=vencimento,
+                description=_append_portal_link(f"Ativacao chip {iccid_clean} - {oferta['nome']}"),
+                discount_value=desconto if desconto > 0 else None,
+            )
+            activation_doc["asaas_payment_id"] = payment_result.get("id")
+            activation_doc["asaas_invoice_url"] = payment_result.get("invoiceUrl")
+
+            payment_id = payment_result.get("id")
+            if payment_id:
+                try:
+                    if data.billing_type == "BOLETO":
+                        barcode_data = await asaas_service.get_boleto_barcode(payment_id)
+                        activation_doc["barcode"] = barcode_data.get("identificationField")
+                    elif data.billing_type == "PIX":
+                        pix_data = await asaas_service.get_pix_qrcode(payment_id)
+                        activation_doc["asaas_pix_code"] = pix_data.get("payload")
+                        activation_doc["asaas_pix_qrcode"] = pix_data.get("encodedImage")
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar detalhes pagamento self-service: {e}")
+        except Exception as e:
+            logger.warning(f"Erro Asaas no self-service (usando mock local): {e}")
+            activation_doc["asaas_payment_id"] = f"mock_ss_{secrets.token_hex(8)}"
+            activation_doc["asaas_invoice_url"] = None
+    elif valor_final <= 0:
+        activation_doc["status"] = "pago"
+
+    inserted = await db.ativacoes_selfservice.insert_one(activation_doc)
+    activation_doc["_id"] = inserted.inserted_id
+
+    await create_log("ativacao", f"Self-service: {data.nome} ({doc_clean}) solicitou ativacao do chip {iccid_clean}", None, "self-service")
+
+    # Se valor final = 0 (100% desconto), disparar ativacao imediatamente
+    if valor_final <= 0:
+        try:
+            await _trigger_selfservice_activation(activation_doc)
+            # Recarregar o doc atualizado
+            updated_doc = await db.ativacoes_selfservice.find_one({"_id": inserted.inserted_id})
+            if updated_doc:
+                activation_doc = updated_doc
+        except Exception as e:
+            logger.warning(f"Erro ao disparar ativacao gratuita self-service: {e}")
+
+    return SelfServiceActivationResponse(
+        id=str(inserted.inserted_id),
+        status=activation_doc["status"],
+        chip_iccid=iccid_clean,
+        plano_nome=plano["nome"] if plano else None,
+        oferta_nome=oferta["nome"],
+        valor_original=valor_original,
+        desconto=desconto,
+        valor_final=valor_final,
+        billing_type=data.billing_type,
+        asaas_invoice_url=activation_doc.get("asaas_invoice_url"),
+        asaas_pix_code=activation_doc.get("asaas_pix_code"),
+        asaas_pix_qrcode=activation_doc.get("asaas_pix_qrcode"),
+        barcode=activation_doc.get("barcode"),
+        message="Pagamento gerado. Apos confirmacao, seu chip sera ativado automaticamente." if activation_doc["status"] == "aguardando_pagamento" else "Ativacao em processamento.",
+    )
+
+@api_router.get("/public/ativacao/{activation_id}/status")
+async def public_check_activation_status(activation_id: str):
+    """Verifica status de uma ativacao self-service."""
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+
+    # If still waiting, check Asaas
+    if doc["status"] == "aguardando_pagamento" and doc.get("asaas_payment_id") and not doc["asaas_payment_id"].startswith("mock_"):
+        try:
+            payment = await asaas_service.get_payment(doc["asaas_payment_id"])
+            asaas_status = payment.get("status", "")
+            if asaas_status in ("CONFIRMED", "RECEIVED"):
+                await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "pago"}})
+                doc["status"] = "pago"
+                # Trigger activation
+                await _trigger_selfservice_activation(doc)
+                doc = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+        except Exception as e:
+            logger.warning(f"Erro ao consultar status pagamento self-service: {e}")
+
+    # If status is "pago" but activation was not triggered yet (e.g. free activation retry)
+    if doc["status"] == "pago":
+        try:
+            await _trigger_selfservice_activation(doc)
+            doc = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+        except Exception as e:
+            logger.warning(f"Erro ao disparar ativacao pendente: {e}")
+
+    # If portability in progress, check with Ta Telecom
+    if doc["status"] in ("portabilidade_em_andamento", "ativando") and doc.get("portability"):
+        try:
+            iccid = doc.get("iccid", "")
+            port_result = await operadora_service.consultar_status_portabilidade(iccid, db=db)
+            if port_result.success and port_result.data:
+                port_data = port_result.data
+                port_status = (port_data.get("status") or "").upper()
+                doc["portability_status"] = port_data.get("status", "")
+                doc["portability_window"] = port_data.get("janela", "")
+                doc["portability_msg"] = port_data.get("msg_usuario", "")
+                # If portability is concluded, update to ativo
+                if "CONCLUIDA" in port_status or "CONCLUÍDA" in port_status:
+                    msisdn = doc.get("port_number") or doc.get("msisdn")
+                    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                        "status": "ativo", "msisdn": msisdn,
+                    }})
+                    doc["status"] = "ativo"
+                    doc["msisdn"] = msisdn
+                    # Atualizar chip e linha para ativado
+                    if doc.get("chip_id"):
+                        await db.chips.update_one({"_id": ObjectId(doc["chip_id"])}, {"$set": {"status": "ativado", "msisdn": msisdn}})
+                    if doc.get("chip_id"):
+                        await db.linhas.update_one({"chip_id": doc["chip_id"]}, {"$set": {"status": "ativo", "msisdn": msisdn, "numero": msisdn or "Pendente"}})
+        except Exception as e:
+            logger.warning(f"Erro ao consultar portabilidade self-service: {e}")
+
+    plano_nome, oferta_nome = None, None
+    if doc.get("plano_id"):
+        plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])})
+        if plano:
+            plano_nome = plano["nome"]
+    if doc.get("oferta_id"):
+        oferta = await db.ofertas.find_one({"_id": ObjectId(doc["oferta_id"])})
+        if oferta:
+            oferta_nome = oferta["nome"]
+
+    status_messages = {
+        "aguardando_pagamento": "Aguardando confirmacao do pagamento.",
+        "pago": "Pagamento confirmado! Ativando seu chip...",
+        "ativando": "Ativacao em andamento na operadora...",
+        "portabilidade_em_andamento": "Portabilidade solicitada! Voce recebera um SMS da sua operadora anterior para confirmar. Apos a confirmacao, a portabilidade sera agendada.",
+        "ativo": "Chip ativado com sucesso!",
+        "retry_pendente": "Houve uma falha temporaria. A ativacao sera retentada automaticamente em breve.",
+        "erro": "Erro na ativacao. Contate o suporte.",
+    }
+
+    return {
+        "id": str(doc["_id"]),
+        "status": doc["status"],
+        "chip_iccid": doc.get("iccid"),
+        "plano_nome": plano_nome,
+        "oferta_nome": oferta_nome,
+        "valor_original": doc.get("valor_original", 0),
+        "desconto": doc.get("desconto", 0),
+        "valor_final": doc.get("valor_final", 0),
+        "billing_type": doc.get("billing_type"),
+        "asaas_invoice_url": doc.get("asaas_invoice_url"),
+        "asaas_pix_code": doc.get("asaas_pix_code"),
+        "asaas_pix_qrcode": doc.get("asaas_pix_qrcode"),
+        "barcode": doc.get("barcode"),
+        "msisdn": doc.get("msisdn"),
+        "portability": doc.get("portability", False),
+        "portability_status": doc.get("portability_status", ""),
+        "portability_window": doc.get("portability_window", ""),
+        "portability_msg": doc.get("portability_msg", ""),
+        "message": status_messages.get(doc["status"], ""),
+    }
+
+async def _trigger_selfservice_activation(doc: dict):
+    """Dispara a ativacao na Ta Telecom apos pagamento confirmado."""
+    try:
+        await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "ativando"}})
+
+        cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+        chip = await db.chips.find_one({"_id": ObjectId(doc["chip_id"])})
+        oferta = await db.ofertas.find_one({"_id": ObjectId(doc["oferta_id"])})
+        plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])}) if doc.get("plano_id") else None
+
+        if not all([cliente, chip, oferta, plano]):
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "erro", "erro_msg": "Dados incompletos para ativacao"}})
+            return
+
+        if not plano.get("plan_code"):
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "erro", "erro_msg": "Plano sem plan_code configurado"}})
+            return
+
+        telefone_clean = re.sub(r'\D', '', cliente.get("telefone", ""))
+        chosen_ddd = doc.get("ddd")
+        ddd = chosen_ddd if chosen_ddd and len(chosen_ddd) == 2 else (telefone_clean[:2] if len(telefone_clean) >= 2 else "11")
+
+        # Mapear tipo_pessoa para formato Ta Telecom
+        tipo_pessoa = cliente.get("tipo_pessoa", "pf")
+        person_type_map = {"pf": "F", "pj": "J", "F": "F", "J": "J"}
+        person_type = person_type_map.get(tipo_pessoa, "F")
+
+        # Converter data_nascimento para dd/mm/YYYY
+        raw_dob = cliente.get("data_nascimento", "")
+        dob_formatted = ""
+        if raw_dob:
+            try:
+                if "-" in raw_dob and len(raw_dob) >= 10:
+                    parts = raw_dob[:10].split("-")
+                    if len(parts) == 3 and len(parts[0]) == 4:
+                        dob_formatted = f"{parts[2]}/{parts[1]}/{parts[0]}"
+                    else:
+                        dob_formatted = raw_dob
+                elif "/" in raw_dob:
+                    dob_formatted = raw_dob
+                else:
+                    dob_formatted = raw_dob
+            except Exception:
+                dob_formatted = raw_dob
+
+        activation_payload = {
+            "person_type": person_type,
+            "person_name": cliente["nome"],
+            "document_number": clean_document(cliente.get("documento", "")),
+            "phone_number": telefone_clean,
+            "date_of_birth": dob_formatted,
+            "type_of_street": "",
+            "address": cliente.get("endereco", ""),
+            "address_number": cliente.get("numero_endereco", ""),
+            "neighborhood": cliente.get("bairro", ""),
+            "state": cliente.get("estado", ""),
+            "city_code": cliente.get("city_code", ""),
+            "postcode": re.sub(r'\D', '', cliente.get("cep", "")),
+            "plan_code": plano["plan_code"],
+            "portability": doc.get("portability", False),
+            "cn_contract_line": doc.get("port_ddd") or ddd,
+            "contract_line": doc.get("port_number", ""),
+        }
+
+        result = await operadora_service.ativar_chip(
+            iccid=chip["iccid"],
+            activation_payload=activation_payload,
+            db=db, user_id="self-service", user_name="self-service"
+        )
+
+        if result.success:
+            status_str = result.status if isinstance(result.status, str) else result.status.value
+            is_portability = doc.get("portability", False)
+            # Para portabilidade, o chip fica "reservado" ate a conclusao; para ativacao normal, se a API retornou sucesso, considerar ativado
+            if status_str == "ativo" or (not is_portability and result.success):
+                chip_status = ChipStatus.ativado.value
+            else:
+                chip_status = ChipStatus.reservado.value
+            msisdn = result.numero or (result.data.get("msisdn") if result.data else None)
+
+            # Determinar o status final ja para poder decidir se consulta MSISDN
+            if status_str == "ativo" or (result.success and not is_portability):
+                new_status = "ativo"
+            elif is_portability:
+                new_status = "portabilidade_em_andamento"
+            else:
+                new_status = "ativo"
+
+            # Se nao obteve o MSISDN no resultado, consultar a operadora
+            if not msisdn and new_status == "ativo":
+                try:
+                    await asyncio.sleep(3)  # Aguardar operadora processar
+                    check = await operadora_service.consultar_linha(
+                        iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                    )
+                    if check.success and check.data:
+                        msisdn = check.data.get("msisdn") or check.data.get("numero")
+                        if not msisdn:
+                            # Tentar segunda vez após mais tempo
+                            await asyncio.sleep(5)
+                            check2 = await operadora_service.consultar_linha(
+                                iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                            )
+                            if check2.success and check2.data:
+                                msisdn = check2.data.get("msisdn") or check2.data.get("numero")
+                    logger.info(f"MSISDN obtido pos-ativacao: {msisdn}")
+                except Exception as e:
+                    logger.warning(f"Erro ao consultar MSISDN pos-ativacao: {e}")
+
+            await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+                "status": chip_status, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+            }})
+
+            line_doc = {
+                "numero": msisdn or doc.get("port_number") or "Pendente",
+                "status": status_str,
+                "cliente_id": doc["cliente_id"],
+                "chip_id": doc["chip_id"],
+                "plano_id": doc.get("plano_id"),
+                "oferta_id": doc.get("oferta_id"),
+                "msisdn": msisdn,
+                "created_at": datetime.now(timezone.utc),
+            }
+            await db.linhas.insert_one(line_doc)
+
+            update_fields = {"status": new_status, "msisdn": msisdn}
+            if is_portability:
+                update_fields["portability_submitted_at"] = datetime.now(timezone.utc).isoformat()
+
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+            await create_log("ativacao", f"Self-service {'portabilidade enviada' if is_portability else 'ativacao concluida'}: {cliente['nome']} - chip {chip['iccid']} - {msisdn or 'pendente'}", None, "self-service")
+
+            # Enviar email de ativacao ao cliente
+            if new_status == "ativo" and email_service.is_configured:
+                cliente_email = cliente.get("email")
+                if cliente_email:
+                    try:
+                        plano_nome = plano.get("nome") if plano else None
+                        await email_service.send_ativacao_sucesso(
+                            to_email=cliente_email,
+                            cliente_nome=cliente["nome"],
+                            numero=msisdn,
+                            plano_nome=plano_nome,
+                            iccid=chip["iccid"],
+                        )
+                    except Exception as e:
+                        logger.warning(f"Erro ao enviar email de ativacao: {e}")
+        else:
+            err_msg = result.message
+            if isinstance(err_msg, list):
+                err_msg = "; ".join(str(m) for m in err_msg)
+            error_code = result.error_code if hasattr(result, 'error_code') else None
+
+            # ===== VERIFICACAO POS-ERRO =====
+            # Quando da timeout ou erro retentavel, consultar a operadora para verificar
+            # se o chip foi ativado com sucesso antes de marcar como erro
+            is_timeout_or_retryable = _is_retryable_error(str(err_msg), str(error_code) if error_code else None)
+            if is_timeout_or_retryable:
+                logger.info(f"Verificacao pos-erro: consultando operadora para chip {chip['iccid']}...")
+                try:
+                    await asyncio.sleep(5)  # Aguardar 5s para a operadora processar
+                    check_result = await operadora_service.consultar_linha(
+                        iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                    )
+                    if check_result.success and check_result.data:
+                        check_status = check_result.data.get("status", "").lower()
+                        if check_status in ("ativo", "ativa", "active"):
+                            # Chip foi ativado com sucesso! Corrigir tudo
+                            msisdn = check_result.data.get("msisdn") or check_result.data.get("numero")
+                            logger.info(f"Verificacao pos-erro: chip {chip['iccid']} ATIVADO com sucesso! msisdn={msisdn}")
+                            await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+                                "status": ChipStatus.ativado.value, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+                            }})
+                            line_doc = {
+                                "numero": msisdn or "Pendente",
+                                "status": "ativo",
+                                "cliente_id": doc["cliente_id"],
+                                "chip_id": doc["chip_id"],
+                                "plano_id": doc.get("plano_id"),
+                                "oferta_id": doc.get("oferta_id"),
+                                "msisdn": msisdn,
+                                "created_at": datetime.now(timezone.utc),
+                            }
+                            existing_line = await db.linhas.find_one({"chip_id": doc["chip_id"]})
+                            if not existing_line:
+                                await db.linhas.insert_one(line_doc)
+                            elif msisdn and (not existing_line.get("msisdn") or existing_line.get("msisdn") != msisdn):
+                                # Linha ja existe mas sem MSISDN ou desatualizada — atualizar
+                                await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {
+                                    "msisdn": msisdn, "numero": msisdn, "status": "ativo",
+                                }})
+                            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                                "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+                            }})
+                            await create_log("ativacao", f"Self-service ativacao confirmada pos-verificacao: {cliente['nome']} - chip {chip['iccid']} - {msisdn}", None, "self-service")
+                            if email_service.is_configured:
+                                cliente_email = cliente.get("email")
+                                if cliente_email:
+                                    try:
+                                        await email_service.send_ativacao_sucesso(
+                                            to_email=cliente_email, cliente_nome=cliente["nome"],
+                                            numero=msisdn, plano_nome=plano.get("nome") if plano else None,
+                                            iccid=chip["iccid"],
+                                        )
+                                    except Exception:
+                                        pass
+                            return  # Ativacao OK, nao marcar como erro
+                except Exception as e:
+                    logger.warning(f"Verificacao pos-erro falhou: {e}")
+
+            # Se chegou aqui, realmente falhou
+            retry_count = doc.get("retry_count", 0)
+            retry_errors = doc.get("retry_errors", [])
+            retry_errors.append({"msg": str(err_msg), "code": str(error_code) if error_code else None, "at": datetime.now(timezone.utc).isoformat()})
+
+            if is_timeout_or_retryable and retry_count < RETRY_MAX_ATTEMPTS:
+                delay_min = _get_next_retry_delay(retry_count)
+                next_retry = datetime.now(timezone.utc) + timedelta(minutes=delay_min)
+                await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                    "status": "retry_pendente",
+                    "erro_msg": str(err_msg),
+                    "error_code": str(error_code) if error_code else None,
+                    "retry_count": retry_count + 1,
+                    "next_retry_at": next_retry,
+                    "last_retry_at": datetime.now(timezone.utc),
+                    "retry_errors": retry_errors,
+                }})
+                await create_log("retry", f"Self-service retry agendado ({retry_count + 1}/{RETRY_MAX_ATTEMPTS}) em {delay_min}min: {err_msg}", None, "self-service")
+                logger.info(f"Retry agendado para ativacao {doc['_id']} em {delay_min} minutos (tentativa {retry_count + 1})")
+            else:
+                await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                    "status": "erro", "erro_msg": str(err_msg),
+                    "error_code": str(error_code) if error_code else None,
+                    "retry_count": retry_count,
+                    "retry_errors": retry_errors,
+                }})
+                reason = "nao retentavel" if not is_timeout_or_retryable else f"max retries ({RETRY_MAX_ATTEMPTS}) atingido"
+                await create_log("erro", f"Self-service ativacao falhou ({reason}): {err_msg}", None, "self-service")
+    except Exception as e:
+        logger.error(f"Erro na ativacao self-service: {e}")
+        error_str = str(e)
+        retry_count = doc.get("retry_count", 0)
+        is_retryable = _is_retryable_error(error_str)
+        retry_errors = doc.get("retry_errors", [])
+        retry_errors.append({"msg": error_str, "code": None, "at": datetime.now(timezone.utc).isoformat()})
+
+        # Verificacao pos-erro (exception): consultar operadora
+        if is_retryable:
+            try:
+                chip = await db.chips.find_one({"_id": ObjectId(doc["chip_id"])})
+                if chip:
+                    await asyncio.sleep(5)
+                    check_result = await operadora_service.consultar_linha(
+                        iccid=chip["iccid"], db=db, user_id="self-service", user_name="self-service"
+                    )
+                    if check_result.success and check_result.data:
+                        check_status = check_result.data.get("status", "").lower()
+                        if check_status in ("ativo", "ativa", "active"):
+                            msisdn = check_result.data.get("msisdn") or check_result.data.get("numero")
+                            logger.info(f"Verificacao pos-exception: chip {chip['iccid']} ATIVADO! msisdn={msisdn}")
+                            cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+                            await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+                                "status": ChipStatus.ativado.value, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+                            }})
+                            existing_line = await db.linhas.find_one({"chip_id": doc["chip_id"]})
+                            if not existing_line:
+                                await db.linhas.insert_one({
+                                    "numero": msisdn or "Pendente", "status": "ativo",
+                                    "cliente_id": doc["cliente_id"], "chip_id": doc["chip_id"],
+                                    "plano_id": doc.get("plano_id"), "oferta_id": doc.get("oferta_id"),
+                                    "msisdn": msisdn, "created_at": datetime.now(timezone.utc),
+                                })
+                            elif msisdn and (not existing_line.get("msisdn") or existing_line.get("msisdn") != msisdn):
+                                await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {
+                                    "msisdn": msisdn, "numero": msisdn, "status": "ativo",
+                                }})
+                            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                                "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+                            }})
+                            await create_log("ativacao", f"Self-service ativacao confirmada pos-exception: {cliente['nome'] if cliente else '?'} - chip {chip['iccid']}", None, "self-service")
+                            # Envio email de ativacao (tambem quando recuperado via pos-exception)
+                            if email_service.is_configured and cliente and cliente.get("email"):
+                                try:
+                                    plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])}) if doc.get("plano_id") else None
+                                    await email_service.send_ativacao_sucesso(
+                                        to_email=cliente["email"],
+                                        cliente_nome=cliente["nome"],
+                                        numero=msisdn,
+                                        plano_nome=plano.get("nome") if plano else None,
+                                        iccid=chip["iccid"],
+                                    )
+                                except Exception as ee:
+                                    logger.warning(f"Erro ao enviar email pos-exception: {ee}")
+                            return
+            except Exception as ve:
+                logger.warning(f"Verificacao pos-exception falhou: {ve}")
+
+        if is_retryable and retry_count < RETRY_MAX_ATTEMPTS:
+            delay_min = _get_next_retry_delay(retry_count)
+            next_retry = datetime.now(timezone.utc) + timedelta(minutes=delay_min)
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": "retry_pendente", "erro_msg": error_str,
+                "retry_count": retry_count + 1,
+                "next_retry_at": next_retry,
+                "last_retry_at": datetime.now(timezone.utc),
+                "retry_errors": retry_errors,
+            }})
+            logger.info(f"Retry agendado (exception) para ativacao {doc['_id']} em {delay_min}min")
+        else:
+            await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": "erro", "erro_msg": error_str,
+                "retry_count": retry_count,
+                "retry_errors": retry_errors,
+            }})
+
+@api_router.post("/public/ativacao/{activation_id}/confirmar-pagamento")
+async def public_confirm_payment_manual(activation_id: str):
+    """Permite confirmacao manual do pagamento (para testes ou quando webhook nao funcionar)."""
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("aguardando_pagamento",):
+        raise HTTPException(status_code=400, detail=f"Status atual: {doc['status']}. Nao e possivel confirmar pagamento.")
+
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "pago"}})
+    doc["status"] = "pago"
+    await _trigger_selfservice_activation(doc)
+
+    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+    return {"success": True, "status": updated["status"], "message": "Pagamento confirmado. Ativacao em andamento."}
+
+# --- Admin: Manage Self-Service Activations ---
+@api_router.get("/ativacoes-selfservice")
+async def admin_list_selfservice_activations(request: Request, status: Optional[str] = None):
+    """Lista ativacoes self-service para o admin gerenciar."""
+    await require_admin(request)
+    query = {}
+    if status:
+        query["status"] = status
+    docs = await db.ativacoes_selfservice.find(query).sort("created_at", -1).limit(200).to_list(200)
+    result = []
+    for d in docs:
+        cliente_nome = None
+        if d.get("cliente_id"):
+            cl = await db.clientes.find_one({"_id": ObjectId(d["cliente_id"])})
+            if cl:
+                cliente_nome = cl["nome"]
+        plano_nome = None
+        if d.get("plano_id"):
+            plano = await db.planos.find_one({"_id": ObjectId(d["plano_id"])})
+            if plano:
+                plano_nome = plano["nome"]
+        oferta_nome = None
+        if d.get("oferta_id"):
+            oferta = await db.ofertas.find_one({"_id": ObjectId(d["oferta_id"])})
+            if oferta:
+                oferta_nome = oferta["nome"]
+        result.append({
+            "id": str(d["_id"]),
+            "cliente_id": d.get("cliente_id"),
+            "cliente_nome": cliente_nome,
+            "iccid": d.get("iccid"),
+            "plano_nome": plano_nome,
+            "oferta_nome": oferta_nome,
+            "valor_original": d.get("valor_original", 0),
+            "desconto": d.get("desconto", 0),
+            "valor_final": d.get("valor_final", 0),
+            "billing_type": d.get("billing_type"),
+            "status": d.get("status"),
+            "msisdn": d.get("msisdn"),
+            "erro_msg": d.get("erro_msg"),
+            "error_code": d.get("error_code"),
+            "retry_count": d.get("retry_count", 0),
+            "next_retry_at": d.get("next_retry_at").isoformat() if d.get("next_retry_at") else None,
+            "last_retry_at": d.get("last_retry_at").isoformat() if d.get("last_retry_at") else None,
+            "retry_errors": d.get("retry_errors", []),
+            "revendedor_id": d.get("revendedor_id"),
+            "created_at": d.get("created_at", datetime.now(timezone.utc)).isoformat(),
+        })
+    return result
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/confirmar")
+async def admin_confirm_selfservice(activation_id: str, request: Request):
+    """Admin confirma pagamento manualmente e dispara ativacao."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("aguardando_pagamento",):
+        raise HTTPException(status_code=400, detail=f"Status atual: {doc['status']}")
+
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "pago"}})
+    doc["status"] = "pago"
+    await _trigger_selfservice_activation(doc)
+
+    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+    await create_log("ativacao", f"Admin confirmou pagamento self-service: {doc.get('iccid')}", user["id"], user["name"])
+    return {"success": True, "status": updated["status"]}
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/cancelar")
+async def admin_cancel_selfservice(activation_id: str, request: Request):
+    """Admin cancela ativacao self-service e libera o chip."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] in ("ativo",):
+        raise HTTPException(status_code=400, detail="Ativacao ja foi concluida")
+
+    # Release chip back to available
+    if doc.get("chip_id"):
+        await db.chips.update_one({"_id": ObjectId(doc["chip_id"])}, {"$set": {"status": "disponivel", "cliente_id": None}})
+
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "cancelado"}})
+    await create_log("ativacao", f"Admin cancelou ativacao self-service: {doc.get('iccid')}", user["id"], user["name"])
+    return {"success": True, "message": "Ativacao cancelada e chip liberado."}
+
+
+# ==================== RETRY AUTOMATICO ====================
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/retry")
+async def admin_retry_selfservice(activation_id: str, request: Request):
+    """Admin dispara retry manual de uma ativacao com erro ou retry_pendente."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("erro", "retry_pendente"):
+        raise HTTPException(status_code=400, detail=f"Apenas ativacoes com status 'erro' ou 'retry_pendente' podem ser retentadas. Status atual: {doc['status']}")
+
+    # Reset para ativando e disparar
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+        "status": "ativando", "next_retry_at": None,
+    }})
+    doc["status"] = "ativando"
+    await _trigger_selfservice_activation(doc)
+    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+    await create_log("retry", f"Admin disparou retry manual: {doc.get('iccid')} (tentativa {doc.get('retry_count', 0) + 1})", user["id"], user["name"])
+    return {
+        "success": True,
+        "status": updated["status"],
+        "retry_count": updated.get("retry_count", 0),
+        "message": f"Retry disparado. Status: {updated['status']}",
+    }
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/sincronizar")
+async def admin_sincronizar_selfservice(activation_id: str, request: Request):
+    """Admin consulta a Ta Telecom para buscar MSISDN e atualizar linha/chip/cliente.
+
+    Usado para corrigir ativacoes onde o chip foi ativado na operadora mas o
+    sistema nao conseguiu salvar o MSISDN (ex: bug historico do new_status).
+    Tambem reenvia o email de ativacao ao cliente.
+    """
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+
+    chip = await db.chips.find_one({"_id": ObjectId(doc["chip_id"])})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    # Consulta a operadora
+    check = await operadora_service.consultar_linha(
+        iccid=chip["iccid"], db=db, user_id=user["id"], user_name=user["name"]
+    )
+    if not check.success or not check.data:
+        raise HTTPException(status_code=400, detail=f"Nao foi possivel consultar a operadora: {check.message}")
+
+    msisdn = check.data.get("msisdn") or check.data.get("numero")
+    status_operadora = (check.data.get("status") or "").lower()
+    is_portability = doc.get("portability", False)
+
+    if not msisdn:
+        if is_portability and doc.get("status") == "portabilidade_em_andamento":
+            raise HTTPException(status_code=400, detail="A portabilidade ainda nao foi concluida na Ta Telecom. Tente novamente em algumas horas.")
+        raise HTTPException(status_code=400, detail="Operadora nao retornou o MSISDN. Tente novamente em alguns minutos.")
+
+    # Atualiza chip
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+        "status": ChipStatus.ativado.value, "cliente_id": doc["cliente_id"], "msisdn": msisdn,
+    }})
+
+    # Atualiza/insere linha
+    existing_line = await db.linhas.find_one({"chip_id": doc["chip_id"]})
+    if existing_line:
+        await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {
+            "msisdn": msisdn, "numero": msisdn, "status": "ativo", "cliente_id": doc["cliente_id"],
+        }})
+    else:
+        plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])}) if doc.get("plano_id") else None
+        await db.linhas.insert_one({
+            "numero": msisdn, "status": "ativo",
+            "cliente_id": doc["cliente_id"], "chip_id": doc["chip_id"],
+            "plano_id": doc.get("plano_id"), "oferta_id": doc.get("oferta_id"),
+            "msisdn": msisdn, "created_at": datetime.now(timezone.utc),
+        })
+
+    # Atualiza ativacao
+    await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {
+        "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+    }})
+
+    # Envia email de ativacao (se ainda nao foi enviado)
+    email_sent = False
+    if email_service.is_configured and cliente.get("email"):
+        try:
+            plano = await db.planos.find_one({"_id": ObjectId(doc["plano_id"])}) if doc.get("plano_id") else None
+            await email_service.send_ativacao_sucesso(
+                to_email=cliente["email"],
+                cliente_nome=cliente["nome"],
+                numero=msisdn,
+                plano_nome=plano.get("nome") if plano else None,
+                iccid=chip["iccid"],
+            )
+            email_sent = True
+        except Exception as ee:
+            logger.warning(f"Erro ao enviar email de ativacao na sincronizacao: {ee}")
+
+    await create_log("ativacao", f"Admin sincronizou ativacao self-service: {cliente['nome']} - chip {chip['iccid']} - MSISDN {msisdn}{' (email enviado)' if email_sent else ''}", user["id"], user["name"])
+
+    return {
+        "success": True,
+        "msisdn": msisdn,
+        "status_operadora": status_operadora,
+        "email_enviado": email_sent,
+        "message": f"Sincronizado! MSISDN {msisdn} gravado na linha.{' Email de ativacao reenviado.' if email_sent else ''}",
+    }
+
+@api_router.post("/clientes/{cliente_id}/sincronizar-com-ta")
+async def sincronizar_cliente_com_ta(cliente_id: str, request: Request):
+    """Sincroniza um cliente especifico com a Ta Telecom — usa para casos onde
+    a ativacao foi feita manualmente no painel da Ta e o sistema nao foi atualizado.
+
+    Cobre cenarios:
+    - Cliente nao tem linha (caso Murilo: chip reservado, sem linha registrada)
+    - Linha existe mas sem MSISDN
+    - Status do chip esta "reservado" mas Ta diz que esta ativo
+    """
+    user = await require_admin(request)
+    if not ObjectId.is_valid(cliente_id):
+        raise HTTPException(status_code=400, detail="ID invalido")
+    cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    # Acha o chip atrelado a esse cliente (pode estar como reservado/ativado)
+    chip = await db.chips.find_one({"cliente_id": cliente_id})
+    if not chip:
+        # Tenta buscar via ativacao self-service como fallback
+        ativ = await db.ativacoes_selfservice.find_one({"cliente_id": cliente_id})
+        if ativ and ativ.get("chip_id"):
+            chip = await db.chips.find_one({"_id": ObjectId(ativ["chip_id"])})
+    if not chip or not chip.get("iccid"):
+        raise HTTPException(status_code=404, detail="Cliente nao tem chip atrelado. Verifique o cadastro.")
+
+    iccid = chip["iccid"]
+
+    # Consulta Ta Telecom
+    check = await operadora_service.consultar_linha(iccid=iccid, db=db, user_id=user["id"], user_name=user["name"])
+    if not check.success or not check.data:
+        raise HTTPException(status_code=400, detail=f"Nao foi possivel consultar a Ta: {check.message}")
+
+    raw = check.data
+    inner = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+    msisdn = (
+        check.data.get("msisdn") or check.data.get("numero")
+        or inner.get("msisdn") or inner.get("numero")
+        or inner.get("numero_contrato")
+    )
+    status_ta = str(inner.get("status") or raw.get("status") or "").upper().strip()
+
+    if not msisdn:
+        raise HTTPException(status_code=400, detail=f"Ta retornou status '{status_ta or '?'}' mas nao tem numero. Tente em alguns minutos.")
+
+    # Atualiza chip
+    await db.chips.update_one({"_id": chip["_id"]}, {"$set": {
+        "status": ChipStatus.ativado.value, "cliente_id": cliente_id, "msisdn": msisdn,
+    }})
+
+    # Cria/atualiza linha
+    existing_line = await db.linhas.find_one({"chip_id": str(chip["_id"])})
+    if not existing_line:
+        existing_line = await db.linhas.find_one({"chip_id": chip["_id"]})
+
+    if existing_line:
+        await db.linhas.update_one({"_id": existing_line["_id"]}, {"$set": {
+            "msisdn": msisdn, "numero": msisdn, "status": "ativo", "cliente_id": cliente_id,
+        }})
+        line_action = "atualizada"
+    else:
+        # Pega plano da ativacao self-service ou do cadastro do cliente
+        ativ = await db.ativacoes_selfservice.find_one({"cliente_id": cliente_id})
+        plano_id = (ativ or {}).get("plano_id") or cliente.get("plano_id")
+        oferta_id = (ativ or {}).get("oferta_id") or cliente.get("oferta_id")
+        await db.linhas.insert_one({
+            "numero": msisdn, "status": "ativo",
+            "cliente_id": cliente_id, "chip_id": str(chip["_id"]),
+            "plano_id": plano_id, "oferta_id": oferta_id,
+            "msisdn": msisdn, "created_at": datetime.now(timezone.utc),
+        })
+        line_action = "criada"
+
+    # Marca ativacao self-service como ativa, se existir
+    ativ = await db.ativacoes_selfservice.find_one({"cliente_id": cliente_id})
+    if ativ:
+        await db.ativacoes_selfservice.update_one({"_id": ativ["_id"]}, {"$set": {
+            "status": "ativo", "msisdn": msisdn, "erro_msg": None,
+        }})
+
+    # Envia email de ativacao
+    email_sent = False
+    if email_service.is_configured and cliente.get("email"):
+        try:
+            plano_id = (ativ or {}).get("plano_id") or cliente.get("plano_id")
+            plano = None
+            if plano_id and ObjectId.is_valid(str(plano_id)):
+                plano = await db.planos.find_one({"_id": ObjectId(str(plano_id))})
+            await email_service.send_ativacao_sucesso(
+                to_email=cliente["email"],
+                cliente_nome=cliente["nome"],
+                numero=msisdn,
+                plano_nome=(plano or {}).get("nome"),
+                iccid=iccid,
+            )
+            email_sent = True
+        except Exception as ee:
+            logger.warning(f"Erro ao enviar email pos-sincronizacao: {ee}")
+
+    await create_log("ativacao", f"Admin sincronizou cliente com Ta: {cliente['nome']} - chip {iccid} - MSISDN {msisdn} (linha {line_action}{', email enviado' if email_sent else ''})", user["id"], user["name"])
+
+    return {
+        "success": True,
+        "msisdn": msisdn,
+        "iccid": iccid,
+        "status_ta": status_ta,
+        "linha_action": line_action,
+        "email_enviado": email_sent,
+        "message": f"Pronto! Numero {msisdn} gravado, linha {line_action}{', email reenviado' if email_sent else ''}.",
+    }
+
+@api_router.get("/retry-queue")
+async def get_retry_queue(request: Request):
+    """Lista ativacoes na fila de retry automatico."""
+    await require_admin(request)
+    now = datetime.now(timezone.utc)
+
+    # Pendentes de retry
+    pending = await db.ativacoes_selfservice.find(
+        {"status": "retry_pendente"}
+    ).sort("next_retry_at", 1).to_list(100)
+
+    # Erros recentes (ultimas 24h) que nao sao retentaveis
+    errors = await db.ativacoes_selfservice.find({
+        "status": "erro",
+        "created_at": {"$gte": now - timedelta(hours=24)},
+    }).sort("created_at", -1).to_list(50)
+
+    queue_items = []
+    for d in pending + errors:
+        cliente_nome = None
+        if d.get("cliente_id"):
+            cl = await db.clientes.find_one({"_id": ObjectId(d["cliente_id"])})
+            if cl:
+                cliente_nome = cl["nome"]
+        next_retry = d.get("next_retry_at")
+        queue_items.append({
+            "id": str(d["_id"]),
+            "iccid": d.get("iccid"),
+            "cliente_nome": cliente_nome,
+            "status": d["status"],
+            "erro_msg": d.get("erro_msg"),
+            "error_code": d.get("error_code"),
+            "retry_count": d.get("retry_count", 0),
+            "max_retries": RETRY_MAX_ATTEMPTS,
+            "next_retry_at": next_retry.isoformat() if isinstance(next_retry, datetime) else next_retry,
+            "last_retry_at": d.get("last_retry_at").isoformat() if isinstance(d.get("last_retry_at"), datetime) else d.get("last_retry_at"),
+            "retry_errors": d.get("retry_errors", []),
+            "created_at": d.get("created_at", now).isoformat(),
+        })
+
+    stats = {
+        "retry_pendente": await db.ativacoes_selfservice.count_documents({"status": "retry_pendente"}),
+        "erro": await db.ativacoes_selfservice.count_documents({"status": "erro"}),
+        "ativando": await db.ativacoes_selfservice.count_documents({"status": "ativando"}),
+        "config": {
+            "max_retries": RETRY_MAX_ATTEMPTS,
+            "backoff_minutes": RETRY_BACKOFF_MINUTES,
+            "check_interval_seconds": RETRY_CHECK_INTERVAL_SECONDS,
+        },
+    }
+    return {"queue": queue_items, "stats": stats}
+
+
+async def _process_retry_queue():
+    """Background task: processa fila de retry automatico."""
+    while True:
+        try:
+            await asyncio.sleep(RETRY_CHECK_INTERVAL_SECONDS)
+            now = datetime.now(timezone.utc)
+
+            # Buscar ativacoes pendentes de retry cujo horario ja passou
+            pending = await db.ativacoes_selfservice.find({
+                "status": "retry_pendente",
+                "next_retry_at": {"$lte": now},
+            }).sort("next_retry_at", 1).to_list(10)
+
+            if not pending:
+                continue
+
+            logger.info(f"Retry worker: {len(pending)} ativacoes para processar")
+
+            for doc in pending:
+                try:
+                    iccid = doc.get("iccid", "?")
+                    retry_count = doc.get("retry_count", 0)
+                    logger.info(f"Retry worker: processando {iccid} (tentativa {retry_count}/{RETRY_MAX_ATTEMPTS})")
+
+                    # Setar como ativando
+                    await db.ativacoes_selfservice.update_one(
+                        {"_id": doc["_id"]},
+                        {"$set": {"status": "ativando"}}
+                    )
+                    doc["status"] = "ativando"
+
+                    # Disparar ativacao
+                    await _trigger_selfservice_activation(doc)
+
+                    # Verificar resultado
+                    updated = await db.ativacoes_selfservice.find_one({"_id": doc["_id"]})
+                    new_status = updated["status"] if updated else "erro"
+                    logger.info(f"Retry worker: {iccid} -> status {new_status}")
+
+                    # Pequeno delay entre retries para nao sobrecarregar a operadora
+                    await asyncio.sleep(5)
+                except Exception as e:
+                    logger.error(f"Retry worker erro ao processar {doc.get('iccid', '?')}: {e}")
+                    await asyncio.sleep(2)
+
+        except asyncio.CancelledError:
+            logger.info("Retry worker cancelado")
+            break
+        except Exception as e:
+            logger.error(f"Retry worker erro geral: {e}")
+            await asyncio.sleep(30)
+
+
+# ==================== DASHBOARD STATS ====================
+@api_router.get("/dashboard/stats")
+async def get_dashboard_stats(request: Request):
+    await get_current_user(request)
+    total_clientes = await db.clientes.count_documents({})
+    clientes_ativos = await db.clientes.count_documents({"status": {"$in": ["ativo"]}})
+    clientes_bloqueados = await db.clientes.count_documents({"status": {"$in": ["bloqueado", "inativo"]}})
+    total_chips = await db.chips.count_documents({})
+    chips_disponiveis = await db.chips.count_documents({"status": "disponivel"})
+    chips_ativados = await db.chips.count_documents({"status": "ativado"})
+    chips_bloqueados = await db.chips.count_documents({"status": "bloqueado"})
+    total_linhas = await db.linhas.count_documents({})
+    linhas_ativas = await db.linhas.count_documents({"status": "ativo"})
+    linhas_pendentes = await db.linhas.count_documents({"status": "pendente"})
+    linhas_bloqueadas = await db.linhas.count_documents({"status": "bloqueado"})
+    total_planos = await db.planos.count_documents({})
+    total_ofertas = await db.ofertas.count_documents({})
+    ofertas_ativas = await db.ofertas.count_documents({"ativo": True})
+    recent_logs = await db.logs.find({}).sort("created_at", -1).limit(5).to_list(5)
+    return {
+        "clientes": {"total": total_clientes, "ativos": clientes_ativos, "bloqueados": clientes_bloqueados},
+        "chips": {"total": total_chips, "disponiveis": chips_disponiveis, "ativados": chips_ativados, "bloqueados": chips_bloqueados},
+        "linhas": {"total": total_linhas, "ativas": linhas_ativas, "pendentes": linhas_pendentes, "bloqueadas": linhas_bloqueadas},
+        "planos": {"total": total_planos},
+        "ofertas": {"total": total_ofertas, "ativas": ofertas_ativas},
+        "operadora": operadora_service.get_config_status(),
+        "recent_logs": [{
+            "id": str(log["_id"]), "action": log["action"], "details": log["details"],
+            "created_at": log.get("created_at", datetime.now(timezone.utc)).isoformat()
+        } for log in recent_logs]
+    }
+
+# ==================== BLOCK REASONS ENDPOINT ====================
+@api_router.get("/operadora/motivos-bloqueio")
+async def get_block_reasons(request: Request):
+    await get_current_user(request)
+    return {"reasons": [{"code": k, "label": v} for k, v in BLOCK_REASONS.items()]}
+
+# ==================== SEED DATA ====================
+async def seed_admin():
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@mvno.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    existing = await db.usuarios.find_one({"email": admin_email})
+    if existing is None:
+        await db.usuarios.insert_one({
+            "email": admin_email, "password_hash": hash_password(admin_password),
+            "name": "Administrador", "role": "admin",
+            "created_at": datetime.now(timezone.utc)
+        })
+        logger.info(f"Admin user created: {admin_email}")
+    elif not verify_password(admin_password, existing["password_hash"]):
+        await db.usuarios.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+        logger.info(f"Admin password updated: {admin_email}")
+    memory_dir = Path("/app/memory")
+    memory_dir.mkdir(exist_ok=True)
+    with open(memory_dir / "test_credentials.md", "w") as f:
+        f.write(f"# Test Credentials\n\n## Admin User\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: admin\n")
+
+async def seed_sample_data():
+    existing_plans = await db.planos.count_documents({})
+    if existing_plans > 0:
+        return
+    plans = [
+        {"nome": "Plano 5GB", "franquia": "5GB", "descricao": "Plano basico com 5GB", "plan_code": "PLAN_5GB", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 10GB", "franquia": "10GB", "descricao": "Plano essencial com 10GB", "plan_code": "PLAN_10GB", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 20GB", "franquia": "20GB", "descricao": "Plano plus com 20GB", "plan_code": "PLAN_20GB", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Plano 50GB", "franquia": "50GB", "descricao": "Plano premium com 50GB", "plan_code": "PLAN_50GB", "created_at": datetime.now(timezone.utc)},
+    ]
+    result = await db.planos.insert_many(plans)
+    plan_ids = [str(pid) for pid in result.inserted_ids]
+    offers = [
+        {"nome": "Chip 5GB Basico", "plano_id": plan_ids[0], "valor": 29.90, "descricao": "Oferta basica", "ativo": True, "created_at": datetime.now(timezone.utc)},
+        {"nome": "Chip 10GB Essencial", "plano_id": plan_ids[1], "valor": 49.90, "descricao": "Oferta essencial", "ativo": True, "created_at": datetime.now(timezone.utc)},
+        {"nome": "Chip 20GB Plus", "plano_id": plan_ids[2], "valor": 79.90, "descricao": "Oferta plus", "ativo": True, "created_at": datetime.now(timezone.utc)},
+        {"nome": "Chip 50GB Premium", "plano_id": plan_ids[3], "valor": 119.90, "descricao": "Oferta premium", "ativo": True, "created_at": datetime.now(timezone.utc)},
+    ]
+    result = await db.ofertas.insert_many(offers)
+    offer_ids = [str(oid) for oid in result.inserted_ids]
+    clients = [
+        {"nome": "Joao Silva", "tipo_pessoa": "pf", "documento": "52998224725", "telefone": "11987654321",
+         "data_nascimento": "1990-05-15", "cep": "01001000", "endereco": "Praca da Se",
+         "numero_endereco": "100", "bairro": "Se", "cidade": "Sao Paulo", "estado": "SP",
+         "city_code": "3550308", "complemento": None, "status": "ativo", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Maria Santos", "tipo_pessoa": "pf", "documento": "11144477735", "telefone": "11912345678",
+         "data_nascimento": "1985-08-20", "cep": "04538133", "endereco": "Av Brigadeiro Faria Lima",
+         "numero_endereco": "3477", "bairro": "Itaim Bibi", "cidade": "Sao Paulo", "estado": "SP",
+         "city_code": "3550308", "complemento": "Sala 501", "status": "ativo", "created_at": datetime.now(timezone.utc)},
+        {"nome": "Pedro Oliveira", "tipo_pessoa": "pf", "documento": "35379838867", "telefone": "21999876543",
+         "data_nascimento": "1992-03-10", "cep": "20040020", "endereco": "Av Rio Branco",
+         "numero_endereco": "156", "bairro": "Centro", "cidade": "Rio de Janeiro", "estado": "RJ",
+         "city_code": "3304557", "complemento": None, "status": "ativo", "created_at": datetime.now(timezone.utc)},
+    ]
+    await db.clientes.insert_many(clients)
+    chips = [
+        {"iccid": "8955010012345678901", "status": "disponivel", "oferta_id": offer_ids[0], "cliente_id": None, "msisdn": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678902", "status": "disponivel", "oferta_id": offer_ids[1], "cliente_id": None, "msisdn": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678903", "status": "disponivel", "oferta_id": offer_ids[2], "cliente_id": None, "msisdn": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678904", "status": "disponivel", "oferta_id": offer_ids[3], "cliente_id": None, "msisdn": None, "created_at": datetime.now(timezone.utc)},
+        {"iccid": "8955010012345678905", "status": "disponivel", "oferta_id": offer_ids[0], "cliente_id": None, "msisdn": None, "created_at": datetime.now(timezone.utc)},
+    ]
+    await db.chips.insert_many(chips)
+    logger.info("Sample data seeded successfully with Ta Telecom structure")
+
+@app.on_event("startup")
+async def startup_event():
+    await db.usuarios.create_index("email", unique=True)
+    await db.clientes.create_index("documento", unique=True, sparse=True)
+    await db.chips.create_index("iccid", unique=True)
+    await db.login_attempts.create_index("identifier")
+    await db.logs.create_index([("created_at", -1)])
+    await db.cobrancas.create_index([("cliente_id", 1)])
+    await db.cobrancas.create_index([("status", 1)])
+    await db.cobrancas.create_index("asaas_payment_id", sparse=True)
+    await db.assinaturas.create_index([("cliente_id", 1)])
+    await db.assinaturas.create_index([("status", 1)])
+    await db.ativacoes_selfservice.create_index([("status", 1)])
+    await db.ativacoes_selfservice.create_index([("iccid", 1)])
+    await db.ativacoes_selfservice.create_index([("status", 1), ("next_retry_at", 1)])
+    await seed_admin()
+    await seed_sample_data()
+    # Load configs from DB (survives restarts/redeploys)
+    await asaas_service.load_config_from_db(db)
+    await operadora_service.load_config_from_db(db)
+    # Cleanup: fix legacy lines with status "ok" -> "ativo"
+    try:
+        fix_result = await db.linhas.update_many({"status": "ok"}, {"$set": {"status": "ativo"}})
+        if fix_result.modified_count > 0:
+            logger.info(f"Startup cleanup: {fix_result.modified_count} linhas corrigidas de 'ok' para 'ativo'")
+        # Cleanup: fix lines stuck as "pendente" where client is "ativo"
+        active_clients = await db.clientes.find({"status": "ativo"}, {"_id": 1}).to_list(5000)
+        active_ids = [str(c["_id"]) for c in active_clients]
+        if active_ids:
+            fix_pending = await db.linhas.update_many(
+                {"status": "pendente", "cliente_id": {"$in": active_ids}},
+                {"$set": {"status": "ativo"}}
+            )
+            if fix_pending.modified_count > 0:
+                logger.info(f"Startup cleanup: {fix_pending.modified_count} linhas 'pendente' corrigidas para 'ativo' (cliente ativo)")
+    except Exception as e:
+        logger.warning(f"Startup cleanup error (non-fatal): {e}")
+    # Iniciar worker de retry automatico em background
+    asyncio.create_task(_process_retry_queue())
+    logger.info("Application started successfully (retry worker ativo)")
+
+app.include_router(api_router)
+
+# Registrar router Operacional (novo modulo)
+from routes.operacional import router as operacional_router, init as init_operacional
+init_operacional(db=db, get_current_user=get_current_user, require_admin=require_admin, create_log=create_log)
+api_router_v2 = APIRouter(prefix="/api")
+api_router_v2.include_router(operacional_router)
+app.include_router(api_router_v2)
+
+# Registrar router Demo (rastreamento publico de acessos)
+from routes.demo import router as demo_router, init as init_demo, get_stats_data as demo_get_stats
+init_demo(db=db, require_admin=require_admin)
+api_router_demo = APIRouter(prefix="/api")
+api_router_demo.include_router(demo_router)
+app.include_router(api_router_demo)
+
+# Endpoint admin protegido para ver estatisticas da demo
+@app.get("/api/demo-admin/stats")
+async def demo_admin_stats(current_user: dict = Depends(require_admin)):
+    return await demo_get_stats()
+
+# Portfolio publico HomeOn — rastreamento de cliques
+from routes.homeon import router as homeon_router, init as init_homeon, get_stats_data as homeon_get_stats
+init_homeon(db=db, require_admin=require_admin)
+api_router_homeon = APIRouter(prefix="/api")
+api_router_homeon.include_router(homeon_router)
+app.include_router(api_router_homeon)
+
+@app.get("/api/homeon-admin/stats")
+async def homeon_admin_stats(current_user: dict = Depends(require_admin)):
+    return await homeon_get_stats()
+
+# Z-API WhatsApp - envios em lote de cobrancas
+from routes.whatsapp import router as whatsapp_router, init as init_whatsapp
+init_whatsapp(db=db, get_current_user=get_current_user, require_admin=require_admin, create_log=create_log)
+api_router_whatsapp = APIRouter(prefix="/api")
+api_router_whatsapp.include_router(whatsapp_router)
+app.include_router(api_router_whatsapp)
+
+# Carrega config Z-API no startup
+from services.zapi_service import zapi_service as _zapi_service
+@app.on_event("startup")
+async def _load_zapi_config():
+    try:
+        await _zapi_service.load_config(db)
+    except Exception as e:
+        logger.warning(f"Falha ao carregar config Z-API: {e}")
+
+# Download endpoint for VPS deploy package
+@app.get("/download/deploy-package")
+async def download_deploy_package():
+    file_path = Path(__file__).parent.parent / "deploy" / "mvno-vps-deploy.tar.gz"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Pacote de deploy nao encontrado")
+    return FileResponse(path=str(file_path), filename="mvno-vps-deploy.tar.gz", media_type="application/gzip")
+
+frontend_url = os.environ.get('FRONTEND_URL', os.environ.get('CORS_ORIGINS', '*'))
+if frontend_url == '*':
+    origins = ["*"]
+    app.add_middleware(CORSMiddleware, allow_credentials=False, allow_origins=origins, allow_methods=["*"], allow_headers=["*"])
+else:
+    origins = [o.strip() for o in frontend_url.split(",")]
+    app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=origins, allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()

@@ -1,0 +1,126 @@
+{
+  "project_name": "HELP4PRIME MVNO",
+  "theme_and_archetype": {
+    "theme": "dark",
+    "archetype": "Archetype 4: Swiss & High-Contrast (Tech/B2B)",
+    "description": "A sleek, authoritative dark mode inspired by Linear.app and Betterstack. Utilizes deep tinted greys (Zinc), stark white for high contrast typography, and WhatsApp Green / Electric Blue as kinetic triggers to drive conversions."
+  },
+  "typography": {
+    "headings": {
+      "family": "Outfit",
+      "weights": ["light", "bold", "black"],
+      "sizes": {
+        "h1": "text-5xl md:text-6xl tracking-tight",
+        "h2": "text-3xl md:text-4xl tracking-tight",
+        "h3": "text-xl md:text-2xl tracking-tight",
+        "h4": "text-lg md:text-xl font-bold"
+      },
+      "rules": ["Never use Inter", "Never center align by default", "Use leading-none for H1/H2"]
+    },
+    "body": {
+      "family": "Manrope",
+      "weights": ["regular", "medium"],
+      "sizes": {
+        "large": "text-lg leading-relaxed text-zinc-300",
+        "base": "text-base leading-relaxed text-zinc-400",
+        "small": "text-sm text-zinc-500",
+        "overline": "text-xs font-bold uppercase tracking-[0.2em] text-blue-500"
+      }
+    }
+  },
+  "color_palette": {
+    "backgrounds": {
+      "base": "bg-zinc-950",
+      "surface": "bg-zinc-900/50",
+      "surface_elevated": "bg-zinc-800/80",
+      "glass": "bg-zinc-950/60 backdrop-blur-2xl"
+    },
+    "text": {
+      "primary": "text-white",
+      "secondary": "text-zinc-400",
+      "muted": "text-zinc-500"
+    },
+    "borders": {
+      "default": "border-white/10",
+      "hover": "border-white/20",
+      "accent": "border-blue-500/50"
+    },
+    "accents": {
+      "primary_cta": "bg-[#25D366] text-zinc-950 hover:bg-[#1DA851]", 
+      "secondary_cta": "bg-zinc-900 text-white border border-white/10 hover:bg-zinc-800",
+      "highlight": "text-blue-500"
+    }
+  },
+  "layout_and_spacing": {
+    "grid_system": "The Tetris Grid (Bento mode) for features: grid-cols-1 md:grid-cols-12 gap-6 md:gap-8",
+    "section_padding": "py-24 md:py-32",
+    "container_padding": "px-6 md:px-12 max-w-7xl mx-auto",
+    "card_padding": "p-8 md:p-10",
+    "border_radius": "rounded-2xl md:rounded-3xl (nested radii required for inner elements)"
+  },
+  "components": {
+    "navigation": {
+      "style": "Crystal Glassmorphism",
+      "classes": "fixed top-0 left-0 right-0 z-50 bg-zinc-950/70 backdrop-blur-xl border-b border-white/10",
+      "elements": ["Logo (Text: HELP4PRIME MVNO)", "Links (Features, Screenshots, Pricing)", "Primary CTA (WhatsApp)"]
+    },
+    "hero_section": {
+      "layout": "Asymmetrical 2-column on desktop (Text left, Mockup right)",
+      "background": "Use 'hero_bg_mesh' with bg-zinc-950/60 overlay to ensure text contrast",
+      "headline": "Complete MVNO Management System",
+      "ctas": [
+        { "label": "Fale no WhatsApp", "style": "primary_cta", "icon": "WhatsappLogo", "href": "https://wa.me/5511915322526" }
+      ],
+      "visual": "Floating 3D-like perspective or layered mockup using '/demo-dashboard.jpg'"
+    },
+    "features_bento": {
+      "layout": "Grid Cols 12. Mix spans: col-span-12 md:col-span-8, col-span-12 md:col-span-4",
+      "cards_style": "Neumorphic/Glass hybrid: bg-zinc-900/50 border border-white/10 rounded-3xl p-8 hover:-translate-y-1 transition-transform",
+      "features_to_include": [
+        { "title": "Client Management", "icon": "Users", "span": "col-span-12 md:col-span-4" },
+        { "title": "Billing System (Asaas)", "icon": "Receipt", "span": "col-span-12 md:col-span-8", "bg_image": "bento_texture" },
+        { "title": "Self-Service QR Code", "icon": "QrCode", "span": "col-span-12 md:col-span-6" },
+        { "title": "Client Portal (PWA)", "icon": "DeviceMobile", "span": "col-span-12 md:col-span-6" },
+        { "title": "Reseller Management", "icon": "Storefront", "span": "col-span-12 md:col-span-8" },
+        { "title": "Email Notifications", "icon": "EnvelopeSimple", "span": "col-span-12 md:col-span-4" }
+      ]
+    },
+    "screenshot_carousel": {
+      "style": "Full-width marquee or interactive Swiper gallery",
+      "images": ["/demo-clientes.jpg", "/demo-cobrancas.jpg", "/demo-ativacoes.jpg", "/demo-portal.jpg"],
+      "wrapper_classes": "w-full overflow-hidden py-12"
+    },
+    "pricing_section": {
+      "layout": "2 Cards (12-month vs 24-month) side by side",
+      "cards": [
+        { "plan": "12 Meses", "price": "R$ 600/mês", "style": "default glass card" },
+        { "plan": "24 Meses", "price": "R$ 500/mês", "style": "The Tracing Beam / Highlighted border-blue-500/50, scaled up slightly" }
+      ]
+    },
+    "whatsapp_fab": {
+      "description": "Fixed bottom-right WhatsApp floating action button for constant conversion access.",
+      "classes": "fixed bottom-8 right-8 z-50 rounded-full p-4 bg-[#25D366] text-black shadow-lg hover:scale-110 transition-transform"
+    }
+  },
+  "media_urls": {
+    "hero_bg_mesh": "https://static.prod-images.emergentagent.com/jobs/cd589222-e194-4fe9-a668-39f150d64e78/images/3af39f5b23d54e5628deb0c7ab99e2518e1bae1a7778e0ce0e241d461a3181c6.png",
+    "bento_texture": "https://static.prod-images.emergentagent.com/jobs/cd589222-e194-4fe9-a668-39f150d64e78/images/6e680e4ad0bbe651d02c5050d7d8bfe1eb16d30890e0e46ae99fbef39a0818a8.png",
+    "local_screenshots": [
+      "/demo-dashboard.jpg",
+      "/demo-clientes.jpg",
+      "/demo-cobrancas.jpg",
+      "/demo-ativacoes.jpg",
+      "/demo-portal.jpg"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Execute `yarn add @phosphor-icons/react framer-motion` before starting.",
+    "Use Phosphor Icons (e.g., WhatsappLogo, Users, Receipt, QrCode) with weight='duotone'.",
+    "Strictly follow the color palette: Avoid pure #000000. Use Zinc scale.",
+    "Apply `data-testid` to all interactive elements (buttons, links, forms).",
+    "The 24-month pricing card MUST be visually highlighted compared to the 12-month card.",
+    "Do NOT use 'Inter' font. Add Google Fonts links for 'Outfit' and 'Manrope' in index.html.",
+    "Ensure the hero background image has a dark overlay (`bg-zinc-950/60` or similar) to keep the text readable.",
+    "Local screenshots MUST be loaded exactly with the paths provided (e.g., <img src='/demo-dashboard.jpg' />) as they exist in the public directory."
+  ]
+}

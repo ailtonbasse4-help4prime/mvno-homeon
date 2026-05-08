@@ -1,0 +1,51 @@
+#!/bin/bash
+set -e
+echo "=== MVNO Manager - Atualizacao Segura ==="
+echo "PROTECAO: Este script NAO toca no Docker (CRM Atendimento)"
+echo ""
+
+echo "[0/6] Executando backup automatico antes de atualizar..."
+bash /opt/mvno-homeon/deploy/backup-mvno.sh || bash /tmp/mvno-homeon/deploy/backup-mvno.sh || echo "AVISO: Backup nao disponivel, continuando..."
+echo ""
+
+echo "[1/6] Baixando codigo atualizado..."
+cd /tmp/mvno-homeon && git pull
+
+echo "[2/6] Compilando frontend (producao - URLs relativas)..."
+cd /tmp/mvno-homeon/frontend && yarn install --silent
+REACT_APP_BACKEND_URL="" yarn build
+echo "Build OK - verificando URL..."
+if grep -q "chip-manager-3" build/static/js/main.*.js 2>/dev/null; then
+  echo "ERRO: Build ainda contem URL do preview! Abortando."
+  exit 1
+fi
+echo "URL OK - nenhuma referencia ao preview encontrada."
+
+echo "[3/6] Atualizando frontend MVNO..."
+sudo cp -r /tmp/mvno-homeon/frontend/build/* /var/www/mvno/frontend/
+
+echo "[4/6] Atualizando backend MVNO..."
+sudo cp /tmp/mvno-homeon/backend/server.py /opt/mvno-homeon/backend/server.py
+sudo cp -r /tmp/mvno-homeon/backend/services/* /opt/mvno-homeon/backend/services/
+sudo cp /tmp/mvno-homeon/backend/requirements.txt /opt/mvno-homeon/backend/requirements.txt
+sudo cp -r /tmp/mvno-homeon/deploy/* /opt/mvno-homeon/deploy/ 2>/dev/null || true
+echo "  Instalando dependencias Python..."
+cd /opt/mvno-homeon/backend && source /app/venv/bin/activate && pip install -q -r requirements.txt 2>/dev/null || echo "AVISO: Algumas dependencias podem ter falhado"
+
+echo "[5/6] Atualizando Nginx (proxy /api -> porta 3002)..."
+sudo cp /tmp/mvno-homeon/deploy/vps-backend/nginx-mvno.conf /etc/nginx/sites-enabled/app-ativacao || echo "AVISO: Nginx config nao copiada"
+sudo nginx -t && sudo systemctl reload nginx || echo "AVISO: Nginx reload falhou"
+
+echo "[6/6] Reiniciando backend MVNO..."
+kill $(pgrep -f "uvicorn server:app") 2>/dev/null || true
+sleep 2
+cd /opt/mvno-homeon/backend && source /app/venv/bin/activate && nohup uvicorn server:app --host 0.0.0.0 --port 3002 --reload > /var/log/mvno-backend.log 2>&1 &
+sleep 3
+tail -3 /var/log/mvno-backend.log
+
+echo ""
+echo "=== MVNO ATUALIZADO COM SUCESSO! ==="
+echo "Frontend: /var/www/mvno/frontend/"
+echo "Backend: porta 3002"
+echo "Nginx: /api -> 127.0.0.1:3002"
+echo "Docker CRM: INTOCADO"

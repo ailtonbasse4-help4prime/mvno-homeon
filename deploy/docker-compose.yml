@@ -1,0 +1,62 @@
+services:
+  # ===== MongoDB =====
+  mongo:
+    image: mongo:7
+    container_name: mvno-mongo
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===== Backend (FastAPI) =====
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mvno-backend
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - DB_NAME=${DB_NAME:-mvno_management}
+      - JWT_SECRET=${JWT_SECRET}
+      - USE_MOCK_API=${USE_MOCK_API:-false}
+      - TATELECOM_API_URL=${TATELECOM_API_URL}
+      - TATELECOM_USER_TOKEN=${TATELECOM_USER_TOKEN}
+      - TATELECOM_TIMEOUT=${TATELECOM_TIMEOUT:-30}
+      - ASAAS_API_KEY=${ASAAS_API_KEY:-}
+      - ASAAS_ENVIRONMENT=${ASAAS_ENVIRONMENT:-sandbox}
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ===== Frontend (React + Nginx) =====
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL:-https://seudominio.com.br}
+    container_name: mvno-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+
+volumes:
+  mongo_data:
+    driver: local

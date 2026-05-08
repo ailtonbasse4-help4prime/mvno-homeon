@@ -1,0 +1,18 @@
+[Unit]
+Description=MVNO Manager Backend (FastAPI)
+After=network.target mongod.service
+Wants=mongod.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/mvno-backend
+EnvironmentFile=/opt/mvno-backend/.env
+ExecStart=/opt/mvno-backend/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --workers 2
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

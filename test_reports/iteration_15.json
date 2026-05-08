@@ -1,0 +1,123 @@
+{
+  "summary": "Portal do Cliente testing completed successfully. All 13 backend API tests passed. Frontend portal login, dashboard, line expand/collapse, and logout all working correctly. Portal uses separate JWT token type ('portal') distinct from admin tokens.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Portal Login",
+        "issues": ["Phone input formatting limits to 11 digits - users with 13-digit phone numbers (including country code 55) need to enter only the last 11 digits. This is expected behavior for Brazilian phone format."]
+      }
+    ]
+  },
+  
+  "passed_tests": [
+    "POST /api/portal/login - Valid CPF+phone returns token and cliente data",
+    "POST /api/portal/login - Invalid CPF returns 401",
+    "POST /api/portal/login - Valid CPF with wrong phone returns 401",
+    "POST /api/portal/login - Missing fields returns 422",
+    "POST /api/portal/login - Alternative client login works",
+    "GET /api/portal/dashboard - Valid token returns linhas, cobrancas, cliente data",
+    "GET /api/portal/dashboard - No token returns 401",
+    "GET /api/portal/dashboard - Invalid token returns 401",
+    "GET /api/portal/dashboard - Admin token rejected (type != portal)",
+    "GET /api/portal/saldo/{numero} - Returns balance data (mock)",
+    "GET /api/portal/saldo/{numero} - No token returns 401",
+    "GET /api/portal/consumo/{numero} - Returns consumption data (mock)",
+    "GET /api/portal/consumo/{numero} - No token returns 401",
+    "Frontend: Portal login page renders at /portal with CPF and phone fields",
+    "Frontend: Form validation shows 'CPF deve ter 11 digitos' error",
+    "Frontend: Login with valid credentials redirects to /portal/dashboard",
+    "Frontend: Dashboard shows client name, CPF, phone number",
+    "Frontend: Dashboard shows 'Minhas Linhas' section with line status badges",
+    "Frontend: Line expand/collapse shows ICCID, Saldo de Dados, Consumo do Mes cards",
+    "Frontend: Logout button clears session and redirects to /portal",
+    "Frontend: Unauthenticated access to /portal/dashboard redirects to /portal"
+  ],
+  
+  "test_report_links": [
+    "/app/backend/tests/test_portal.py",
+    "/app/test_reports/pytest/pytest_portal.xml"
+  ],
+  
+  "action_items": [],
+  
+  "critical_code_review_comments": [
+    "Portal uses separate JWT token type ('portal') with 24-hour expiry - good security practice",
+    "Phone matching uses last 8 digits comparison - handles both with/without country code",
+    "All portal endpoints properly validate token type to prevent admin token reuse",
+    "data-testid attributes properly implemented on all interactive elements"
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_portal.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "100% (all portal features working)"
+  },
+  
+  "test_credentials": {
+    "portal_client": {
+      "cpf": "02962261493",
+      "telefone": "83999056284",
+      "nome": "Adriano Pinto De Sousa",
+      "note": "Use 11-digit phone without country code 55"
+    },
+    "admin": {
+      "email": "admin@mvno.com",
+      "password": "admin123"
+    }
+  },
+  
+  "seed_data_creation": "No new seed data created - used existing client Adriano Pinto De Sousa",
+  
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  
+  "context_for_next_testing_agent": "Portal do Cliente fully tested. Login uses CPF + phone (11 digits without country code). Dashboard shows client info, lines with expand/collapse for saldo/consumo, and faturas. Saldo and Consumo endpoints return mock data in preview environment (Ta Telecom API requires real credentials). All data-testid attributes are in place for automated testing.",
+  
+  "mocked_api": {
+    "has_mocked_apis": true,
+    "mocked_apis_list": [
+      "Ta Telecom saldo/consumo API (returns mock data in preview environment)",
+      "Asaas payments API (sandbox key configured but may be blocked from preview container)"
+    ]
+  },
+  
+  "portal_features_validated": {
+    "login_page": {
+      "url": "/portal",
+      "features_tested": [
+        "CPF input with formatting (data-testid='portal-login-cpf-input')",
+        "Phone input with formatting (data-testid='portal-login-phone-input')",
+        "Submit button (data-testid='portal-login-submit-button')",
+        "Error message display (data-testid='portal-login-error')",
+        "Form validation for CPF length and phone length",
+        "Admin link to /login"
+      ]
+    },
+    "dashboard_page": {
+      "url": "/portal/dashboard",
+      "features_tested": [
+        "Dashboard container (data-testid='portal-dashboard')",
+        "Client info card (data-testid='portal-client-info')",
+        "Refresh button (data-testid='portal-refresh-btn')",
+        "Logout button (data-testid='portal-logout-btn')",
+        "Line cards (data-testid='portal-line-{numero}')",
+        "Line toggle expand/collapse (data-testid='portal-line-toggle-{numero}')",
+        "Line details with ICCID (data-testid='portal-line-details-{numero}')",
+        "Saldo refresh button (data-testid='portal-saldo-refresh-{numero}')",
+        "Consumo refresh button (data-testid='portal-consumo-refresh-{numero}')",
+        "Fatura cards (data-testid='portal-fatura-{id}')"
+      ]
+    }
+  }
+}
