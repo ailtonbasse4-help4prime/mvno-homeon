@@ -602,6 +602,9 @@ async def login(data: UserLogin, response: Response, request: Request):
         else:
             lockout_mins = 15
         lockout_until = attempts.get("lockout_until")
+        # Normaliza: se for naive (sem tz), assume UTC pra comparacao segura
+        if lockout_until and isinstance(lockout_until, datetime) and lockout_until.tzinfo is None:
+            lockout_until = lockout_until.replace(tzinfo=timezone.utc)
         if lockout_until and datetime.now(timezone.utc) < lockout_until:
             raise HTTPException(status_code=429, detail=f"Conta bloqueada por {lockout_mins} minutos. Muitas tentativas falhas.")
     user = await db.usuarios.find_one({"email": email})
