@@ -11,13 +11,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import {
   Plus, Search, Trash2, Edit, RefreshCw, ExternalLink,
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
-  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download, Mail, MessageCircle,
+  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download, Mail, MessageCircle, CalendarDays,
 } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { StatCard } from '../components/StatCard';
 import { WhatsAppLoteDialog } from '../components/WhatsAppLoteDialog';
+import { CobrancaLotePorVencimentoDialog } from '../components/CobrancaLotePorVencimentoDialog';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -31,6 +32,7 @@ export function GestaoCobrancas() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loteDialogOpen, setLoteDialogOpen] = useState(false);
   const [whatsLoteOpen, setWhatsLoteOpen] = useState(false);
+  const [loteVencimentoOpen, setLoteVencimentoOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedCobranca, setSelectedCobranca] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -573,6 +575,9 @@ export function GestaoCobrancas() {
             </Button>
             <Button onClick={() => setLoteDialogOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-zinc-700 hover:bg-zinc-800 text-xs sm:text-sm" data-testid="lote-cobranca-btn">
               <CreditCard className="w-3.5 h-3.5" /><span className="hidden sm:inline">Em Lote</span><span className="sm:hidden">Lote</span>
+            </Button>
+            <Button onClick={() => setLoteVencimentoOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-emerald-600 text-emerald-300 hover:bg-emerald-900/20 text-xs sm:text-sm" data-testid="lote-vencimento-btn" title="Gerar cobrancas em massa por data de vencimento, com selecao manual">
+              <CalendarDays className="w-3.5 h-3.5" /><span className="hidden sm:inline">Por Vencimento</span><span className="sm:hidden">Vencto</span>
             </Button>
             <Button onClick={() => setWhatsLoteOpen(true)} variant="outline" size="sm" className="flex items-center gap-1.5 border-emerald-700 text-emerald-400 hover:bg-emerald-900/20 text-xs sm:text-sm" data-testid="whatsapp-lote-btn" title="Enviar cobrancas em lote via WhatsApp (Z-API)">
               <MessageCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">WhatsApp Lote</span><span className="sm:hidden">WhatsApp</span>
@@ -1281,6 +1286,13 @@ export function GestaoCobrancas() {
         onClose={() => setWhatsLoteOpen(false)}
         cobrancas={cobrancas}
         clientes={clientes}
+      />
+
+      {/* Cobranca em Lote por Vencimento */}
+      <CobrancaLotePorVencimentoDialog
+        open={loteVencimentoOpen}
+        onClose={() => setLoteVencimentoOpen(false)}
+        onSuccess={fetchAll}
       />
     </div>
   );

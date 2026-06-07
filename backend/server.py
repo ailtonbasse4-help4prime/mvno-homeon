@@ -3761,6 +3761,265 @@ async def create_cobrancas_lote(data: CobrancaLoteRequest, request: Request):
     await create_log("financeiro", f"Lote de cobrancas: {created} criadas de {len(data.cobrancas)}", user["id"], user["name"])
     return {"success": True, "created": created, "total": len(data.cobrancas), "errors": errors}
 
+# ===== Geracao em massa por data de vencimento (selecao manual) =====
+
+def _calc_vencimento_from_dia(dia: int, mes: int, ano: int) -> str:
+    """Retorna YYYY-MM-DD ajustando o dia ao ultimo dia do mes quando necessario (ex: dia 31 em fev)."""
+    import calendar
+    last_day = calendar.monthrange(ano, mes)[1]
+    dia_ajustado = min(max(1, dia), last_day)
+    return f"{ano:04d}-{mes:02d}-{dia_ajustado:02d}"
+
+
+@api_router.get("/carteira/cobrancas/lote/preview")
+async def preview_lote_por_vencimento(
+    request: Request,
+    dia_vencimento: Optional[int] = None,  # 1-31
+    mes: Optional[int] = None,             # 1-12 (mes alvo para gerar cobranca)
+    ano: Optional[int] = None,             # YYYY
+    apenas_ativas: bool = True,
+):
+    """
+    Retorna assinaturas elegiveis para gerar cobranca em lote, agrupadas pelo dia
+    do vencimento (extraido de `proximo_vencimento` da assinatura).
+    Marca `ja_tem_cobranca=True` se existir cobranca com mesmo vencimento exato e cliente.
+    """
+    await get_current_user(request)
+
+    # Mes/ano alvo (padrao: mes atual)
+    hoje = datetime.now(timezone.utc)
+    mes_alvo = mes or hoje.month
+    ano_alvo = ano or hoje.year
+
+    query = {}
+    if apenas_ativas:
+        query["status"] = "ACTIVE"
+
+    docs = await db.assinaturas.find(query).sort("proximo_vencimento", 1).to_list(10000)
+
+    # Pre-carregar cobrancas existentes do mes alvo (intervalo 1..31)
+    inicio = f"{ano_alvo:04d}-{mes_alvo:02d}-01"
+    import calendar
+    last_day = calendar.monthrange(ano_alvo, mes_alvo)[1]
+    fim = f"{ano_alvo:04d}-{mes_alvo:02d}-{last_day:02d}"
+    cobr_mes = await db.cobrancas.find({
+        "vencimento": {"$gte": inicio, "$lte": fim}
+    }).to_list(20000)
+    # index por (cliente_id, vencimento)
+    cobr_index = {}
+    for c in cobr_mes:
+        key = (str(c.get("cliente_id")), c.get("vencimento"))
+        cobr_index[key] = c
+
+    items = []
+    counts_by_dia = {}
+    for d in docs:
+        pv = d.get("proximo_vencimento") or ""
+        try:
+            dia = int(pv.split("-")[2]) if pv and len(pv) >= 10 else None
+        except Exception:
+            dia = None
+        if dia is None:
+            continue
+        if dia_vencimento is not None and dia != dia_vencimento:
+            continue
+
+        cliente_id = d.get("cliente_id")
+        cliente_nome = None
+        cliente_doc = None
+        if cliente_id:
+            try:
+                cliente_doc = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
+                if cliente_doc:
+                    cliente_nome = cliente_doc.get("nome")
+            except Exception:
+                pass
+        if not cliente_doc:
+            continue  # assinatura orfa
+
+        # Vencimento computado para o mes alvo
+        vencimento_alvo = _calc_vencimento_from_dia(dia, mes_alvo, ano_alvo)
+        ja_existe = (str(cliente_id), vencimento_alvo) in cobr_index
+        cobr_existente = cobr_index.get((str(cliente_id), vencimento_alvo))
+
+        msisdn = None
+        oferta_nome = None
+        if d.get("linha_id"):
+            try:
+                ln = await db.linhas.find_one({"_id": ObjectId(d["linha_id"])})
+                if ln:
+                    msisdn = ln.get("msisdn")
+                    if ln.get("oferta_id"):
+                        of = await db.ofertas.find_one({"_id": ObjectId(ln["oferta_id"])})
+                        if of:
+                            oferta_nome = of.get("nome")
+            except Exception:
+                pass
+
+        items.append({
+            "assinatura_id": str(d["_id"]),
+            "cliente_id": str(cliente_id),
+            "cliente_nome": cliente_nome,
+            "linha_id": d.get("linha_id"),
+            "msisdn": msisdn,
+            "oferta_nome": oferta_nome,
+            "valor_assinatura": d.get("valor", 0),
+            "dia_vencimento": dia,
+            "proximo_vencimento": pv,
+            "vencimento_alvo": vencimento_alvo,
+            "ja_tem_cobranca": ja_existe,
+            "cobranca_existente_id": str(cobr_existente["_id"]) if cobr_existente else None,
+            "cobranca_existente_status": cobr_existente.get("status") if cobr_existente else None,
+            "billing_type_assinatura": d.get("billing_type", "BOLETO"),
+            "descricao_assinatura": d.get("descricao"),
+        })
+        counts_by_dia[dia] = counts_by_dia.get(dia, 0) + 1
+
+    return {
+        "mes_alvo": mes_alvo,
+        "ano_alvo": ano_alvo,
+        "total": len(items),
+        "items": items,
+        "counts_by_dia": counts_by_dia,
+    }
+
+
+class CobrancaLotePorVencimentoItem(BaseModel):
+    assinatura_id: str
+    valor: Optional[float] = None  # se None, usa valor da assinatura
+    vencimento: str  # YYYY-MM-DD
+
+
+class CobrancaLotePorVencimentoRequest(BaseModel):
+    items: List[CobrancaLotePorVencimentoItem]
+    billing_type: str = "BOLETO"
+    descricao_template: Optional[str] = None  # placeholders: {nome}, {mes}, {ano}
+
+
+@api_router.post("/carteira/cobrancas/lote/por-vencimento")
+async def gerar_lote_por_vencimento(data: CobrancaLotePorVencimentoRequest, request: Request):
+    """Gera cobrancas (Asaas) em lote a partir de assinaturas selecionadas.
+    Anti-duplicidade: pula se ja existe cobranca com mesmo vencimento exato p/ o cliente."""
+    user = await require_admin(request)
+    created = 0
+    skipped = 0
+    errors = []
+    created_items = []
+    for idx, item in enumerate(data.items):
+        try:
+            try:
+                asn = await db.assinaturas.find_one({"_id": ObjectId(item.assinatura_id)})
+            except Exception:
+                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "ID de assinatura invalido"})
+                continue
+            if not asn:
+                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Assinatura nao encontrada"})
+                continue
+            cliente_id = asn.get("cliente_id")
+            cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)}) if cliente_id else None
+            if not cliente:
+                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Cliente nao encontrado"})
+                continue
+
+            valor = float(item.valor) if item.valor is not None else float(asn.get("valor", 0))
+            if valor <= 0:
+                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Valor invalido"})
+                continue
+
+            # Anti-duplicidade: mesmo vencimento exato p/ o cliente
+            existente = await db.cobrancas.find_one({
+                "cliente_id": str(cliente_id),
+                "vencimento": item.vencimento,
+            })
+            if existente:
+                skipped += 1
+                continue
+
+            # Montar descricao
+            try:
+                ano, mes, _ = item.vencimento.split("-")
+                mes_nome = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][int(mes)-1]
+            except Exception:
+                mes_nome = ""
+                ano = ""
+            base_desc = (data.descricao_template or f"Mensalidade {{mes}}/{{ano}} - {{nome}}").format(
+                nome=cliente.get("nome", ""),
+                mes=mes_nome,
+                ano=ano,
+            )
+
+            doc = {
+                "cliente_id": str(cliente_id),
+                "linha_id": asn.get("linha_id"),
+                "billing_type": data.billing_type,
+                "valor": valor,
+                "vencimento": item.vencimento,
+                "descricao": base_desc,
+                "status": "PENDING",
+                "modalidade": "avista",
+                "assinatura_id": str(asn["_id"]),
+                "asaas_payment_id": None,
+                "asaas_invoice_url": None,
+                "asaas_bankslip_url": None,
+                "asaas_pix_code": None,
+                "asaas_pix_qrcode": None,
+                "paid_at": None,
+                "created_at": datetime.now(timezone.utc),
+            }
+
+            if asaas_service.is_configured:
+                try:
+                    asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                    result = await asaas_service.create_payment(
+                        customer_id=asaas_customer_id,
+                        billing_type=data.billing_type,
+                        value=valor,
+                        due_date=item.vencimento,
+                        description=_append_portal_link(base_desc),
+                        external_reference=f"lote-venc-{asn['_id']}",
+                    )
+                    doc["asaas_payment_id"] = result.get("id")
+                    doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                    doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
+                    doc["status"] = result.get("status", "PENDING")
+                except (AsaasNotConfiguredError, AsaasApiError) as e:
+                    errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": f"Asaas: {e}"})
+                    continue
+                except Exception as e:
+                    errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": f"Erro inesperado: {e}"})
+                    continue
+            else:
+                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Asaas nao configurado"})
+                continue
+
+            inserted = await db.cobrancas.insert_one(doc)
+            created += 1
+            created_items.append({
+                "cobranca_id": str(inserted.inserted_id),
+                "cliente_nome": cliente.get("nome"),
+                "valor": valor,
+                "vencimento": item.vencimento,
+                "asaas_payment_id": doc.get("asaas_payment_id"),
+                "asaas_invoice_url": doc.get("asaas_invoice_url"),
+            })
+        except Exception as e:
+            errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": str(e)})
+
+    await create_log(
+        "financeiro",
+        f"Lote por vencimento: {created} criadas, {skipped} puladas (duplicadas), {len(errors)} erros (total {len(data.items)})",
+        user["id"], user["name"],
+    )
+    return {
+        "success": True,
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+        "total": len(data.items),
+        "items": created_items,
+    }
+
+
 @api_router.post("/carteira/cobrancas/{cobranca_id}/consultar")
 async def consultar_cobranca(cobranca_id: str, request: Request):
     user = await get_current_user(request)
