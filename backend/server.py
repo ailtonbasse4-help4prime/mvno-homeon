@@ -3813,6 +3813,11 @@ async def preview_lote_por_vencimento(
 
     items = []
     counts_by_dia = {}
+
+    # Pre-coleta IDs para batch lookups (evita N+1)
+    cliente_ids_set = set()
+    linha_ids_set = set()
+    valid_docs = []
     for d in docs:
         pv = d.get("proximo_vencimento") or ""
         try:
@@ -3823,19 +3828,59 @@ async def preview_lote_por_vencimento(
             continue
         if dia_vencimento is not None and dia != dia_vencimento:
             continue
+        cid = d.get("cliente_id")
+        if not cid:
+            continue
+        valid_docs.append((d, dia))
+        cliente_ids_set.add(cid)
+        if d.get("linha_id"):
+            linha_ids_set.add(d["linha_id"])
 
-        cliente_id = d.get("cliente_id")
-        cliente_nome = None
-        cliente_doc = None
-        if cliente_id:
+    # Batch load clientes
+    cliente_map = {}
+    if cliente_ids_set:
+        cli_obj_ids = []
+        for cid in cliente_ids_set:
             try:
-                cliente_doc = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
-                if cliente_doc:
-                    cliente_nome = cliente_doc.get("nome")
+                cli_obj_ids.append(ObjectId(cid))
             except Exception:
                 pass
+        async for cl in db.clientes.find({"_id": {"$in": cli_obj_ids}}):
+            cliente_map[str(cl["_id"])] = cl
+
+    # Batch load linhas
+    linha_map = {}
+    oferta_ids_set = set()
+    if linha_ids_set:
+        lin_obj_ids = []
+        for lid in linha_ids_set:
+            try:
+                lin_obj_ids.append(ObjectId(lid))
+            except Exception:
+                pass
+        async for ln in db.linhas.find({"_id": {"$in": lin_obj_ids}}):
+            linha_map[str(ln["_id"])] = ln
+            if ln.get("oferta_id"):
+                oferta_ids_set.add(ln["oferta_id"])
+
+    # Batch load ofertas
+    oferta_map = {}
+    if oferta_ids_set:
+        of_obj_ids = []
+        for oid in oferta_ids_set:
+            try:
+                of_obj_ids.append(ObjectId(oid))
+            except Exception:
+                pass
+        async for of in db.ofertas.find({"_id": {"$in": of_obj_ids}}):
+            oferta_map[str(of["_id"])] = of
+
+    for d, dia in valid_docs:
+        cliente_id = d.get("cliente_id")
+        cliente_doc = cliente_map.get(str(cliente_id))
         if not cliente_doc:
             continue  # assinatura orfa
+        cliente_nome = cliente_doc.get("nome")
 
         # Vencimento computado para o mes alvo
         vencimento_alvo = _calc_vencimento_from_dia(dia, mes_alvo, ano_alvo)
@@ -3845,16 +3890,13 @@ async def preview_lote_por_vencimento(
         msisdn = None
         oferta_nome = None
         if d.get("linha_id"):
-            try:
-                ln = await db.linhas.find_one({"_id": ObjectId(d["linha_id"])})
-                if ln:
-                    msisdn = ln.get("msisdn")
-                    if ln.get("oferta_id"):
-                        of = await db.ofertas.find_one({"_id": ObjectId(ln["oferta_id"])})
-                        if of:
-                            oferta_nome = of.get("nome")
-            except Exception:
-                pass
+            ln = linha_map.get(str(d["linha_id"]))
+            if ln:
+                msisdn = ln.get("msisdn")
+                if ln.get("oferta_id"):
+                    of = oferta_map.get(str(ln["oferta_id"]))
+                    if of:
+                        oferta_nome = of.get("nome")
 
         items.append({
             "assinatura_id": str(d["_id"]),
@@ -3865,7 +3907,7 @@ async def preview_lote_por_vencimento(
             "oferta_nome": oferta_nome,
             "valor_assinatura": d.get("valor", 0),
             "dia_vencimento": dia,
-            "proximo_vencimento": pv,
+            "proximo_vencimento": d.get("proximo_vencimento", ""),
             "vencimento_alvo": vencimento_alvo,
             "ja_tem_cobranca": ja_existe,
             "cobranca_existente_id": str(cobr_existente["_id"]) if cobr_existente else None,

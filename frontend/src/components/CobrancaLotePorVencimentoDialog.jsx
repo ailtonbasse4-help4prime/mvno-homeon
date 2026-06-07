@@ -3,7 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { CalendarDays, Loader2, CheckCircle2, AlertTriangle, FileText, RefreshCw, Search } from 'lucide-react';
 import { formatDateBR } from '../lib/formatters';
 
@@ -148,6 +148,9 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
             <CalendarDays className="w-5 h-5 text-emerald-400" />
             Gerar Cobranças em Lote por Vencimento
           </DialogTitle>
+          <DialogDescription className="text-zinc-400 text-xs">
+            Selecione assinaturas ativas por dia de vencimento e gere boletos/PIX no Asaas em massa.
+          </DialogDescription>
         </DialogHeader>
 
         {resultado ? (
