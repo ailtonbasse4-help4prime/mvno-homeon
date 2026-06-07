@@ -3777,12 +3777,12 @@ async def preview_lote_por_vencimento(
     dia_vencimento: Optional[int] = None,  # 1-31
     mes: Optional[int] = None,             # 1-12 (mes alvo para gerar cobranca)
     ano: Optional[int] = None,             # YYYY
-    apenas_ativas: bool = True,
 ):
     """
-    Retorna assinaturas elegiveis para gerar cobranca em lote, agrupadas pelo dia
-    do vencimento (extraido de `proximo_vencimento` da assinatura).
-    Marca `ja_tem_cobranca=True` se existir cobranca com mesmo vencimento exato e cliente.
+    Para cada cliente que tem historico de cobrancas, pega a ULTIMA cobranca
+    (por vencimento mais recente) e usa como base para o lote do proximo vencimento.
+    Agrupa pelo dia de vencimento dessa ultima cobranca.
+    Marca `ja_tem_cobranca=True` se ja existir cobranca com mesmo vencimento alvo p/ o cliente.
     """
     await get_current_user(request)
 
@@ -3791,50 +3791,56 @@ async def preview_lote_por_vencimento(
     mes_alvo = mes or hoje.month
     ano_alvo = ano or hoje.year
 
-    query = {}
-    if apenas_ativas:
-        query["status"] = "ACTIVE"
-
-    docs = await db.assinaturas.find(query).sort("proximo_vencimento", 1).to_list(10000)
-
-    # Pre-carregar cobrancas existentes do mes alvo (intervalo 1..31)
-    inicio = f"{ano_alvo:04d}-{mes_alvo:02d}-01"
+    # Pre-carregar cobrancas existentes do mes alvo (intervalo 1..31) - anti-dup
     import calendar
+    inicio = f"{ano_alvo:04d}-{mes_alvo:02d}-01"
     last_day = calendar.monthrange(ano_alvo, mes_alvo)[1]
     fim = f"{ano_alvo:04d}-{mes_alvo:02d}-{last_day:02d}"
     cobr_mes = await db.cobrancas.find({
         "vencimento": {"$gte": inicio, "$lte": fim}
     }).to_list(20000)
-    # index por (cliente_id, vencimento)
     cobr_index = {}
     for c in cobr_mes:
         key = (str(c.get("cliente_id")), c.get("vencimento"))
         cobr_index[key] = c
 
+    # Buscar TODAS as cobrancas ordenadas por vencimento DESC, e pegar a 1a (mais recente) por cliente
+    # Usar agregacao para performance
+    pipeline = [
+        {"$match": {"cliente_id": {"$ne": None}, "vencimento": {"$ne": None, "$ne": ""}}},
+        {"$sort": {"vencimento": -1, "created_at": -1}},
+        {"$group": {
+            "_id": "$cliente_id",
+            "ultima": {"$first": "$$ROOT"},
+        }},
+    ]
+    grouped = await db.cobrancas.aggregate(pipeline).to_list(20000)
+
     items = []
     counts_by_dia = {}
 
-    # Pre-coleta IDs para batch lookups (evita N+1)
+    # Pre-coleta IDs para batch lookups
     cliente_ids_set = set()
     linha_ids_set = set()
-    valid_docs = []
-    for d in docs:
-        pv = d.get("proximo_vencimento") or ""
+    valid = []
+    for g in grouped:
+        ultima = g.get("ultima", {})
+        venc = ultima.get("vencimento") or ""
         try:
-            dia = int(pv.split("-")[2]) if pv and len(pv) >= 10 else None
+            dia = int(venc.split("-")[2]) if venc and len(venc) >= 10 else None
         except Exception:
             dia = None
         if dia is None:
             continue
         if dia_vencimento is not None and dia != dia_vencimento:
             continue
-        cid = d.get("cliente_id")
+        cid = ultima.get("cliente_id") or g.get("_id")
         if not cid:
             continue
-        valid_docs.append((d, dia))
+        valid.append((ultima, dia, cid))
         cliente_ids_set.add(cid)
-        if d.get("linha_id"):
-            linha_ids_set.add(d["linha_id"])
+        if ultima.get("linha_id"):
+            linha_ids_set.add(ultima["linha_id"])
 
     # Batch load clientes
     cliente_map = {}
@@ -3875,22 +3881,20 @@ async def preview_lote_por_vencimento(
         async for of in db.ofertas.find({"_id": {"$in": of_obj_ids}}):
             oferta_map[str(of["_id"])] = of
 
-    for d, dia in valid_docs:
-        cliente_id = d.get("cliente_id")
+    for ultima, dia, cliente_id in valid:
         cliente_doc = cliente_map.get(str(cliente_id))
         if not cliente_doc:
-            continue  # assinatura orfa
+            continue
         cliente_nome = cliente_doc.get("nome")
 
-        # Vencimento computado para o mes alvo
         vencimento_alvo = _calc_vencimento_from_dia(dia, mes_alvo, ano_alvo)
         ja_existe = (str(cliente_id), vencimento_alvo) in cobr_index
         cobr_existente = cobr_index.get((str(cliente_id), vencimento_alvo))
 
         msisdn = None
         oferta_nome = None
-        if d.get("linha_id"):
-            ln = linha_map.get(str(d["linha_id"]))
+        if ultima.get("linha_id"):
+            ln = linha_map.get(str(ultima["linha_id"]))
             if ln:
                 msisdn = ln.get("msisdn")
                 if ln.get("oferta_id"):
@@ -3898,24 +3902,31 @@ async def preview_lote_por_vencimento(
                     if of:
                         oferta_nome = of.get("nome")
 
+        # Descricao sugerida: pega a do ultimo boleto MAS troca o mes/ano
+        descricao_anterior = ultima.get("descricao", "") or ""
+        descricao_sugerida = _sugerir_descricao_proximo_mes(descricao_anterior, mes_alvo, ano_alvo, cliente_nome or "")
+
         items.append({
-            "assinatura_id": str(d["_id"]),
             "cliente_id": str(cliente_id),
             "cliente_nome": cliente_nome,
-            "linha_id": d.get("linha_id"),
+            "linha_id": ultima.get("linha_id"),
             "msisdn": msisdn,
             "oferta_nome": oferta_nome,
-            "valor_assinatura": d.get("valor", 0),
+            "valor_ultimo": ultima.get("valor", 0),
+            "descricao_ultimo": descricao_anterior,
+            "descricao_sugerida": descricao_sugerida,
+            "vencimento_ultimo": ultima.get("vencimento"),
+            "billing_type_ultimo": ultima.get("billing_type", "BOLETO"),
             "dia_vencimento": dia,
-            "proximo_vencimento": d.get("proximo_vencimento", ""),
             "vencimento_alvo": vencimento_alvo,
             "ja_tem_cobranca": ja_existe,
             "cobranca_existente_id": str(cobr_existente["_id"]) if cobr_existente else None,
             "cobranca_existente_status": cobr_existente.get("status") if cobr_existente else None,
-            "billing_type_assinatura": d.get("billing_type", "BOLETO"),
-            "descricao_assinatura": d.get("descricao"),
         })
         counts_by_dia[dia] = counts_by_dia.get(dia, 0) + 1
+
+    # Ordena por dia, depois nome
+    items.sort(key=lambda x: (x["dia_vencimento"], (x.get("cliente_nome") or "").lower()))
 
     return {
         "mes_alvo": mes_alvo,
@@ -3926,21 +3937,53 @@ async def preview_lote_por_vencimento(
     }
 
 
+def _sugerir_descricao_proximo_mes(descricao_anterior: str, mes_alvo: int, ano_alvo: int, nome: str) -> str:
+    """Tenta substituir nome do mes/ano na descricao anterior pelo novo. Senao retorna template padrao."""
+    import re
+    meses = {
+        "janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+        "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+        "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+    }
+    nome_mes_alvo = ["Janeiro","Fevereiro","Marco","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][mes_alvo-1]
+    if not descricao_anterior:
+        return f"Mensalidade {nome_mes_alvo}/{ano_alvo} - {nome}".strip(" -")
+
+    nova = descricao_anterior
+    # Tenta substituir mes anterior por mes_alvo (case-insensitive)
+    found = False
+    # Ordenar por tamanho desc para casar "marco" antes de "mar"
+    for mes_str in sorted(meses.keys(), key=lambda s: -len(s)):
+        pattern = re.compile(re.escape(mes_str), re.IGNORECASE)
+        if pattern.search(nova):
+            nova = pattern.sub(nome_mes_alvo, nova, count=1)
+            found = True
+            break
+    # Tenta substituir ano (4 digitos como 2025/2026)
+    nova = re.sub(r"20\d{2}", str(ano_alvo), nova)
+    if not found:
+        # Se nao achou mes, anexa
+        nova = f"{nova} - {nome_mes_alvo}/{ano_alvo}"
+    return nova.strip()
+
+
 class CobrancaLotePorVencimentoItem(BaseModel):
-    assinatura_id: str
-    valor: Optional[float] = None  # se None, usa valor da assinatura
+    cliente_id: str
+    valor: float
     vencimento: str  # YYYY-MM-DD
+    descricao: Optional[str] = None
+    linha_id: Optional[str] = None
 
 
 class CobrancaLotePorVencimentoRequest(BaseModel):
     items: List[CobrancaLotePorVencimentoItem]
     billing_type: str = "BOLETO"
-    descricao_template: Optional[str] = None  # placeholders: {nome}, {mes}, {ano}
 
 
 @api_router.post("/carteira/cobrancas/lote/por-vencimento")
 async def gerar_lote_por_vencimento(data: CobrancaLotePorVencimentoRequest, request: Request):
-    """Gera cobrancas (Asaas) em lote a partir de assinaturas selecionadas.
+    """Gera cobrancas (Asaas) em lote para clientes selecionados.
     Anti-duplicidade: pula se ja existe cobranca com mesmo vencimento exato p/ o cliente."""
     user = await require_admin(request)
     created = 0
@@ -3950,56 +3993,39 @@ async def gerar_lote_por_vencimento(data: CobrancaLotePorVencimentoRequest, requ
     for idx, item in enumerate(data.items):
         try:
             try:
-                asn = await db.assinaturas.find_one({"_id": ObjectId(item.assinatura_id)})
+                cliente = await db.clientes.find_one({"_id": ObjectId(item.cliente_id)})
             except Exception:
-                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "ID de assinatura invalido"})
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "ID de cliente invalido"})
                 continue
-            if not asn:
-                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Assinatura nao encontrada"})
-                continue
-            cliente_id = asn.get("cliente_id")
-            cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)}) if cliente_id else None
             if not cliente:
-                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Cliente nao encontrado"})
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "Cliente nao encontrado"})
                 continue
 
-            valor = float(item.valor) if item.valor is not None else float(asn.get("valor", 0))
+            valor = float(item.valor)
             if valor <= 0:
-                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Valor invalido"})
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "Valor invalido"})
                 continue
 
             # Anti-duplicidade: mesmo vencimento exato p/ o cliente
             existente = await db.cobrancas.find_one({
-                "cliente_id": str(cliente_id),
+                "cliente_id": str(item.cliente_id),
                 "vencimento": item.vencimento,
             })
             if existente:
                 skipped += 1
                 continue
 
-            # Montar descricao
-            try:
-                ano, mes, _ = item.vencimento.split("-")
-                mes_nome = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"][int(mes)-1]
-            except Exception:
-                mes_nome = ""
-                ano = ""
-            base_desc = (data.descricao_template or f"Mensalidade {{mes}}/{{ano}} - {{nome}}").format(
-                nome=cliente.get("nome", ""),
-                mes=mes_nome,
-                ano=ano,
-            )
+            base_desc = item.descricao or f"Mensalidade - {cliente.get('nome', '')}".strip(" -")
 
             doc = {
-                "cliente_id": str(cliente_id),
-                "linha_id": asn.get("linha_id"),
+                "cliente_id": str(item.cliente_id),
+                "linha_id": item.linha_id,
                 "billing_type": data.billing_type,
                 "valor": valor,
                 "vencimento": item.vencimento,
                 "descricao": base_desc,
                 "status": "PENDING",
                 "modalidade": "avista",
-                "assinatura_id": str(asn["_id"]),
                 "asaas_payment_id": None,
                 "asaas_invoice_url": None,
                 "asaas_bankslip_url": None,
@@ -4018,20 +4044,20 @@ async def gerar_lote_por_vencimento(data: CobrancaLotePorVencimentoRequest, requ
                         value=valor,
                         due_date=item.vencimento,
                         description=_append_portal_link(base_desc),
-                        external_reference=f"lote-venc-{asn['_id']}",
+                        external_reference=f"lote-venc-{item.cliente_id}",
                     )
                     doc["asaas_payment_id"] = result.get("id")
                     doc["asaas_invoice_url"] = result.get("invoiceUrl")
                     doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
                     doc["status"] = result.get("status", "PENDING")
                 except (AsaasNotConfiguredError, AsaasApiError) as e:
-                    errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": f"Asaas: {e}"})
+                    errors.append({"index": idx, "cliente_id": item.cliente_id, "error": f"Asaas: {e}"})
                     continue
                 except Exception as e:
-                    errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": f"Erro inesperado: {e}"})
+                    errors.append({"index": idx, "cliente_id": item.cliente_id, "error": f"Erro inesperado: {e}"})
                     continue
             else:
-                errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": "Asaas nao configurado"})
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "Asaas nao configurado"})
                 continue
 
             inserted = await db.cobrancas.insert_one(doc)
@@ -4045,7 +4071,7 @@ async def gerar_lote_por_vencimento(data: CobrancaLotePorVencimentoRequest, requ
                 "asaas_invoice_url": doc.get("asaas_invoice_url"),
             })
         except Exception as e:
-            errors.append({"index": idx, "assinatura_id": item.assinatura_id, "error": str(e)})
+            errors.append({"index": idx, "cliente_id": item.cliente_id, "error": str(e)})
 
     await create_log(
         "financeiro",

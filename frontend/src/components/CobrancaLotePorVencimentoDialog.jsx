@@ -31,7 +31,8 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ items: [], counts_by_dia: {}, total: 0 });
   const [selecionadas, setSelecionadas] = useState(new Set());
-  const [valoresOverride, setValoresOverride] = useState({}); // assinatura_id -> valor editado
+  const [valoresOverride, setValoresOverride] = useState({}); // cliente_id -> valor
+  const [descricoesOverride, setDescricoesOverride] = useState({}); // cliente_id -> descricao
   const [billingType, setBillingType] = useState('BOLETO');
   const [gerando, setGerando] = useState(false);
   const [resultado, setResultado] = useState(null);
@@ -45,6 +46,7 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
       setData(r.data || { items: [], counts_by_dia: {}, total: 0 });
       setSelecionadas(new Set());
       setValoresOverride({});
+      setDescricoesOverride({});
     } catch (e) {
       toast.error('Erro ao carregar previa: ' + (e.response?.data?.detail || e.message));
     }
@@ -64,59 +66,63 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
     return data.items.filter(i =>
       (i.cliente_nome || '').toLowerCase().includes(q) ||
       (i.msisdn || '').toLowerCase().includes(q) ||
-      (i.oferta_nome || '').toLowerCase().includes(q)
+      (i.descricao_ultimo || '').toLowerCase().includes(q)
     );
   }, [data.items, busca]);
 
   const elegiveis = useMemo(() => itemsFiltrados.filter(i => !i.ja_tem_cobranca), [itemsFiltrados]);
 
-  const toggleSelecao = (assinatura_id) => {
+  const toggleSelecao = (cliente_id) => {
     setSelecionadas(prev => {
       const next = new Set(prev);
-      if (next.has(assinatura_id)) next.delete(assinatura_id); else next.add(assinatura_id);
+      if (next.has(cliente_id)) next.delete(cliente_id); else next.add(cliente_id);
       return next;
     });
   };
 
   const selecionarTodos = () => {
-    setSelecionadas(new Set(elegiveis.map(i => i.assinatura_id)));
+    setSelecionadas(new Set(elegiveis.map(i => i.cliente_id)));
   };
   const limparSelecao = () => setSelecionadas(new Set());
 
-  const updateValor = (assinatura_id, val) => {
-    setValoresOverride(prev => ({ ...prev, [assinatura_id]: val }));
+  const getValor = (item) => {
+    const v = valoresOverride[item.cliente_id];
+    if (v !== undefined && v !== '') return parseFloat(v);
+    return item.valor_ultimo;
+  };
+  const getDescricao = (item) => {
+    const v = descricoesOverride[item.cliente_id];
+    if (v !== undefined) return v;
+    return item.descricao_sugerida || item.descricao_ultimo || '';
   };
 
   const totalSelecionado = useMemo(() => {
     let soma = 0;
     selecionadas.forEach(id => {
-      const item = data.items.find(i => i.assinatura_id === id);
+      const item = data.items.find(i => i.cliente_id === id);
       if (!item) return;
-      const v = valoresOverride[id] !== undefined && valoresOverride[id] !== ''
-        ? parseFloat(valoresOverride[id])
-        : item.valor_assinatura;
+      const v = getValor(item);
       if (!isNaN(v)) soma += v;
     });
     return soma;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selecionadas, data.items, valoresOverride]);
 
   const gerarLote = async () => {
     if (selecionadas.size === 0) {
-      toast.warning('Selecione ao menos uma assinatura');
+      toast.warning('Selecione ao menos um cliente');
       return;
     }
     const items = [];
     for (const id of selecionadas) {
-      const item = data.items.find(i => i.assinatura_id === id);
+      const item = data.items.find(i => i.cliente_id === id);
       if (!item) continue;
-      const valorEditado = valoresOverride[id];
-      const valor = valorEditado !== undefined && valorEditado !== ''
-        ? parseFloat(valorEditado)
-        : null; // backend usa valor da assinatura
       items.push({
-        assinatura_id: id,
-        valor,
+        cliente_id: id,
+        valor: getValor(item),
         vencimento: item.vencimento_alvo,
+        descricao: getDescricao(item),
+        linha_id: item.linha_id,
       });
     }
     setGerando(true);
@@ -142,14 +148,14 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && closeAll()}>
-      <DialogContent className="bg-zinc-950 border-zinc-800 max-w-5xl max-h-[90vh] overflow-hidden flex flex-col" data-testid="lote-vencimento-dialog">
+      <DialogContent className="bg-zinc-950 border-zinc-800 max-w-6xl max-h-[92vh] overflow-hidden flex flex-col" data-testid="lote-vencimento-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-emerald-400" />
             Gerar Cobranças em Lote por Vencimento
           </DialogTitle>
           <DialogDescription className="text-zinc-400 text-xs">
-            Selecione assinaturas ativas por dia de vencimento e gere boletos/PIX no Asaas em massa.
+            Valores e descrições são herdados do último boleto de cada cliente. Filtre por dia, marque os clientes e edite o que quiser antes de gerar.
           </DialogDescription>
         </DialogHeader>
 
@@ -239,7 +245,7 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
             {/* Resumo por dia */}
             {Object.keys(data.counts_by_dia || {}).length > 0 && (
               <div className="flex flex-wrap gap-2 px-1">
-                <span className="text-xs text-zinc-400 mr-1">Distribuição:</span>
+                <span className="text-xs text-zinc-400 mr-1">Distribuição por dia:</span>
                 {Object.entries(data.counts_by_dia).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([dia, qt]) => (
                   <button key={dia}
                     onClick={() => setDiaFiltro(diaFiltro === dia ? '' : dia)}
@@ -255,13 +261,13 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
             {/* Busca */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input placeholder="Buscar por nome / número / oferta..."
+              <Input placeholder="Buscar por nome / número / descrição..."
                 value={busca} onChange={e => setBusca(e.target.value)}
                 className="pl-10 bg-zinc-900 border-zinc-700" data-testid="search-lote" />
             </div>
 
             {/* Ações de selecao */}
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={selecionarTodos}
                   className="border-zinc-700 hover:bg-zinc-800" data-testid="select-all-btn">
@@ -281,68 +287,80 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
             {/* Tabela */}
             <div className="flex-1 overflow-auto border border-zinc-800 rounded-lg">
               <table className="w-full text-sm" data-testid="lote-table">
-                <thead className="bg-zinc-900 sticky top-0">
+                <thead className="bg-zinc-900 sticky top-0 z-10">
                   <tr className="border-b border-zinc-800 text-xs uppercase text-zinc-400">
                     <th className="p-2 w-8"></th>
                     <th className="p-2 text-left">Cliente</th>
-                    <th className="p-2 text-left">Linha / Oferta</th>
-                    <th className="p-2 text-center">Dia</th>
-                    <th className="p-2 text-center">Vencimento</th>
-                    <th className="p-2 text-right">Valor</th>
-                    <th className="p-2 text-center">Status</th>
+                    <th className="p-2 text-left">Último boleto</th>
+                    <th className="p-2 text-center w-14">Dia</th>
+                    <th className="p-2 text-center">Novo vencimento</th>
+                    <th className="p-2 text-right w-28">Valor</th>
+                    <th className="p-2 text-left">Descrição</th>
+                    <th className="p-2 text-center w-24">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && (
-                    <tr><td colSpan={7} className="p-8 text-center text-zinc-500">
+                    <tr><td colSpan={8} className="p-8 text-center text-zinc-500">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td></tr>
                   )}
                   {!loading && itemsFiltrados.length === 0 && (
-                    <tr><td colSpan={7} className="p-8 text-center text-zinc-500">
-                      Nenhuma assinatura ativa para os filtros aplicados.
+                    <tr><td colSpan={8} className="p-8 text-center text-zinc-500">
+                      Nenhum cliente com histórico de cobrança encontrado para os filtros aplicados.
                     </td></tr>
                   )}
                   {!loading && itemsFiltrados.map(item => {
-                    const selecionada = selecionadas.has(item.assinatura_id);
+                    const selecionada = selecionadas.has(item.cliente_id);
                     const desabilitada = item.ja_tem_cobranca;
                     return (
-                      <tr key={item.assinatura_id}
+                      <tr key={item.cliente_id}
                         className={`border-b border-zinc-800/60 ${desabilitada ? 'opacity-50' : 'hover:bg-zinc-900/40'}`}
-                        data-testid={`row-asn-${item.assinatura_id}`}
+                        data-testid={`row-cli-${item.cliente_id}`}
                       >
-                        <td className="p-2 text-center">
+                        <td className="p-2 text-center align-top pt-3">
                           <input type="checkbox"
                             checked={selecionada}
                             disabled={desabilitada}
-                            onChange={() => toggleSelecao(item.assinatura_id)}
+                            onChange={() => toggleSelecao(item.cliente_id)}
                             className="accent-emerald-500 w-4 h-4"
-                            data-testid={`check-asn-${item.assinatura_id}`}
+                            data-testid={`check-cli-${item.cliente_id}`}
                           />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 align-top">
                           <div className="font-medium">{item.cliente_nome || '—'}</div>
+                          {item.msisdn && <div className="text-xs text-zinc-500">{item.msisdn}</div>}
                         </td>
-                        <td className="p-2 text-zinc-300">
-                          <div className="text-xs">{item.msisdn || '—'}</div>
-                          <div className="text-xs text-zinc-500">{item.oferta_nome || ''}</div>
+                        <td className="p-2 text-zinc-300 align-top">
+                          <div className="text-xs">R$ {(item.valor_ultimo || 0).toFixed(2)}</div>
+                          <div className="text-xs text-zinc-500">{formatDateBR(item.vencimento_ultimo)}</div>
                         </td>
-                        <td className="p-2 text-center">
+                        <td className="p-2 text-center align-top pt-3">
                           <span className="inline-block bg-zinc-800 px-2 py-0.5 rounded text-xs">{item.dia_vencimento}</span>
                         </td>
-                        <td className="p-2 text-center text-xs">
+                        <td className="p-2 text-center text-xs align-top pt-3">
                           {formatDateBR(item.vencimento_alvo)}
                         </td>
-                        <td className="p-2 text-right">
+                        <td className="p-2 text-right align-top">
                           <Input type="number" step="0.01"
-                            value={valoresOverride[item.assinatura_id] ?? item.valor_assinatura}
-                            onChange={e => updateValor(item.assinatura_id, e.target.value)}
+                            value={valoresOverride[item.cliente_id] ?? item.valor_ultimo}
+                            onChange={e => setValoresOverride(prev => ({ ...prev, [item.cliente_id]: e.target.value }))}
                             disabled={desabilitada}
-                            className="bg-zinc-900 border-zinc-700 h-7 w-24 text-right text-xs ml-auto"
-                            data-testid={`valor-${item.assinatura_id}`}
+                            className="bg-zinc-900 border-zinc-700 h-8 w-24 text-right text-xs ml-auto"
+                            data-testid={`valor-${item.cliente_id}`}
                           />
                         </td>
-                        <td className="p-2 text-center">
+                        <td className="p-2 align-top">
+                          <Input type="text"
+                            value={descricoesOverride[item.cliente_id] ?? (item.descricao_sugerida || item.descricao_ultimo || '')}
+                            onChange={e => setDescricoesOverride(prev => ({ ...prev, [item.cliente_id]: e.target.value }))}
+                            disabled={desabilitada}
+                            placeholder="Descrição"
+                            className="bg-zinc-900 border-zinc-700 h-8 text-xs"
+                            data-testid={`desc-${item.cliente_id}`}
+                          />
+                        </td>
+                        <td className="p-2 text-center align-top pt-3">
                           {item.ja_tem_cobranca ? (
                             <span className="inline-flex items-center gap-1 text-xs text-amber-400">
                               <AlertTriangle className="w-3 h-3" /> Já gerada
@@ -361,10 +379,10 @@ export function CobrancaLotePorVencimentoDialog({ open, onClose, onSuccess }) {
             </div>
 
             {/* Acao */}
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800 flex-wrap gap-2">
               <div className="text-xs text-zinc-400">
                 <FileText className="w-3 h-3 inline mr-1" />
-                Cobranças com vencimento já existente para o cliente serão puladas automaticamente.
+                Cobranças com vencimento já existente serão puladas automaticamente.
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={closeAll}
