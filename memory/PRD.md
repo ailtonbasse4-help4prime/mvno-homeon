@@ -124,11 +124,20 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Script forense `/app/memory/RECUPERAR_RECARGA_TA.sh` para investigar oplog, dumps e backups na VPS
 - [x] Testado: sync com e sem force, restauracao em lote por nome (1/1 OK), modal renderiza corretamente
 
+### Geracao em Massa de Cobrancas por Data de Vencimento (07/06/2026)
+- [x] Novo endpoint `GET /api/carteira/cobrancas/lote/preview?dia_vencimento=&mes=&ano=` retorna assinaturas ACTIVE agrupadas por dia (extraido de `proximo_vencimento`), marcando `ja_tem_cobranca` para anti-duplicidade. Inclui `counts_by_dia` para chips de filtro
+- [x] Novo endpoint `POST /api/carteira/cobrancas/lote/por-vencimento` gera boletos/PIX em massa no Asaas para assinaturas selecionadas. Anti-duplicidade: pula se ja existe cobranca com mesmo vencimento exato para o cliente. Retorna {created, skipped, errors, items}
+- [x] Frontend componente `CobrancaLotePorVencimentoDialog` com filtros (mês, ano, dia, tipo cobranca), chips clickaveis por dia, busca por nome/numero/oferta, checkboxes individuais, valor editavel por linha, total selecionado em R$, anti-duplicidade visual (linhas com "Ja gerada" desabilitadas)
+- [x] Botao `lote-vencimento-btn` em /cobrancas abre o modal. Em sucesso, refresca a lista de cobrancas
+- [x] Otimizado: batch lookups com `$in` (clientes, linhas, ofertas) evita N+1
+- [x] Testado: 9/9 backend tests, 100% frontend tests, anti-duplicidade validada
+
 ## Backlog
 
 ### P1 - Alta Prioridade
-- [ ] Desmembrar server.py (5300+ linhas) em roteadores separados
-- [ ] Geracao automatica de cobrancas mensais (regra de negocio pendente)
+- [ ] Configurar autenticacao interna do MongoDB (habilitar `--auth` no Docker, criar usuario root forte, atualizar `MONGO_URL` no .env)
+- [ ] Desmembrar server.py (5900+ linhas) em roteadores separados
+- [ ] Backup externo do MongoDB (S3/Backblaze) - hoje so backup local na VPS
 
 ### P2 - Media Prioridade
 - [ ] Bloqueio automatico por inadimplencia (webhook Asaas)

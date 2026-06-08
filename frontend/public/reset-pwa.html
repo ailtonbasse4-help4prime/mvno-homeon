@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resetar PWA</title>
+  <meta name="robots" content="noindex">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #fff; padding: 2rem; max-width: 600px; margin: 0 auto; }
+    h1 { color: #10b981; }
+    .step { padding: 1rem; margin: 1rem 0; background: #18181b; border-radius: 8px; border-left: 3px solid #10b981; }
+    .step.pending { border-color: #f59e0b; }
+    .step.error { border-color: #ef4444; }
+    button { background: #10b981; color: white; border: none; padding: 1rem 2rem; font-size: 1.1rem; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 1rem; }
+    button:disabled { opacity: 0.5; }
+    code { background: #27272a; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>🔄 Reset PWA - MVNO Manager</h1>
+  <p>Esta página limpa todos os caches e service workers antigos do navegador. Use quando o site travar com erro <em>"Algo deu errado"</em> ou versão antiga.</p>
+
+  <div id="log"></div>
+  <button id="btn" onclick="reset()">Executar Reset Completo</button>
+
+  <script>
+    const log = document.getElementById('log');
+    function addStep(msg, status='ok') {
+      const div = document.createElement('div');
+      div.className = 'step ' + status;
+      div.textContent = msg;
+      log.appendChild(div);
+    }
+    async function reset() {
+      document.getElementById('btn').disabled = true;
+      addStep('Iniciando reset...');
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const r of regs) await r.unregister();
+          addStep(`✓ ${regs.length} Service Worker(s) desregistrado(s)`);
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          for (const k of keys) await caches.delete(k);
+          addStep(`✓ ${keys.length} cache(s) limpo(s)`);
+        }
+        try { localStorage.clear(); addStep('✓ localStorage limpo'); } catch (e) {}
+        try { sessionStorage.clear(); addStep('✓ sessionStorage limpo'); } catch (e) {}
+        // Limpa cookies do dominio
+        document.cookie.split(';').forEach(c => {
+          const eq = c.indexOf('=');
+          const name = eq > -1 ? c.substr(0, eq).trim() : c.trim();
+          document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname;
+          document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+        });
+        addStep('✓ Cookies limpos');
+        addStep('✅ TUDO LIMPO! Redirecionando para o login em 3s...', 'ok');
+        setTimeout(() => { window.location.href = '/login?fresh=' + Date.now(); }, 3000);
+      } catch (e) {
+        addStep('❌ Erro: ' + e.message, 'error');
+        document.getElementById('btn').disabled = false;
+      }
+    }
+    // Auto-executa quando a página abre
+    window.addEventListener('load', () => setTimeout(reset, 500));
+  </script>
+</body>
+</html>

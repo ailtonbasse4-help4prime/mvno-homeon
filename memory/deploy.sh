@@ -42,8 +42,24 @@ git pull || {
 # 3. Build frontend
 echo "→ Build frontend..."
 cd "$REPO/frontend"
+# Forca REACT_APP_BACKEND_URL pra producao (sobrescreve qualquer URL de preview/dev vinda do Emergent)
+PROD_BACKEND_URL="https://mvno.homeonapp.com.br"
+if [ -f .env ]; then
+    # Remove linha antiga e adiciona a correta
+    grep -v '^REACT_APP_BACKEND_URL=' .env > .env.tmp 2>/dev/null || true
+    mv .env.tmp .env 2>/dev/null || true
+fi
+echo "REACT_APP_BACKEND_URL=$PROD_BACKEND_URL" >> .env
+echo "   .env configurado: REACT_APP_BACKEND_URL=$PROD_BACKEND_URL"
 yarn install --frozen-lockfile 2>/dev/null || yarn install
 yarn build
+
+# Valida que a URL correta esta no bundle
+if grep -rq "$PROD_BACKEND_URL" build/static/js/*.js 2>/dev/null; then
+    echo "   ✓ Build contem a URL de producao"
+else
+    echo "   ⚠ AVISO: URL de producao nao encontrada no bundle"
+fi
 
 # 4. Copiar build para nginx
 echo "→ Copiando build para $WEB_DIR..."

@@ -1,0 +1,41 @@
+{
+  "summary": "Tested new mass billing generation by due date (lote por vencimento) endpoints + frontend dialog. 9/9 backend tests passed (1 skipped: non-admin enforcement requires unknown password). Frontend dialog renders all required data-testids, empty state shown, gerar button disabled when 0 selected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/carteira/cobrancas/lote/preview", "issue": "counts_by_dia uses int keys when serialized to JSON they become strings - frontend handles this correctly but worth noting"},
+      {"endpoint": "/api/carteira/cobrancas/lote/preview", "issue": "Per-item N+1 DB lookups: for each subscription, queries clientes, linhas, ofertas individually. Will be slow at scale (>500 subs). Consider batching with $in queries."},
+      {"endpoint": "/api/carteira/cobrancas/lote/preview", "issue": "Preview's anti-dup index keyed by (cliente_id, vencimento) only loads charges within target month range — correct, but POST endpoint does its own DB check (also correct). Logic OK."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CobrancaLotePorVencimentoDialog", "issues": ["Accessibility warning: DialogContent missing aria-describedby / Description - non-blocking but worth adding <DialogDescription> for a11y"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_lote_por_vencimento.py",
+    "/app/test_reports/pytest/pytest_lote_por_vencimento.xml"
+  ],
+  "action_items": [
+    "(Optional) Add <DialogDescription> inside lote-vencimento-dialog to fix Radix a11y warning",
+    "(Optional - performance) Batch cliente/linha/oferta lookups in preview endpoint using $in to avoid N+1 when subscription count grows"
+  ],
+  "critical_code_review_comments": [
+    "_calc_vencimento_from_dia correctly handles month-end edge case (e.g., dia=31 in Feb -> 28/29)",
+    "POST anti-dup check is per (cliente_id, vencimento) — matches user spec ('mesma data de vencimento exato'). Works.",
+    "Both endpoints handle ObjectId conversion errors gracefully with try/except.",
+    "POST endpoint requires admin via require_admin(); GET preview uses get_current_user() — any authenticated user can call preview. This may be acceptable but if strictly admin-only data, consider tightening.",
+    "When asaas_service.is_configured is False, POST appends error per item but does NOT insert a local-only cobranca — items list silently failing. Could be a UX surprise; consider returning a clear single error message instead of per-item errors when Asaas is down."
+  ],
+  "updated_files": ["/app/backend/tests/test_lote_por_vencimento.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@mvno.com / admin123",
+  "seed_data_creation": "None. Dev env has 1 ACTIVE subscription with orphan cliente_id (expected per task note) — preview returns total=0 which is correct behavior. End-to-end anti-duplicate flow NOT tested against Asaas production (per testing context note to avoid real charges).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend endpoints /api/carteira/cobrancas/lote/preview (GET, requires auth) and /api/carteira/cobrancas/lote/por-vencimento (POST, requires admin) are working. Anti-duplicate is keyed on (cliente_id, vencimento). To do end-to-end charge creation testing, seed a real cliente+assinatura in MongoDB to avoid real Asaas charges. Frontend dialog at /cobrancas → 'Por Vencimento' button is fully functional with empty state.",
+  "rca of the issue": "N/A - no bugs found. Feature functioning as specified."
+}

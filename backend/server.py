@@ -602,6 +602,9 @@ async def login(data: UserLogin, response: Response, request: Request):
         else:
             lockout_mins = 15
         lockout_until = attempts.get("lockout_until")
+        # Normaliza: se for naive (sem tz), assume UTC pra comparacao segura
+        if lockout_until and isinstance(lockout_until, datetime) and lockout_until.tzinfo is None:
+            lockout_until = lockout_until.replace(tzinfo=timezone.utc)
         if lockout_until and datetime.now(timezone.utc) < lockout_until:
             raise HTTPException(status_code=429, detail=f"Conta bloqueada por {lockout_mins} minutos. Muitas tentativas falhas.")
     user = await db.usuarios.find_one({"email": email})
@@ -3757,6 +3760,333 @@ async def create_cobrancas_lote(data: CobrancaLoteRequest, request: Request):
             errors.append(f"Item {idx+1}: {str(e)}")
     await create_log("financeiro", f"Lote de cobrancas: {created} criadas de {len(data.cobrancas)}", user["id"], user["name"])
     return {"success": True, "created": created, "total": len(data.cobrancas), "errors": errors}
+
+# ===== Geracao em massa por data de vencimento (selecao manual) =====
+
+def _calc_vencimento_from_dia(dia: int, mes: int, ano: int) -> str:
+    """Retorna YYYY-MM-DD ajustando o dia ao ultimo dia do mes quando necessario (ex: dia 31 em fev)."""
+    import calendar
+    last_day = calendar.monthrange(ano, mes)[1]
+    dia_ajustado = min(max(1, dia), last_day)
+    return f"{ano:04d}-{mes:02d}-{dia_ajustado:02d}"
+
+
+@api_router.get("/carteira/cobrancas/lote/preview")
+async def preview_lote_por_vencimento(
+    request: Request,
+    dia_vencimento: Optional[int] = None,  # 1-31
+    mes: Optional[int] = None,             # 1-12 (mes alvo para gerar cobranca)
+    ano: Optional[int] = None,             # YYYY
+):
+    """
+    Para cada cliente que tem historico de cobrancas, pega a ULTIMA cobranca
+    (por vencimento mais recente) e usa como base para o lote do proximo vencimento.
+    Agrupa pelo dia de vencimento dessa ultima cobranca.
+    Marca `ja_tem_cobranca=True` se ja existir cobranca com mesmo vencimento alvo p/ o cliente.
+    """
+    await get_current_user(request)
+
+    # Mes/ano alvo (padrao: mes atual)
+    hoje = datetime.now(timezone.utc)
+    mes_alvo = mes or hoje.month
+    ano_alvo = ano or hoje.year
+
+    # Pre-carregar cobrancas existentes do mes alvo (intervalo 1..31) - anti-dup
+    import calendar
+    inicio = f"{ano_alvo:04d}-{mes_alvo:02d}-01"
+    last_day = calendar.monthrange(ano_alvo, mes_alvo)[1]
+    fim = f"{ano_alvo:04d}-{mes_alvo:02d}-{last_day:02d}"
+    cobr_mes = await db.cobrancas.find({
+        "vencimento": {"$gte": inicio, "$lte": fim}
+    }).to_list(20000)
+    cobr_index = {}
+    for c in cobr_mes:
+        key = (str(c.get("cliente_id")), c.get("vencimento"))
+        cobr_index[key] = c
+
+    # Buscar TODAS as cobrancas ordenadas por vencimento DESC, e pegar a 1a (mais recente) por cliente
+    # Usar agregacao para performance
+    pipeline = [
+        {"$match": {"cliente_id": {"$ne": None}, "vencimento": {"$ne": None, "$ne": ""}}},
+        {"$sort": {"vencimento": -1, "created_at": -1}},
+        {"$group": {
+            "_id": "$cliente_id",
+            "ultima": {"$first": "$$ROOT"},
+        }},
+    ]
+    grouped = await db.cobrancas.aggregate(pipeline).to_list(20000)
+
+    items = []
+    counts_by_dia = {}
+
+    # Pre-coleta IDs para batch lookups
+    cliente_ids_set = set()
+    linha_ids_set = set()
+    valid = []
+    for g in grouped:
+        ultima = g.get("ultima", {})
+        venc = ultima.get("vencimento") or ""
+        try:
+            dia = int(venc.split("-")[2]) if venc and len(venc) >= 10 else None
+        except Exception:
+            dia = None
+        if dia is None:
+            continue
+        if dia_vencimento is not None and dia != dia_vencimento:
+            continue
+        cid = ultima.get("cliente_id") or g.get("_id")
+        if not cid:
+            continue
+        valid.append((ultima, dia, cid))
+        cliente_ids_set.add(cid)
+        if ultima.get("linha_id"):
+            linha_ids_set.add(ultima["linha_id"])
+
+    # Batch load clientes
+    cliente_map = {}
+    if cliente_ids_set:
+        cli_obj_ids = []
+        for cid in cliente_ids_set:
+            try:
+                cli_obj_ids.append(ObjectId(cid))
+            except Exception:
+                pass
+        async for cl in db.clientes.find({"_id": {"$in": cli_obj_ids}}):
+            cliente_map[str(cl["_id"])] = cl
+
+    # Batch load linhas
+    linha_map = {}
+    oferta_ids_set = set()
+    if linha_ids_set:
+        lin_obj_ids = []
+        for lid in linha_ids_set:
+            try:
+                lin_obj_ids.append(ObjectId(lid))
+            except Exception:
+                pass
+        async for ln in db.linhas.find({"_id": {"$in": lin_obj_ids}}):
+            linha_map[str(ln["_id"])] = ln
+            if ln.get("oferta_id"):
+                oferta_ids_set.add(ln["oferta_id"])
+
+    # Batch load ofertas
+    oferta_map = {}
+    if oferta_ids_set:
+        of_obj_ids = []
+        for oid in oferta_ids_set:
+            try:
+                of_obj_ids.append(ObjectId(oid))
+            except Exception:
+                pass
+        async for of in db.ofertas.find({"_id": {"$in": of_obj_ids}}):
+            oferta_map[str(of["_id"])] = of
+
+    for ultima, dia, cliente_id in valid:
+        cliente_doc = cliente_map.get(str(cliente_id))
+        if not cliente_doc:
+            continue
+        cliente_nome = cliente_doc.get("nome")
+
+        vencimento_alvo = _calc_vencimento_from_dia(dia, mes_alvo, ano_alvo)
+        ja_existe = (str(cliente_id), vencimento_alvo) in cobr_index
+        cobr_existente = cobr_index.get((str(cliente_id), vencimento_alvo))
+
+        msisdn = None
+        oferta_nome = None
+        if ultima.get("linha_id"):
+            ln = linha_map.get(str(ultima["linha_id"]))
+            if ln:
+                msisdn = ln.get("msisdn")
+                if ln.get("oferta_id"):
+                    of = oferta_map.get(str(ln["oferta_id"]))
+                    if of:
+                        oferta_nome = of.get("nome")
+
+        # Descricao sugerida: pega a do ultimo boleto MAS troca o mes/ano
+        descricao_anterior = ultima.get("descricao", "") or ""
+        descricao_sugerida = _sugerir_descricao_proximo_mes(descricao_anterior, mes_alvo, ano_alvo, cliente_nome or "")
+
+        items.append({
+            "cliente_id": str(cliente_id),
+            "cliente_nome": cliente_nome,
+            "linha_id": ultima.get("linha_id"),
+            "msisdn": msisdn,
+            "oferta_nome": oferta_nome,
+            "valor_ultimo": ultima.get("valor", 0),
+            "descricao_ultimo": descricao_anterior,
+            "descricao_sugerida": descricao_sugerida,
+            "vencimento_ultimo": ultima.get("vencimento"),
+            "billing_type_ultimo": ultima.get("billing_type", "BOLETO"),
+            "dia_vencimento": dia,
+            "vencimento_alvo": vencimento_alvo,
+            "ja_tem_cobranca": ja_existe,
+            "cobranca_existente_id": str(cobr_existente["_id"]) if cobr_existente else None,
+            "cobranca_existente_status": cobr_existente.get("status") if cobr_existente else None,
+        })
+        counts_by_dia[dia] = counts_by_dia.get(dia, 0) + 1
+
+    # Ordena por dia, depois nome
+    items.sort(key=lambda x: (x["dia_vencimento"], (x.get("cliente_nome") or "").lower()))
+
+    return {
+        "mes_alvo": mes_alvo,
+        "ano_alvo": ano_alvo,
+        "total": len(items),
+        "items": items,
+        "counts_by_dia": counts_by_dia,
+    }
+
+
+def _sugerir_descricao_proximo_mes(descricao_anterior: str, mes_alvo: int, ano_alvo: int, nome: str) -> str:
+    """Tenta substituir nome do mes/ano na descricao anterior pelo novo. Senao retorna template padrao."""
+    import re
+    meses = {
+        "janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+        "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+        "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
+    }
+    nome_mes_alvo = ["Janeiro","Fevereiro","Marco","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][mes_alvo-1]
+    if not descricao_anterior:
+        return f"Mensalidade {nome_mes_alvo}/{ano_alvo} - {nome}".strip(" -")
+
+    nova = descricao_anterior
+    # Tenta substituir mes anterior por mes_alvo (case-insensitive)
+    found = False
+    # Ordenar por tamanho desc para casar "marco" antes de "mar"
+    for mes_str in sorted(meses.keys(), key=lambda s: -len(s)):
+        pattern = re.compile(re.escape(mes_str), re.IGNORECASE)
+        if pattern.search(nova):
+            nova = pattern.sub(nome_mes_alvo, nova, count=1)
+            found = True
+            break
+    # Tenta substituir ano (4 digitos como 2025/2026)
+    nova = re.sub(r"20\d{2}", str(ano_alvo), nova)
+    if not found:
+        # Se nao achou mes, anexa
+        nova = f"{nova} - {nome_mes_alvo}/{ano_alvo}"
+    return nova.strip()
+
+
+class CobrancaLotePorVencimentoItem(BaseModel):
+    cliente_id: str
+    valor: float
+    vencimento: str  # YYYY-MM-DD
+    descricao: Optional[str] = None
+    linha_id: Optional[str] = None
+
+
+class CobrancaLotePorVencimentoRequest(BaseModel):
+    items: List[CobrancaLotePorVencimentoItem]
+    billing_type: str = "BOLETO"
+
+
+@api_router.post("/carteira/cobrancas/lote/por-vencimento")
+async def gerar_lote_por_vencimento(data: CobrancaLotePorVencimentoRequest, request: Request):
+    """Gera cobrancas (Asaas) em lote para clientes selecionados.
+    Anti-duplicidade: pula se ja existe cobranca com mesmo vencimento exato p/ o cliente."""
+    user = await require_admin(request)
+    created = 0
+    skipped = 0
+    errors = []
+    created_items = []
+    for idx, item in enumerate(data.items):
+        try:
+            try:
+                cliente = await db.clientes.find_one({"_id": ObjectId(item.cliente_id)})
+            except Exception:
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "ID de cliente invalido"})
+                continue
+            if not cliente:
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "Cliente nao encontrado"})
+                continue
+
+            valor = float(item.valor)
+            if valor <= 0:
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "Valor invalido"})
+                continue
+
+            # Anti-duplicidade: mesmo vencimento exato p/ o cliente
+            existente = await db.cobrancas.find_one({
+                "cliente_id": str(item.cliente_id),
+                "vencimento": item.vencimento,
+            })
+            if existente:
+                skipped += 1
+                continue
+
+            base_desc = item.descricao or f"Mensalidade - {cliente.get('nome', '')}".strip(" -")
+
+            doc = {
+                "cliente_id": str(item.cliente_id),
+                "linha_id": item.linha_id,
+                "billing_type": data.billing_type,
+                "valor": valor,
+                "vencimento": item.vencimento,
+                "descricao": base_desc,
+                "status": "PENDING",
+                "modalidade": "avista",
+                "asaas_payment_id": None,
+                "asaas_invoice_url": None,
+                "asaas_bankslip_url": None,
+                "asaas_pix_code": None,
+                "asaas_pix_qrcode": None,
+                "paid_at": None,
+                "created_at": datetime.now(timezone.utc),
+            }
+
+            if asaas_service.is_configured:
+                try:
+                    asaas_customer_id = await _get_asaas_customer_id(cliente, user)
+                    result = await asaas_service.create_payment(
+                        customer_id=asaas_customer_id,
+                        billing_type=data.billing_type,
+                        value=valor,
+                        due_date=item.vencimento,
+                        description=_append_portal_link(base_desc),
+                        external_reference=f"lote-venc-{item.cliente_id}",
+                    )
+                    doc["asaas_payment_id"] = result.get("id")
+                    doc["asaas_invoice_url"] = result.get("invoiceUrl")
+                    doc["asaas_bankslip_url"] = result.get("bankSlipUrl")
+                    doc["status"] = result.get("status", "PENDING")
+                except (AsaasNotConfiguredError, AsaasApiError) as e:
+                    errors.append({"index": idx, "cliente_id": item.cliente_id, "error": f"Asaas: {e}"})
+                    continue
+                except Exception as e:
+                    errors.append({"index": idx, "cliente_id": item.cliente_id, "error": f"Erro inesperado: {e}"})
+                    continue
+            else:
+                errors.append({"index": idx, "cliente_id": item.cliente_id, "error": "Asaas nao configurado"})
+                continue
+
+            inserted = await db.cobrancas.insert_one(doc)
+            created += 1
+            created_items.append({
+                "cobranca_id": str(inserted.inserted_id),
+                "cliente_nome": cliente.get("nome"),
+                "valor": valor,
+                "vencimento": item.vencimento,
+                "asaas_payment_id": doc.get("asaas_payment_id"),
+                "asaas_invoice_url": doc.get("asaas_invoice_url"),
+            })
+        except Exception as e:
+            errors.append({"index": idx, "cliente_id": item.cliente_id, "error": str(e)})
+
+    await create_log(
+        "financeiro",
+        f"Lote por vencimento: {created} criadas, {skipped} puladas (duplicadas), {len(errors)} erros (total {len(data.items)})",
+        user["id"], user["name"],
+    )
+    return {
+        "success": True,
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+        "total": len(data.items),
+        "items": created_items,
+    }
+
 
 @api_router.post("/carteira/cobrancas/{cobranca_id}/consultar")
 async def consultar_cobranca(cobranca_id: str, request: Request):
