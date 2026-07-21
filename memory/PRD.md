@@ -127,10 +127,19 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Geracao em Massa de Cobrancas por Data de Vencimento (07/06/2026)
 - [x] Novo endpoint `GET /api/carteira/cobrancas/lote/preview?dia_vencimento=&mes=&ano=` retorna assinaturas ACTIVE agrupadas por dia (extraido de `proximo_vencimento`), marcando `ja_tem_cobranca` para anti-duplicidade. Inclui `counts_by_dia` para chips de filtro
 - [x] Novo endpoint `POST /api/carteira/cobrancas/lote/por-vencimento` gera boletos/PIX em massa no Asaas para assinaturas selecionadas. Anti-duplicidade: pula se ja existe cobranca com mesmo vencimento exato para o cliente. Retorna {created, skipped, errors, items}
-- [x] Frontend componente `CobrancaLotePorVencimentoDialog` com filtros (mês, ano, dia, tipo cobranca), chips clickaveis por dia, busca por nome/numero/oferta, checkboxes individuais, valor editavel por linha, total selecionado em R$, anti-duplicidade visual (linhas com "Ja gerada" desabilitadas)
-- [x] Botao `lote-vencimento-btn` em /cobrancas abre o modal. Em sucesso, refresca a lista de cobrancas
+- [x] REFATORADO: fonte de dados mudou de `assinaturas` para `ultima cobranca de cada cliente` (mais confiavel - nem todo cliente tem assinatura). Valor + descricao herdados do ultimo boleto, com descricao_sugerida trocando o mes/ano automaticamente
+- [x] Frontend componente `CobrancaLotePorVencimentoDialog` com filtros, chips clickaveis por dia, busca, checkboxes, valor E descricao editaveis por linha
 - [x] Otimizado: batch lookups com `$in` (clientes, linhas, ofertas) evita N+1
-- [x] Testado: 9/9 backend tests, 100% frontend tests, anti-duplicidade validada
+
+### Portal do Cliente - Fix Portabilidade (07/21/2026)
+- [x] BUG resolvido: Cliente que fazia portabilidade perdia acesso ao Portal (msisdn Ta Telecom original era sobrescrito pelo numero portado)
+- [x] Backend: `verificar_portabilidade_chip` agora faz `$addToSet msisdn_historico` do msisdn anterior antes de sobrescrever (chip + linha)
+- [x] Backend: `portal_login` busca msisdn atual + `numero` + array `msisdn_historico` (linha e chip)
+- [x] Novo endpoint admin `POST /api/linhas/{linha_id}/msisdn-historico` body `{numero}` para backfill manual de numeros antigos de clientes que ja portaram antes do fix
+- [x] Novo endpoint admin `DELETE /api/linhas/{linha_id}/msisdn-historico/{numero}` para remover
+- [x] Frontend: botao History (cyan) na lista de linhas abre dialog para gerenciar numeros historicos
+- [x] Testado (iteration_27): 13/13 backend + 100% frontend
+
 
 ## Backlog
 

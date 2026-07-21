@@ -4,7 +4,7 @@ import { safeArray, safeObject } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '../components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -641,6 +641,9 @@ export function Linhas() {
             <DialogTitle className="flex items-center gap-2">
               <History className="w-5 h-5 text-cyan-400" />Numeros Historicos (Portabilidade)
             </DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              Cadastre numeros antigos para permitir que o cliente logue no Portal com o numero anterior a portabilidade.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="bg-zinc-900 rounded-lg p-3">
