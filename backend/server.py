@@ -1741,9 +1741,30 @@ async def verificar_portabilidade_chip(iccid: str, request: Request):
         new_chip_status = ChipStatus.ativado.value
         updates_chip["status"] = new_chip_status
         if operadora_msisdn:
-            updates_chip["msisdn"] = str(operadora_msisdn)
-            updates_linha["msisdn"] = str(operadora_msisdn)
-            updates_linha["numero"] = str(operadora_msisdn)
+            new_msisdn = str(operadora_msisdn)
+            new_msisdn_clean = re.sub(r'\D', '', new_msisdn)
+            # Preservar msisdn anterior no historico (se diferente do novo)
+            old_msisdn = chip.get("msisdn") or ""
+            old_msisdn_clean = re.sub(r'\D', '', str(old_msisdn)) if old_msisdn else ""
+            historico_add = []
+            if old_msisdn_clean and old_msisdn_clean != new_msisdn_clean:
+                historico_add.append(old_msisdn_clean)
+            # Tambem preservar o msisdn atual da linha (caso divirja)
+            linha_existente = await db.linhas.find_one({"chip_id": str(chip["_id"])})
+            if linha_existente:
+                for f in ("msisdn", "numero"):
+                    v = linha_existente.get(f)
+                    if v:
+                        vc = re.sub(r'\D', '', str(v))
+                        if vc and vc != new_msisdn_clean and vc not in historico_add:
+                            historico_add.append(vc)
+            if historico_add:
+                await db.chips.update_one({"_id": chip["_id"]}, {"$addToSet": {"msisdn_historico": {"$each": historico_add}}})
+                if linha_existente:
+                    await db.linhas.update_one({"_id": linha_existente["_id"]}, {"$addToSet": {"msisdn_historico": {"$each": historico_add}}})
+            updates_chip["msisdn"] = new_msisdn
+            updates_linha["msisdn"] = new_msisdn
+            updates_linha["numero"] = new_msisdn
         updates_linha["status"] = "ativo"
     elif "AGUARDANDO" in port_status or "PENDENTE" in port_status:
         new_chip_status = ChipStatus.reservado.value
@@ -1773,6 +1794,75 @@ async def verificar_portabilidade_chip(iccid: str, request: Request):
         "operadora_status": operadora_status_raw,
         "atualizado": bool(updates_chip or updates_linha),
     }
+
+
+class NumeroHistoricoRequest(BaseModel):
+    numero: str
+
+
+@api_router.post("/linhas/{linha_id}/msisdn-historico")
+async def adicionar_msisdn_historico(linha_id: str, data: NumeroHistoricoRequest, request: Request):
+    """Admin adiciona um numero de telefone antigo ao historico da linha,
+    permitindo que o cliente logue no portal com esse numero (caso de portabilidade
+    anterior ao registro automatico de historico)."""
+    user = await require_admin(request)
+    numero_clean = re.sub(r'\D', '', data.numero or "")
+    if not numero_clean or len(numero_clean) < 8:
+        raise HTTPException(status_code=400, detail="Numero invalido (minimo 8 digitos)")
+    try:
+        linha = await db.linhas.find_one({"_id": ObjectId(linha_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID de linha invalido")
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+
+    await db.linhas.update_one(
+        {"_id": ObjectId(linha_id)},
+        {"$addToSet": {"msisdn_historico": numero_clean}},
+    )
+    if linha.get("chip_id"):
+        try:
+            await db.chips.update_one(
+                {"_id": ObjectId(linha["chip_id"])},
+                {"$addToSet": {"msisdn_historico": numero_clean}},
+            )
+        except Exception:
+            pass
+
+    await create_log(
+        "portal",
+        f"Numero historico {numero_clean} adicionado a linha {linha_id}",
+        user["id"], user["name"],
+    )
+    linha_atual = await db.linhas.find_one({"_id": ObjectId(linha_id)})
+    return {
+        "success": True,
+        "linha_id": linha_id,
+        "msisdn_atual": linha_atual.get("msisdn"),
+        "msisdn_historico": linha_atual.get("msisdn_historico") or [],
+    }
+
+
+@api_router.delete("/linhas/{linha_id}/msisdn-historico/{numero}")
+async def remover_msisdn_historico(linha_id: str, numero: str, request: Request):
+    """Remove um numero do historico da linha."""
+    user = await require_admin(request)
+    numero_clean = re.sub(r'\D', '', numero)
+    try:
+        linha = await db.linhas.find_one({"_id": ObjectId(linha_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID de linha invalido")
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    await db.linhas.update_one({"_id": ObjectId(linha_id)}, {"$pull": {"msisdn_historico": numero_clean}})
+    if linha.get("chip_id"):
+        try:
+            await db.chips.update_one({"_id": ObjectId(linha["chip_id"])}, {"$pull": {"msisdn_historico": numero_clean}})
+        except Exception:
+            pass
+    await create_log("portal", f"Numero historico {numero_clean} removido da linha {linha_id}", user["id"], user["name"])
+    return {"success": True}
+
 
 @api_router.post("/chips/{iccid}/resetar")
 async def resetar_chip(iccid: str, request: Request):
@@ -4432,14 +4522,28 @@ async def portal_login(data: PortalLoginRequest, request: Request):
 
         cliente_id_str = str(cliente["_id"])
 
-        # Find line matching the phone number
+        # Find line matching the phone number (msisdn atual OU historico)
         linhas = await db.linhas.find({"cliente_id": cliente_id_str}).to_list(100)
         chip_match = None
         linha_match = None
+
+        def _msisdn_bate(msisdn_raw: str, tel_clean: str) -> bool:
+            if not msisdn_raw:
+                return False
+            msisdn_clean = re.sub(r'\D', '', str(msisdn_raw))
+            if not msisdn_clean:
+                return False
+            return tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])
+
         for l in linhas:
-            msisdn = l.get("msisdn") or l.get("numero") or ""
-            msisdn_clean = re.sub(r'\D', '', msisdn)
-            if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+            # Coleta todos os msisdns conhecidos: atual + numero + historico
+            candidatos = []
+            for f in ("msisdn", "numero"):
+                if l.get(f):
+                    candidatos.append(l[f])
+            for h in (l.get("msisdn_historico") or []):
+                candidatos.append(h)
+            if any(_msisdn_bate(c, tel_clean) for c in candidatos):
                 linha_match = l
                 if l.get("chip_id"):
                     try:
@@ -4449,12 +4553,13 @@ async def portal_login(data: PortalLoginRequest, request: Request):
                 break
 
         if not linha_match:
-            # Try matching via chips
+            # Try matching via chips (incluindo historico)
             chips = await db.chips.find({"cliente_id": cliente_id_str}).to_list(100)
             for c in chips:
-                msisdn = c.get("msisdn", "")
-                msisdn_clean = re.sub(r'\D', '', msisdn)
-                if msisdn_clean and (tel_clean.endswith(msisdn_clean[-8:]) or msisdn_clean.endswith(tel_clean[-8:])):
+                candidatos = [c.get("msisdn")]
+                for h in (c.get("msisdn_historico") or []):
+                    candidatos.append(h)
+                if any(_msisdn_bate(m, tel_clean) for m in candidatos):
                     chip_match = c
                     linha_match = await db.linhas.find_one({"chip_id": str(c["_id"])})
                     break

@@ -10,7 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle, Hash, CheckCircle, Clock, ShieldOff, UserCog } from 'lucide-react';
+import { Phone, Lock, Unlock, Info, Filter, RefreshCw, Activity, ShieldAlert, ArrowRightLeft, Tag, Search, X, XCircle, Hash, CheckCircle, Clock, ShieldOff, UserCog, History, Trash2 } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
 import { SearchableSelect } from '../components/SearchableSelect';
 
@@ -38,6 +38,10 @@ export function Linhas() {
   const [lineStatus, setLineStatus] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
+
+  // Numero historico (portabilidade)
+  const [historicoDialog, setHistoricoDialog] = useState(false);
+  const [novoNumeroHistorico, setNovoNumeroHistorico] = useState('');
 
   const fetchLinhas = useCallback(async () => {
     try {
@@ -199,6 +203,46 @@ export function Linhas() {
     } finally { setProcessing(false); }
   };
 
+  // Numero historico (para permitir login do cliente com numero antigo apos portabilidade)
+  const handleAdicionarHistorico = async () => {
+    if (!selectedLinha || !novoNumeroHistorico.trim()) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(
+        `${API_URL}/api/linhas/${selectedLinha.id}/msisdn-historico`,
+        { numero: novoNumeroHistorico.trim() },
+        { withCredentials: true },
+      );
+      if (r.data.success) {
+        toast.success('Numero adicionado ao historico. Cliente ja pode logar no portal.');
+        setSelectedLinha({ ...selectedLinha, msisdn_historico: r.data.msisdn_historico });
+        setNovoNumeroHistorico('');
+        fetchLinhas();
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao adicionar numero');
+    } finally { setProcessing(false); }
+  };
+
+  const handleRemoverHistorico = async (numero) => {
+    if (!selectedLinha) return;
+    if (!window.confirm(`Remover ${numero} do historico?`)) return;
+    try {
+      const r = await axios.delete(
+        `${API_URL}/api/linhas/${selectedLinha.id}/msisdn-historico/${numero}`,
+        { withCredentials: true },
+      );
+      if (r.data.success) {
+        toast.success('Numero removido');
+        const novoHist = (selectedLinha.msisdn_historico || []).filter(n => n !== numero);
+        setSelectedLinha({ ...selectedLinha, msisdn_historico: novoHist });
+        fetchLinhas();
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao remover');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const styles = {
       ativo: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40',
@@ -344,6 +388,11 @@ export function Linhas() {
                       {isAdmin && linha.status !== 'cancelado' && (
                         <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setTransferDestino(''); setTransferMigrar(false); setTransferInativar(false); setTransferDialog(true); loadClientesParaTransferencia(); }} className="text-zinc-400 hover:text-violet-400" title="Transferir Titularidade" data-testid={`transfer-titularidade-${linha.id}`}>
                           <UserCog className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setNovoNumeroHistorico(''); setHistoricoDialog(true); }} className="text-zinc-400 hover:text-cyan-400" title="Numeros historicos (portabilidade)" data-testid={`historico-numero-${linha.id}`}>
+                          <History className="w-4 h-4" />
                         </Button>
                       )}
                       {isAdmin && linha.status !== 'cancelado' && (
@@ -580,6 +629,72 @@ export function Linhas() {
             <Button variant="outline" onClick={() => setTransferDialog(false)} className="border-zinc-700" disabled={processing}>Cancelar</Button>
             <Button onClick={handleTransferirTitularidade} disabled={processing || !transferDestino} className="bg-violet-600 hover:bg-violet-500 text-white" data-testid="confirm-transfer-titularidade">
               {processing ? 'Transferindo...' : 'Transferir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Numeros historicos (portabilidade) */}
+      <Dialog open={historicoDialog} onOpenChange={setHistoricoDialog}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md" data-testid="historico-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5 text-cyan-400" />Numeros Historicos (Portabilidade)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-zinc-900 rounded-lg p-3">
+              <div className="text-xs text-zinc-500 mb-1">Numero atual</div>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+            </div>
+
+            <div className="text-xs text-zinc-400 leading-relaxed bg-cyan-950/30 border border-cyan-800/40 rounded p-2">
+              Adicione aqui numeros antigos (ex: numero Ta Telecom original antes da portabilidade)
+              que o cliente pode usar para logar no Portal do Cliente.
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Numeros salvos</label>
+              {(selectedLinha?.msisdn_historico || []).length === 0 ? (
+                <div className="text-xs text-zinc-500 italic p-2 bg-zinc-900 rounded">Nenhum numero historico salvo</div>
+              ) : (
+                <div className="space-y-1">
+                  {(selectedLinha?.msisdn_historico || []).map((n) => (
+                    <div key={n} className="flex items-center justify-between bg-zinc-900 rounded px-3 py-2">
+                      <span className="font-mono text-sm text-white">{n}</span>
+                      <Button variant="ghost" size="sm" onClick={() => handleRemoverHistorico(n)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-7 w-7 p-0"
+                        data-testid={`remove-historico-${n}`}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Adicionar numero</label>
+              <div className="flex gap-2">
+                <input type="text"
+                  value={novoNumeroHistorico}
+                  onChange={e => setNovoNumeroHistorico(e.target.value)}
+                  placeholder="Ex: 11987654321"
+                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white font-mono"
+                  data-testid="input-novo-historico"
+                />
+                <Button onClick={handleAdicionarHistorico}
+                  disabled={processing || !novoNumeroHistorico.trim()}
+                  className="btn-primary"
+                  data-testid="btn-add-historico">
+                  Adicionar
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoricoDialog(false)} className="border-zinc-700 hover:bg-zinc-800" data-testid="btn-close-historico">
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
