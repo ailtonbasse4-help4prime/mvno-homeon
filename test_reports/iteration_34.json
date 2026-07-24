@@ -1,0 +1,37 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "Clarice ainda está na lista dos clientes que seriam bloqueados na produção — usuário não está confiante no auto-bloqueio",
+  "summary": "No relevant testing skill found. Focused backend verification passed: Clarice is absent from /api/automacao/bloqueio/simular and /diagnosticar reports seria_bloqueado=false with motivo sem_cobrancas_vencidas. The removed Asaas fallback is also fixed: a seeded customer with only old Asaas RECEIVED payments (>60 days) now appears as BLOQUEAR, while a seeded customer with recent Asaas RECEIVED payment is protected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/bug_verification_34_backend.py",
+    "/app/test_reports/bug34_backend_results.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Inspected /app/backend/routes/automacao_bloqueio.py: the previous non-empty pagamentos fallback was removed; condition 4 now only returns True for valid paymentDate/confirmedDate/clientPaymentDate within the 60-day cutoff and returns False on Asaas exceptions. No blocking code-review issue found in the tested flow."
+  ],
+  "updated_files": [
+    "/app/tests/bug_verification_34_backend.py",
+    "/app/test_reports/bug34_backend_results.json",
+    "/app/test_reports/bug_verification_34.json",
+    "/app/test_reports/iteration_34.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "not tested - backend only request"
+  },
+  "seed_data_creation": "Created seven tagged BUG34 MongoDB-only clients/cobrancas/linhas: Asaas recent-only, Asaas old-only, local same-month paid, local future paid, local paid_at 50 days, true delinquent, and whitelist. Used real read-only Asaas production list_payments calls to select existing customer IDs. Cleanup verified 0 remaining BUG34 tagged records (deleted 7 clientes, 7 linhas, 10 cobrancas, 1 whitelist).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mandatory skill search for 'Clarice auto-bloqueio Asaas clientes bloqueados diagnosticar' returned no relevant testing skill. /app/memory/test_credentials.md was not present; used required credentials admin@mvno.com/admin123 successfully. git status showed uncommitted M backend/routes/automacao_bloqueio.py; recent history top commit a3282a8. Test ran against REACT_APP_BACKEND_URL=https://chip-manager-3.preview.emergentagent.com. Asaas scan was configured for production and found recent customer cus_000183340858 (max payment 2026-07-22) and old-only customer cus_000170771434 (max payment 2026-05-24, cutoff 2026-05-25). /simular HTTP 200 in 6.123s: seeded recent-only absent, old-only present BLOQUEAR, local protections absent, true delinquent BLOQUEAR, whitelist SKIP_WHITELIST, Clarice id 69d023bc83caf2c1f9c09efe absent. /diagnosticar Clarice HTTP 200 returned seria_bloqueado=false/motivo=sem_cobrancas_vencidas; /diagnosticar old-only returned seria_bloqueado=true/motivo=seria_bloqueado_por_inadimplencia. Direct helper checks confirmed recent Asaas payment returns True, old 75-day payment returns False, and simulated Asaas timeout returns False without crash. No product MOCKED APIs were used for the API workflow; direct helper used an in-memory fake only for isolated exception/date edge cases.",
+  "rca_of_the_issue": "Previous RCA was confirmed and mitigated: the non-empty Asaas pagamentos fallback had masked customers whose only paid history was old. The fix removes that fallback, so only valid Asaas payment dates within the last 60 days protect a customer from the simulation. Runtime evidence now matches the intended behavior."
+}

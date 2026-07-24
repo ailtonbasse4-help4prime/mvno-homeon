@@ -333,7 +333,7 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
                     )
                     pagamentos = result_c.get("data", []) if isinstance(result_c, dict) else []
 
-                # Se pagou algo nos ultimos 60 dias -> em dia
+                # Se pagou algo nos ultimos 60 dias -> em dia (STRICT: exige data valida e recente)
                 limite_60d = (_dt3.now(_tz.utc) - _td(days=60)).date()
                 for p in pagamentos:
                     payment_date = p.get("paymentDate") or p.get("confirmedDate") or p.get("clientPaymentDate")
@@ -344,10 +344,8 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
                                 return True
                         except Exception:
                             pass
-                # Se nao achou data mas tem pagamentos recentes na lista, assume em dia
-                if pagamentos and len(pagamentos) >= 1:
-                    # Asaas retorna do mais recente pro mais antigo; se ha pagamentos RECEIVED e o cliente e ativo, sinal positivo
-                    return True
+                # STRICT: sem fallback - se nenhum pagamento tem data recente,
+                # nao considera em dia (evita mascarar inadimplentes com historico antigo)
         except Exception as e:
             logger.warning(f"Falha ao consultar historico Asaas cliente {cliente_id}: {e}")
 
