@@ -160,6 +160,24 @@ export default function AutomacaoBloqueio() {
     }
   };
 
+  const [diagOpen, setDiagOpen] = useState(false);
+  const [diagData, setDiagData] = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+
+  const diagnosticar = async (cliente_id) => {
+    setDiagOpen(true);
+    setDiagLoading(true);
+    setDiagData(null);
+    try {
+      const r = await axios.get(`${API_URL}/api/automacao/bloqueio/diagnosticar/${cliente_id}`, { withCredentials: true });
+      setDiagData(r.data);
+    } catch (e) {
+      toast.error('Erro: ' + (e.response?.data?.detail || e.message));
+      setDiagOpen(false);
+    }
+    setDiagLoading(false);
+  };
+
   const removerWhitelist = async (cliente_id) => {
     if (!window.confirm('Remover da whitelist?')) return;
     try {
@@ -421,13 +439,19 @@ export default function AutomacaoBloqueio() {
               </div>
               <div className="max-h-72 overflow-y-auto space-y-1 text-xs border border-zinc-800 rounded p-1" data-testid="lista-inadimplentes">
                 {simulacao.itens.map((it, idx) => (
-                  <div key={it.cliente_id} className="flex justify-between bg-zinc-900 rounded px-2 py-1 gap-2" data-testid={`sim-item-${idx}`}>
+                  <div key={it.cliente_id} className="flex justify-between bg-zinc-900 rounded px-2 py-1 gap-2 items-center" data-testid={`sim-item-${idx}`}>
                     <span className="truncate flex-1" title={it.cliente_nome}>
                       <span className="text-zinc-500 mr-1">{idx + 1}.</span>{it.cliente_nome}
                     </span>
                     <span className={`shrink-0 ${it.na_whitelist ? 'text-cyan-400' : 'text-orange-400'}`}>
                       {it.na_whitelist ? '★ VIP' : `R$ ${it.valor?.toFixed(2)}`}
                     </span>
+                    <button onClick={() => diagnosticar(it.cliente_id)}
+                      className="text-cyan-400 hover:text-cyan-300 text-xs px-1"
+                      title="Ver detalhes do cliente"
+                      data-testid={`btn-diag-${idx}`}>
+                      🔍
+                    </button>
                   </div>
                 ))}
               </div>
@@ -619,6 +643,85 @@ export default function AutomacaoBloqueio() {
                 <Plus className="w-4 h-4 mr-1" />
                 Adicionar {selecionadosLote.size} cliente{selecionadosLote.size === 1 ? '' : 's'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal - Diagnostico do Cliente */}
+      {diagOpen && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setDiagOpen(false)}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-lg max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()} data-testid="modal-diag">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                🔍 Diagnóstico do Cliente
+              </h3>
+              <button onClick={() => setDiagOpen(false)} className="text-zinc-400 hover:text-white">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {diagLoading && <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-emerald-400" /></div>}
+              {diagData && (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-lg font-semibold" data-testid="diag-nome">{diagData.cliente.nome}</h4>
+                    <div className="text-xs text-zinc-500">{diagData.cliente.documento} • {diagData.cliente.telefone}</div>
+                  </div>
+
+                  <div className={`p-3 rounded border ${diagData.resumo.seria_bloqueado ? 'bg-orange-900/20 border-orange-700' : 'bg-emerald-900/20 border-emerald-700'}`}>
+                    <div className="font-semibold mb-1" data-testid="diag-resumo">
+                      {diagData.resumo.seria_bloqueado ? '⚠️ SERIA BLOQUEADO' : '✅ NÃO SERIA BLOQUEADO'}
+                    </div>
+                    <div className="text-xs text-zinc-300">Motivo: {diagData.resumo.motivo}</div>
+                    {diagData.na_whitelist && <div className="text-xs text-cyan-400 mt-1">★ Cliente está na Whitelist VIP{diagData.motivo_whitelist ? `: ${diagData.motivo_whitelist}` : ''}</div>}
+                  </div>
+
+                  {diagData.linhas.length > 0 && (
+                    <div>
+                      <h5 className="text-sm font-semibold mb-2">Linhas ({diagData.linhas.length})</h5>
+                      <div className="space-y-1">
+                        {diagData.linhas.map(l => (
+                          <div key={l.id} className="text-xs bg-zinc-900 rounded px-2 py-1 flex justify-between">
+                            <span className="font-mono">{l.msisdn || '—'}</span>
+                            <span className={l.status === 'ativo' ? 'text-emerald-400' : 'text-zinc-400'}>{l.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <h5 className="text-sm font-semibold mb-2">Todas as cobranças ({diagData.total_cobrancas})</h5>
+                    <div className="max-h-64 overflow-y-auto border border-zinc-800 rounded" data-testid="diag-cobrancas">
+                      <table className="w-full text-xs">
+                        <thead className="bg-zinc-900 sticky top-0">
+                          <tr>
+                            <th className="p-2 text-left">Vencimento</th>
+                            <th className="p-2 text-left">Status</th>
+                            <th className="p-2 text-right">Valor</th>
+                            <th className="p-2 text-left">Pago em</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {diagData.cobrancas.map(c => (
+                            <tr key={c.id} className="border-t border-zinc-800/60">
+                              <td className="p-2 font-mono">{c.vencimento}</td>
+                              <td className="p-2">
+                                <span className={
+                                  ['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'].includes(c.status) ? 'text-emerald-400' :
+                                  c.status === 'OVERDUE' ? 'text-red-400' : 'text-amber-400'
+                                }>{c.status}</span>
+                              </td>
+                              <td className="p-2 text-right">R$ {(c.valor || 0).toFixed(2)}</td>
+                              <td className="p-2 text-zinc-500">{c.paid_at ? c.paid_at.slice(0, 10) : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -257,21 +257,143 @@ async def _get_whitelist_set() -> set:
 
 
 async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
-    """Verifica se o cliente ja tem alguma cobranca PAGA para o mesmo mes/ano do vencimento."""
+    """
+    Verifica se o cliente esta "em dia" — logica robusta com multiplas condicoes:
+    1. Tem cobranca paga no mesmo mes do vencimento pendente
+    2. Tem cobranca paga com vencimento >= vencimento pendente (pagou uma futura)
+    3. Pagou algo nos ultimos 35 dias corridos
+    4. Tem cobranca ativa/paga com vencimento no proximo mes (planos pre-pagos)
+    Se qualquer condicao verdadeira -> considera em dia -> NAO bloqueia.
+    """
+    if not vencimento:
+        return False
     try:
-        ano, mes, _ = vencimento.split("-")
-        inicio = f"{ano}-{mes}-01"
-        import calendar
-        last_day = calendar.monthrange(int(ano), int(mes))[1]
-        fim = f"{ano}-{mes}-{last_day:02d}"
+        from datetime import datetime as _dt
+        venc_date = _dt.strptime(vencimento, "%Y-%m-%d").date()
     except Exception:
         return False
-    paga = await _db.cobrancas.find_one({
+
+    paid_statuses = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]
+
+    # (1) mesma janela mensal (mes do vencimento pendente)
+    try:
+        ano, mes, _ = vencimento.split("-")
+        import calendar
+        last_day = calendar.monthrange(int(ano), int(mes))[1]
+        inicio_mes = f"{ano}-{mes}-01"
+        fim_mes = f"{ano}-{mes}-{last_day:02d}"
+        paga = await _db.cobrancas.find_one({
+            "cliente_id": str(cliente_id),
+            "vencimento": {"$gte": inicio_mes, "$lte": fim_mes},
+            "status": {"$in": paid_statuses},
+        })
+        if paga:
+            return True
+    except Exception:
+        pass
+
+    # (2) pagou cobranca com vencimento >= vencimento pendente (adiantou futura)
+    paga_futura = await _db.cobrancas.find_one({
         "cliente_id": str(cliente_id),
-        "vencimento": {"$gte": inicio, "$lte": fim},
-        "status": {"$in": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
+        "vencimento": {"$gte": vencimento},
+        "status": {"$in": paid_statuses},
     })
-    return bool(paga)
+    if paga_futura:
+        return True
+
+    # (3) pagou algo nos ultimos 35 dias corridos (paid_at recente)
+    from datetime import datetime as _dt2, timezone as _tz, timedelta as _td
+    limite_dt = _dt2.now(_tz.utc) - _td(days=35)
+    paga_recente = await _db.cobrancas.find_one({
+        "cliente_id": str(cliente_id),
+        "status": {"$in": paid_statuses},
+        "$or": [
+            {"paid_at": {"$gte": limite_dt}},
+            {"paid_at": {"$gte": limite_dt.isoformat()}},
+        ],
+    })
+    if paga_recente:
+        return True
+
+    return False
+
+
+@router.get("/diagnosticar/{cliente_id}")
+async def diagnosticar_cliente(cliente_id: str, request: Request):
+    """Retorna diagnostico completo do cliente: cobrancas, status, motivo pelo qual
+    aparece (ou nao) na lista de bloqueio. Ferramenta para o admin auditar casos duvidosos."""
+    await _require_admin(request)
+    try:
+        cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="cliente_id invalido")
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    # Todas as cobrancas do cliente (ultimos 12 meses + futuras)
+    cobrancas = await _db.cobrancas.find({"cliente_id": cliente_id}).sort("vencimento", -1).to_list(50)
+
+    # Whitelist?
+    wl = await _db.automacao_bloqueio_whitelist.find_one({"cliente_id": cliente_id})
+
+    # Linhas do cliente
+    linhas = await _db.linhas.find({"cliente_id": cliente_id}).to_list(20)
+
+    # Detectar quais cobrancas estao "vencidas e nao pagas" (candidatas a bloqueio)
+    hoje = datetime.now(timezone.utc).date().isoformat()
+    candidatas_bloqueio = []
+    for c in cobrancas:
+        v = c.get("vencimento")
+        st = c.get("status")
+        if v and v <= hoje and st not in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+            em_dia = await _cliente_ja_pagou_no_mes(cliente_id, v)
+            candidatas_bloqueio.append({
+                "cobranca_id": str(c["_id"]),
+                "vencimento": v,
+                "status": st,
+                "valor": c.get("valor"),
+                "descricao": c.get("descricao"),
+                "paga_no_asaas": None,  # nao consulta aqui (custoso)
+                "cliente_em_dia_local": em_dia,
+                "seria_bloqueada": (not em_dia) and (not wl),
+            })
+
+    return {
+        "cliente": {
+            "id": str(cliente["_id"]),
+            "nome": cliente.get("nome"),
+            "documento": cliente.get("documento"),
+            "telefone": cliente.get("telefone"),
+        },
+        "na_whitelist": bool(wl),
+        "motivo_whitelist": wl.get("motivo") if wl else None,
+        "total_cobrancas": len(cobrancas),
+        "cobrancas": [
+            {
+                "id": str(c["_id"]),
+                "vencimento": c.get("vencimento"),
+                "status": c.get("status"),
+                "valor": c.get("valor"),
+                "descricao": c.get("descricao"),
+                "paid_at": str(c.get("paid_at")) if c.get("paid_at") else None,
+                "asaas_payment_id": c.get("asaas_payment_id"),
+            }
+            for c in cobrancas
+        ],
+        "linhas": [
+            {"id": str(l["_id"]), "msisdn": l.get("msisdn") or l.get("numero"), "status": l.get("status")}
+            for l in linhas
+        ],
+        "candidatas_bloqueio": candidatas_bloqueio,
+        "resumo": {
+            "seria_bloqueado": any(x["seria_bloqueada"] for x in candidatas_bloqueio),
+            "motivo": "whitelist" if wl else (
+                "cliente_em_dia (pagou recente/futura/mesmo_mes)" if candidatas_bloqueio and all(x["cliente_em_dia_local"] for x in candidatas_bloqueio)
+                else "seria_bloqueado_por_inadimplencia" if candidatas_bloqueio
+                else "sem_cobrancas_vencidas"
+            ),
+        },
+    }
 
 
 async def _verificar_pagamento_final_asaas(cobranca_id: str) -> dict:
