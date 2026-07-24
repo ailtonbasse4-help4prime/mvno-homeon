@@ -1,0 +1,168 @@
+{
+  "tag": "BUG32-272ad4a1",
+  "base_url": "https://chip-manager-3.preview.emergentagent.com",
+  "created": {
+    "future_paid": {
+      "cliente_id": "6a638778c59b9edb78b2bc08",
+      "nome": "QA BUG32 FUTURE PAID BUG32-272ad4a1",
+      "cobrancas": [
+        "6a638778c59b9edb78b2bc0a",
+        "6a638778c59b9edb78b2bc0b"
+      ],
+      "whitelist": false
+    },
+    "recent_paid": {
+      "cliente_id": "6a638778c59b9edb78b2bc0c",
+      "nome": "QA BUG32 RECENT PAID BUG32-272ad4a1",
+      "cobrancas": [
+        "6a638778c59b9edb78b2bc0e",
+        "6a638778c59b9edb78b2bc0f"
+      ],
+      "whitelist": false
+    },
+    "same_month_duplicate": {
+      "cliente_id": "6a638778c59b9edb78b2bc10",
+      "nome": "QA BUG32 SAME MONTH DUP BUG32-272ad4a1",
+      "cobrancas": [
+        "6a638778c59b9edb78b2bc12",
+        "6a638778c59b9edb78b2bc13"
+      ],
+      "whitelist": false
+    },
+    "true_delinquent": {
+      "cliente_id": "6a638778c59b9edb78b2bc14",
+      "nome": "QA BUG32 TRUE DELINQUENT BUG32-272ad4a1",
+      "cobrancas": [
+        "6a638778c59b9edb78b2bc16"
+      ],
+      "whitelist": false
+    },
+    "whitelist": {
+      "cliente_id": "6a638778c59b9edb78b2bc17",
+      "nome": "QA BUG32 WHITELIST BUG32-272ad4a1",
+      "cobrancas": [
+        "6a638778c59b9edb78b2bc19"
+      ],
+      "whitelist": true
+    }
+  },
+  "reported_clients_found": {
+    "Clarice": {
+      "id": "69d023bc83caf2c1f9c09efe",
+      "nome": "Clarice Santos De Freitas"
+    }
+  },
+  "simular_counts": {
+    "total": 12,
+    "a_bloquear": 11,
+    "skip_whitelist": 1
+  },
+  "checks": [
+    {
+      "name": "admin login",
+      "passed": true,
+      "detail": "HTTP 200: {\"id\":\"69cbfc5ee53a77ec56042df3\",\"email\":\"admin@mvno.com\",\"name\":\"Administrador\",\"role\":\"admin\",\"created_at\":\"2026-03-31T16:54:54.229000\"}"
+    },
+    {
+      "name": "simular HTTP 200",
+      "passed": true,
+      "detail": "HTTP 200: {\"total\":12,\"a_bloquear\":11,\"skip_whitelist\":1,\"itens\":[{\"cliente_id\":\"69d023c483caf2c1f9c09f24\",\"cliente_nome\":\"Jose Felipe Do Nascimento\",\"documento\":\"40757441831\",\"telefone\":\"5519993699419\",\"cobranca_id\":\"69e25ecd79c76c1991551ac0\",\"valor\":38.0,\"vencimento\":\"2026-07-10\",\"descricao\":\"Parcela 3 de 7"
+    },
+    {
+      "name": "future_paid absent from simular",
+      "passed": true,
+      "detail": "present=None"
+    },
+    {
+      "name": "recent_paid absent from simular",
+      "passed": true,
+      "detail": "present=None"
+    },
+    {
+      "name": "same_month_duplicate absent from simular",
+      "passed": true,
+      "detail": "present=None"
+    },
+    {
+      "name": "true delinquent still appears",
+      "passed": true,
+      "detail": "seeded truly overdue client missing"
+    },
+    {
+      "name": "true delinquent action BLOQUEAR",
+      "passed": true,
+      "detail": "{\"cliente_id\": \"6a638778c59b9edb78b2bc14\", \"cliente_nome\": \"QA BUG32 TRUE DELINQUENT BUG32-272ad4a1\", \"documento\": \"60832941751\", \"telefone\": \"11999999999\", \"cobranca_id\": \"6a638778c59b9edb78b2bc16\", \"valor\": 88.88, \"vencimento\": \"2026-05-25\", \"descricao\": \"QA BUG32 TRUE DELINQUENT\", \"linhas_afetadas\": [{\"linha_id\": \"6a638778c59b9edb78b2bc15\", \"msisdn\": \"11978835231\"}], \"na_whitelist\": false, \"acao\": \"BLOQUEAR\"}"
+    },
+    {
+      "name": "whitelist still appears but skipped",
+      "passed": true,
+      "detail": "{\"cliente_id\": \"6a638778c59b9edb78b2bc17\", \"cliente_nome\": \"QA BUG32 WHITELIST BUG32-272ad4a1\", \"documento\": \"56676600973\", \"telefone\": \"11999999999\", \"cobranca_id\": \"6a638778c59b9edb78b2bc19\", \"valor\": 66.66, \"vencimento\": \"2026-05-25\", \"descricao\": \"QA BUG32 WHITELIST\", \"linhas_afetadas\": [{\"linha_id\": \"6a638778c59b9edb78b2bc18\", \"msisdn\": \"11939730272\"}], \"na_whitelist\": true, \"acao\": \"SKIP_WHITELIST\"}"
+    },
+    {
+      "name": "reported customer Clarice absent from simular",
+      "passed": true,
+      "detail": "present=None"
+    },
+    {
+      "name": "reported customer Emidio found in preview DB",
+      "passed": null,
+      "detail": "not present in this preview database"
+    },
+    {
+      "name": "diagnosticar future_paid HTTP 200",
+      "passed": true,
+      "detail": "{\"cliente\":{\"id\":\"6a638778c59b9edb78b2bc08\",\"nome\":\"QA BUG32 FUTURE PAID BUG32-272ad4a1\",\"documento\":\"22283840352\",\"telefone\":\"11999999999\"},\"na_whitelist\":false,\"motivo_whitelist\":null,\"total_cobrancas\":2,\"cobrancas\":[{\"id\":\"6a638778c59b9edb78b2bc0b\",\"vencimento\":\"2026-08-23\",\"status\":\"RECEIVED\",\"v"
+    },
+    {
+      "name": "diagnosticar schema includes required fields",
+      "passed": true,
+      "detail": "[\"cliente\", \"na_whitelist\", \"motivo_whitelist\", \"total_cobrancas\", \"cobrancas\", \"linhas\", \"candidatas_bloqueio\", \"resumo\"]"
+    },
+    {
+      "name": "diagnosticar future_paid not blocked",
+      "passed": true,
+      "detail": "{\"seria_bloqueado\": false, \"motivo\": \"cliente_em_dia (pagou recente/futura/mesmo_mes)\"}"
+    },
+    {
+      "name": "diagnosticar true_delinquent HTTP 200",
+      "passed": true,
+      "detail": "{\"cliente\":{\"id\":\"6a638778c59b9edb78b2bc14\",\"nome\":\"QA BUG32 TRUE DELINQUENT BUG32-272ad4a1\",\"documento\":\"60832941751\",\"telefone\":\"11999999999\"},\"na_whitelist\":false,\"motivo_whitelist\":null,\"total_cobrancas\":1,\"cobrancas\":[{\"id\":\"6a638778c59b9edb78b2bc16\",\"vencimento\":\"2026-05-25\",\"status\":\"PENDING\""
+    },
+    {
+      "name": "diagnosticar true_delinquent seria_bloqueado true",
+      "passed": true,
+      "detail": "{\"seria_bloqueado\": true, \"motivo\": \"seria_bloqueado_por_inadimplencia\"}"
+    },
+    {
+      "name": "diagnosticar reported Clarice HTTP 200",
+      "passed": true,
+      "detail": "{\"cliente\":{\"id\":\"69d023bc83caf2c1f9c09efe\",\"nome\":\"Clarice Santos De Freitas\",\"documento\":\"08338120847\",\"telefone\":\"5519993862667\"},\"na_whitelist\":false,\"motivo_whitelist\":null,\"total_cobrancas\":12,\"cobrancas\":[{\"id\":\"69e25ee479c76c1991551af9\",\"vencimento\":\"2027-02-25\",\"status\":\"PENDING\",\"valor\":74"
+    },
+    {
+      "name": "diagnosticar reported Clarice not blocked",
+      "passed": true,
+      "detail": "{\"seria_bloqueado\": false, \"motivo\": \"sem_cobrancas_vencidas\"}"
+    },
+    {
+      "name": "diagnosticar invalid id returns 400",
+      "passed": true,
+      "detail": "HTTP 400: {\"detail\":\"cliente_id invalido\"}"
+    },
+    {
+      "name": "diagnosticar nonexistent id returns 404",
+      "passed": true,
+      "detail": "HTTP 404: {\"detail\":\"Cliente nao encontrado\"}"
+    },
+    {
+      "name": "diagnosticar requires auth 401",
+      "passed": true,
+      "detail": "HTTP 401: {\"detail\":\"Nao autenticado\"}"
+    },
+    {
+      "name": "diagnosticar rejects non-admin 403",
+      "passed": true,
+      "detail": "HTTP 403: {\"detail\":\"Acesso negado. Requer permissao de administrador.\"}"
+    }
+  ],
+  "failures": []
+}
