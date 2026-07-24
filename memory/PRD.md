@@ -127,10 +127,30 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 ### Geracao em Massa de Cobrancas por Data de Vencimento (07/06/2026)
 - [x] Novo endpoint `GET /api/carteira/cobrancas/lote/preview?dia_vencimento=&mes=&ano=` retorna assinaturas ACTIVE agrupadas por dia (extraido de `proximo_vencimento`), marcando `ja_tem_cobranca` para anti-duplicidade. Inclui `counts_by_dia` para chips de filtro
 - [x] Novo endpoint `POST /api/carteira/cobrancas/lote/por-vencimento` gera boletos/PIX em massa no Asaas para assinaturas selecionadas. Anti-duplicidade: pula se ja existe cobranca com mesmo vencimento exato para o cliente. Retorna {created, skipped, errors, items}
-- [x] Frontend componente `CobrancaLotePorVencimentoDialog` com filtros (mês, ano, dia, tipo cobranca), chips clickaveis por dia, busca por nome/numero/oferta, checkboxes individuais, valor editavel por linha, total selecionado em R$, anti-duplicidade visual (linhas com "Ja gerada" desabilitadas)
-- [x] Botao `lote-vencimento-btn` em /cobrancas abre o modal. Em sucesso, refresca a lista de cobrancas
+- [x] REFATORADO: fonte de dados mudou de `assinaturas` para `ultima cobranca de cada cliente` (mais confiavel - nem todo cliente tem assinatura). Valor + descricao herdados do ultimo boleto, com descricao_sugerida trocando o mes/ano automaticamente
+- [x] Frontend componente `CobrancaLotePorVencimentoDialog` com filtros, chips clickaveis por dia, busca, checkboxes, valor E descricao editaveis por linha
 - [x] Otimizado: batch lookups com `$in` (clientes, linhas, ofertas) evita N+1
-- [x] Testado: 9/9 backend tests, 100% frontend tests, anti-duplicidade validada
+
+### Portal do Cliente - Fix Portabilidade (07/21/2026)
+- [x] BUG resolvido: Cliente que fazia portabilidade perdia acesso ao Portal (msisdn Ta Telecom original era sobrescrito pelo numero portado)
+- [x] Backend: `verificar_portabilidade_chip` agora faz `$addToSet msisdn_historico` do msisdn anterior antes de sobrescrever (chip + linha)
+- [x] Backend: `portal_login` busca msisdn atual + `numero` + array `msisdn_historico` (linha e chip)
+- [x] Novo endpoint admin `POST /api/linhas/{linha_id}/msisdn-historico` body `{numero}` para backfill manual
+- [x] Frontend: botao History (cyan) na lista de linhas abre dialog para gerenciar numeros historicos
+- [x] Testado (iteration_27): 13/13 backend + 100% frontend
+
+### Automacao Bloqueio/Desbloqueio por Inadimplencia (07/24/2026)
+- [x] Novo modulo `/app/backend/routes/automacao_bloqueio.py` com worker background (asyncio task) que roda diariamente
+- [x] Job de bloqueio: as 23h (config) varre cobrancas vencidas do dia -> `bloqueio_total` Ta Telecom + WhatsApp opcional
+- [x] Job de aviso: as 09h envia WhatsApp para clientes com cobranca vencendo amanha
+- [x] Desbloqueio automatico via webhook Asaas: `POST /api/webhooks/asaas` foi ampliado para chamar `desbloquear_por_pagamento` ao receber CONFIRMED/RECEIVED (best-effort)
+- [x] Endpoints admin: GET/PUT /config, GET/POST/DELETE /whitelist, GET /simular (dry-read), POST /executar (dry_run opcional), GET /historico
+- [x] Feature vem DESATIVADA por padrao (ativo=false) - salvaguarda maxima
+- [x] Whitelist VIP: clientes marcados nunca sao bloqueados automaticamente
+- [x] Frontend: nova pagina `/automacao-bloqueio` (menu Financeiro) com toggle master, config, simulador, whitelist, historico. Confirmacao obrigatoria ao ligar ou executar real
+- [x] BACKUP mongodb feito antes do deploy: /root/backup-20260724-003051 (21MB) + git tag before-automacao-20260724-003056
+- [x] Testado (iteration_28): 21/21 backend + 100% frontend. Zero dados alterados.
+
 
 ## Backlog
 

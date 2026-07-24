@@ -1,0 +1,31 @@
+{
+  "summary": "Tested msisdn_historico portability fix. Backend: 13/13 pytest cases pass (portal login regression + historico login for linha & chip, admin add/remove, idempotency, invalid input, 404 on unknown linha, 403 RBAC for non-admin, 401/403 for unauthenticated). Frontend: History button on /linhas opens dialog, adds a number via input+button (toast confirms), lists numbers, removes with confirmation dialog. All UI selectors match spec.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "historico-dialog", "issues": ["Missing DialogDescription / aria-describedby on Radix DialogContent (a11y warning in console). Minor."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_msisdn_historico.py",
+    "/app/test_reports/pytest/pytest_msisdn_historico.xml"
+  ],
+  "action_items": [
+    "Optional: add DialogDescription to <DialogContent data-testid='historico-dialog'> to silence Radix a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "portal_login uses tel.endswith(msisdn[-8:]) OR msisdn.endswith(tel[-8:]) - lax match; two different customers whose numbers share last 8 digits could collide within same CPF (unlikely but worth noting).",
+    "adicionar_msisdn_historico only validates min 8 digits; no max length / format check.",
+    "remover_msisdn_historico returns 200 even if the number was never in historico (silent no-op); consider 404 for better feedback.",
+    "server.py is 6133 lines - well over the 700-line guideline; should be modularized."
+  ],
+  "updated_files": ["/app/backend/tests/test_msisdn_historico.py"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100%"},
+  "test_credentials": "admin@mvno.com / admin123",
+  "seed_data_creation": "Inserted TEST cliente (CPF 12345678909) + linha + chip with msisdn_historico via pymongo; auto-cleaned in fixture teardown. Also creates a temporary atendente user via /api/auth/register for RBAC tests (cleaned up).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite for portability fix lives at /app/backend/tests/test_msisdn_historico.py and is idempotent (safe to rerun). Non-admin role name is 'atendente' (not 'revendedor') per UserRole enum in server.py."
+}

@@ -26,6 +26,7 @@ import LandingPage from "./pages/LandingPage";
 import PlanilhaOperacional from "./pages/PlanilhaOperacional";
 import Custos from "./pages/Custos";
 import DemoAcessos from "./pages/DemoAcessos";
+import AutomacaoBloqueio from "./pages/AutomacaoBloqueio";
 import Homeon from "./pages/Homeon";
 import DemoLogin from "./pages/demo/DemoLogin";
 import DemoLayout from "./pages/demo/DemoLayout";
@@ -96,6 +97,7 @@ function AppRoutes() {
         <Route path="/usuarios" element={<ErrorBoundary resetKey={location.pathname}><Usuarios /></ErrorBoundary>} />
         <Route path="/logs" element={<ErrorBoundary resetKey={location.pathname}><Logs /></ErrorBoundary>} />
         <Route path="/demo-acessos" element={<ErrorBoundary resetKey={location.pathname}><DemoAcessos /></ErrorBoundary>} />
+        <Route path="/automacao-bloqueio" element={<ErrorBoundary resetKey={location.pathname}><AutomacaoBloqueio /></ErrorBoundary>} />
       </Route>
     </Routes>
   );
