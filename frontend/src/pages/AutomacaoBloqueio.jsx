@@ -237,6 +237,15 @@ export default function AutomacaoBloqueio() {
                 onCheckedChange={v => setConfig({ ...config, desbloqueio_automatico: v })}
                 data-testid="toggle-desbloqueio" />
             </div>
+            <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 col-span-2 border border-emerald-800/50">
+              <div>
+                <label className="text-xs text-emerald-300 block">🛡️ Sync Asaas ANTES do bloqueio (recomendado)</label>
+                <p className="text-xs text-zinc-500 mt-0.5">Puxa status atualizado do Asaas antes de decidir bloquear — protege caso o webhook não esteja funcionando</p>
+              </div>
+              <Switch checked={config.sync_asaas_antes_bloqueio}
+                onCheckedChange={v => setConfig({ ...config, sync_asaas_antes_bloqueio: v })}
+                data-testid="toggle-sync-asaas" />
+            </div>
             <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3">
               <label className="text-xs text-zinc-400">Notificar cliente (WhatsApp) ao bloquear</label>
               <Switch checked={config.notificar_admin}
