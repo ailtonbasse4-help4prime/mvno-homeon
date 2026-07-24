@@ -198,3 +198,106 @@ class TestWebhookAsaas:
         r = requests.post(f"{API}/webhooks/asaas", json=payload, timeout=15)
         # webhook should accept payload (200 or 2xx) even if cobranca not found; should NOT be 500
         assert r.status_code < 500, f"Webhook Asaas quebrou: {r.status_code} {r.text}"
+
+
+
+# --------- ITERATION 30: LOTE + ORDENACAO ALFABETICA ---------
+class TestWhitelistLote:
+    """POST /whitelist/lote and alphabetical sorting."""
+
+    @pytest.fixture(scope="class")
+    def cliente_ids(self, admin_session):
+        r = admin_session.get(f"{API}/clientes?limit=10", timeout=15)
+        assert r.status_code == 200
+        data = r.json()
+        clientes = data if isinstance(data, list) else data.get("items") or data.get("clientes") or []
+        ids = [c.get("id") or c.get("_id") for c in clientes[:3]]
+        if len(ids) < 2:
+            pytest.skip("need at least 2 clientes to test lote")
+        return ids
+
+    def _cleanup(self, session, ids):
+        for cid in ids:
+            try:
+                session.delete(f"{API}/automacao/bloqueio/whitelist/{cid}", timeout=10)
+            except Exception:
+                pass
+
+    def test_lote_empty_400(self, admin_session):
+        r = admin_session.post(f"{API}/automacao/bloqueio/whitelist/lote", json={"cliente_ids": []}, timeout=10)
+        assert r.status_code == 400
+
+    def test_lote_add_success(self, admin_session, cliente_ids):
+        self._cleanup(admin_session, cliente_ids)
+        r = admin_session.post(
+            f"{API}/automacao/bloqueio/whitelist/lote",
+            json={"cliente_ids": cliente_ids, "motivo": "TEST_VIP_lote"},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["success"] is True
+        assert d["adicionados"] == len(cliente_ids)
+        assert d["ja_existiam"] == 0
+        assert d["total_processados"] == len(cliente_ids)
+        assert isinstance(d["erros"], list)
+        # cleanup after
+        self._cleanup(admin_session, cliente_ids)
+
+    def test_lote_idempotente(self, admin_session, cliente_ids):
+        self._cleanup(admin_session, cliente_ids)
+        # first insert
+        admin_session.post(f"{API}/automacao/bloqueio/whitelist/lote",
+                           json={"cliente_ids": cliente_ids, "motivo": "TEST"}, timeout=15)
+        # second call - all should already exist
+        r = admin_session.post(f"{API}/automacao/bloqueio/whitelist/lote",
+                               json={"cliente_ids": cliente_ids, "motivo": "TEST"}, timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["adicionados"] == 0
+        assert d["ja_existiam"] == len(cliente_ids)
+        self._cleanup(admin_session, cliente_ids)
+
+    def test_lote_invalid_id_goes_to_erros(self, admin_session, cliente_ids):
+        self._cleanup(admin_session, cliente_ids)
+        mixed = cliente_ids[:1] + ["notavalidid_TEST", "000000000000000000000000"]
+        r = admin_session.post(f"{API}/automacao/bloqueio/whitelist/lote",
+                               json={"cliente_ids": mixed, "motivo": "TEST"}, timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["adicionados"] == 1  # only the valid one
+        assert len(d["erros"]) >= 2   # both invalid ones fail
+        self._cleanup(admin_session, cliente_ids)
+
+    def test_lote_requires_auth(self, anon_session):
+        r = anon_session.post(f"{API}/automacao/bloqueio/whitelist/lote",
+                              json={"cliente_ids": ["000000000000000000000000"]}, timeout=10)
+        assert r.status_code in (401, 403)
+
+
+class TestWhitelistAlfabetico:
+    def test_whitelist_ordenada_alfabeticamente(self, admin_session):
+        # add multiple clientes then verify sort order by cliente_nome (case-insensitive)
+        r = admin_session.get(f"{API}/clientes?limit=5", timeout=15)
+        assert r.status_code == 200
+        data = r.json()
+        clientes = data if isinstance(data, list) else data.get("items") or data.get("clientes") or []
+        ids = [c.get("id") or c.get("_id") for c in clientes[:5]]
+        if len(ids) < 2:
+            pytest.skip("need at least 2 clientes")
+
+        # cleanup + add
+        for cid in ids:
+            admin_session.delete(f"{API}/automacao/bloqueio/whitelist/{cid}", timeout=10)
+        admin_session.post(f"{API}/automacao/bloqueio/whitelist/lote",
+                           json={"cliente_ids": ids, "motivo": "TEST_alfabetico"}, timeout=15)
+
+        try:
+            r = admin_session.get(f"{API}/automacao/bloqueio/whitelist", timeout=10)
+            assert r.status_code == 200
+            wl = r.json()
+            nomes = [(w.get("cliente_nome") or "").lower() for w in wl if w.get("cliente_nome")]
+            assert nomes == sorted(nomes), f"whitelist nao ordenada: {nomes}"
+        finally:
+            for cid in ids:
+                admin_session.delete(f"{API}/automacao/bloqueio/whitelist/{cid}", timeout=10)

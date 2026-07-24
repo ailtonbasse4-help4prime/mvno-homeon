@@ -35,6 +35,14 @@ export default function AutomacaoBloqueio() {
   const [clientesBusca, setClientesBusca] = useState([]);
   const [buscaCliente, setBuscaCliente] = useState('');
 
+  // Modal seleção em lote
+  const [loteOpen, setLoteOpen] = useState(false);
+  const [todosClientes, setTodosClientes] = useState([]);
+  const [carregandoClientes, setCarregandoClientes] = useState(false);
+  const [buscaLote, setBuscaLote] = useState('');
+  const [selecionadosLote, setSelecionadosLote] = useState(new Set());
+  const [motivoLote, setMotivoLote] = useState('');
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -143,6 +151,60 @@ export default function AutomacaoBloqueio() {
     try {
       await axios.delete(`${API_URL}/api/automacao/bloqueio/whitelist/${cliente_id}`, { withCredentials: true });
       toast.success('Removido');
+      fetchAll();
+    } catch (e) {
+      toast.error('Erro: ' + (e.response?.data?.detail || e.message));
+    }
+  };
+
+  // Modal seleção em lote
+  const abrirLote = async () => {
+    setLoteOpen(true);
+    setSelecionadosLote(new Set());
+    setBuscaLote('');
+    setMotivoLote('');
+    setCarregandoClientes(true);
+    try {
+      const r = await axios.get(`${API_URL}/api/clientes?limit=5000`, { withCredentials: true });
+      const clientes = (r.data || []).slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+      setTodosClientes(clientes);
+    } catch (e) {
+      toast.error('Erro ao carregar clientes: ' + (e.response?.data?.detail || e.message));
+    }
+    setCarregandoClientes(false);
+  };
+
+  const clientesFiltrados = todosClientes.filter(c => {
+    if (!buscaLote.trim()) return true;
+    const q = buscaLote.trim().toLowerCase();
+    return (c.nome || '').toLowerCase().includes(q) ||
+           (c.documento || '').toLowerCase().includes(q) ||
+           (c.telefone || '').toLowerCase().includes(q);
+  });
+
+  const whitelistIds = new Set(whitelist.map(w => w.cliente_id));
+
+  const toggleLote = (cid) => {
+    setSelecionadosLote(prev => {
+      const next = new Set(prev);
+      if (next.has(cid)) next.delete(cid); else next.add(cid);
+      return next;
+    });
+  };
+  const selecionarTodosLote = () => {
+    const elegiveis = clientesFiltrados.filter(c => !whitelistIds.has(c.id)).map(c => c.id);
+    setSelecionadosLote(new Set(elegiveis));
+  };
+  const limparLote = () => setSelecionadosLote(new Set());
+
+  const adicionarLote = async () => {
+    if (selecionadosLote.size === 0) { toast.warning('Selecione ao menos um cliente'); return; }
+    try {
+      const r = await axios.post(`${API_URL}/api/automacao/bloqueio/whitelist/lote`,
+        { cliente_ids: Array.from(selecionadosLote), motivo: motivoLote || null },
+        { withCredentials: true });
+      toast.success(`${r.data.adicionados} clientes adicionados à whitelist${r.data.ja_existiam ? ` (${r.data.ja_existiam} já existiam)` : ''}`);
+      setLoteOpen(false);
       fetchAll();
     } catch (e) {
       toast.error('Erro: ' + (e.response?.data?.detail || e.message));
@@ -355,12 +417,12 @@ export default function AutomacaoBloqueio() {
             <Button onClick={() => executar(true)} disabled={executando} variant="outline"
               className="w-full border-zinc-700 hover:bg-zinc-800" data-testid="btn-executar-dry">
               {executando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              Executar DRY RUN
+              Simular Execução (sem bloquear)
             </Button>
             <Button onClick={() => executar(false)} disabled={executando}
               className="w-full bg-red-600 hover:bg-red-700" data-testid="btn-executar-real">
               {executando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Zap className="w-4 h-4 mr-1" />}
-              Executar REAL (bloqueia)
+              Executar Bloqueio Real Agora
             </Button>
           </div>
         </div>
@@ -395,8 +457,12 @@ export default function AutomacaoBloqueio() {
             className="bg-zinc-900 border-zinc-700" data-testid="input-motivo-vip" />
         </div>
         <Button onClick={adicionarWhitelist} disabled={!novoCliente.cliente_id} size="sm"
-          className="btn-primary mb-4" data-testid="btn-add-vip">
+          className="btn-primary" data-testid="btn-add-vip">
           <Plus className="w-4 h-4 mr-1" /> Adicionar à Whitelist
+        </Button>
+        <Button onClick={abrirLote} size="sm" variant="outline"
+          className="ml-2 border-emerald-600 text-emerald-300 hover:bg-emerald-900/20 mb-4" data-testid="btn-add-lote">
+          <Users className="w-4 h-4 mr-1" /> Adicionar Vários Clientes
         </Button>
 
         <div className="border border-zinc-800 rounded-lg overflow-hidden">
@@ -451,6 +517,88 @@ export default function AutomacaoBloqueio() {
           ))}
         </div>
       </div>
+
+      {/* Modal - Adicionar Varios Clientes a Whitelist */}
+      {loteOpen && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setLoteOpen(false)}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-lg max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()} data-testid="modal-lote">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-400" /> Adicionar Vários Clientes à Whitelist
+              </h3>
+              <button onClick={() => setLoteOpen(false)} className="text-zinc-400 hover:text-white" data-testid="btn-fechar-lote">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 flex-1 overflow-hidden flex flex-col">
+              <Input placeholder="Buscar por nome, CPF ou telefone..." value={buscaLote}
+                onChange={e => setBuscaLote(e.target.value)}
+                className="bg-zinc-900 border-zinc-700" data-testid="input-busca-lote" />
+
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={selecionarTodosLote}
+                    className="border-zinc-700 hover:bg-zinc-800" data-testid="btn-selecionar-todos-lote">
+                    Selecionar visíveis ({clientesFiltrados.filter(c => !whitelistIds.has(c.id)).length})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={limparLote}
+                    className="border-zinc-700 hover:bg-zinc-800" data-testid="btn-limpar-lote">
+                    Limpar seleção
+                  </Button>
+                </div>
+                <div className="text-zinc-400">
+                  Selecionados: <span className="text-emerald-400 font-bold" data-testid="lote-count">{selecionadosLote.size}</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto border border-zinc-800 rounded" data-testid="lista-clientes-lote">
+                {carregandoClientes ? (
+                  <div className="p-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-emerald-400" /></div>
+                ) : clientesFiltrados.length === 0 ? (
+                  <div className="p-8 text-center text-zinc-500 text-sm">Nenhum cliente encontrado</div>
+                ) : (
+                  clientesFiltrados.map(c => {
+                    const jaEstaNaLista = whitelistIds.has(c.id);
+                    const sel = selecionadosLote.has(c.id);
+                    return (
+                      <label key={c.id} className={`flex items-center gap-3 px-3 py-2 border-b border-zinc-800/60 cursor-pointer ${jaEstaNaLista ? 'opacity-50 cursor-not-allowed' : 'hover:bg-zinc-900'}`} data-testid={`cliente-lote-${c.id}`}>
+                        <input type="checkbox"
+                          checked={sel}
+                          disabled={jaEstaNaLista}
+                          onChange={() => toggleLote(c.id)}
+                          className="accent-emerald-500 w-4 h-4"
+                          data-testid={`check-lote-${c.id}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{c.nome}</div>
+                          <div className="text-xs text-zinc-500">{c.documento || '—'} • {c.telefone || '—'}</div>
+                        </div>
+                        {jaEstaNaLista && <span className="text-xs text-cyan-400 shrink-0">★ Já é VIP</span>}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              <Input placeholder="Motivo (opcional, aplicado a todos)" value={motivoLote}
+                onChange={e => setMotivoLote(e.target.value)}
+                className="bg-zinc-900 border-zinc-700" data-testid="input-motivo-lote" />
+            </div>
+
+            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setLoteOpen(false)}
+                className="border-zinc-700 hover:bg-zinc-800" data-testid="btn-cancelar-lote">
+                Cancelar
+              </Button>
+              <Button onClick={adicionarLote} disabled={selecionadosLote.size === 0}
+                className="btn-primary" data-testid="btn-confirmar-lote">
+                <Plus className="w-4 h-4 mr-1" />
+                Adicionar {selecionadosLote.size} cliente{selecionadosLote.size === 1 ? '' : 's'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -119,7 +119,7 @@ async def update_config(data: ConfigUpdate, request: Request):
 @router.get("/whitelist")
 async def list_whitelist(request: Request):
     await _require_admin(request)
-    docs = await _db.automacao_bloqueio_whitelist.find().sort("added_at", -1).to_list(1000)
+    docs = await _db.automacao_bloqueio_whitelist.find().to_list(1000)
     result = []
     for d in docs:
         cliente = None
@@ -136,7 +136,60 @@ async def list_whitelist(request: Request):
             "added_by": d.get("added_by"),
             "added_at": d.get("added_at"),
         })
+    # Ordenar alfabeticamente por nome
+    result.sort(key=lambda x: (x.get("cliente_nome") or "").lower())
     return result
+
+
+class WhitelistAddLote(BaseModel):
+    cliente_ids: List[str]
+    motivo: Optional[str] = None
+
+
+@router.post("/whitelist/lote")
+async def add_whitelist_lote(data: WhitelistAddLote, request: Request):
+    """Adiciona multiplos clientes a whitelist em lote."""
+    user = await _require_admin(request)
+    if not data.cliente_ids:
+        raise HTTPException(status_code=400, detail="Lista de cliente_ids vazia")
+
+    adicionados = 0
+    ja_existiam = 0
+    erros = []
+    for cid in data.cliente_ids:
+        try:
+            cliente = await _db.clientes.find_one({"_id": ObjectId(cid)})
+            if not cliente:
+                erros.append({"cliente_id": cid, "erro": "cliente nao encontrado"})
+                continue
+            existe = await _db.automacao_bloqueio_whitelist.find_one({"cliente_id": cid})
+            if existe:
+                ja_existiam += 1
+                continue
+            doc = {
+                "cliente_id": cid,
+                "motivo": data.motivo,
+                "added_by": user["id"],
+                "added_by_name": user["name"],
+                "added_at": datetime.now(timezone.utc),
+            }
+            await _db.automacao_bloqueio_whitelist.insert_one(doc)
+            adicionados += 1
+        except Exception as e:
+            erros.append({"cliente_id": cid, "erro": str(e)})
+
+    await _create_log(
+        "automacao_bloqueio",
+        f"Whitelist em lote: {adicionados} adicionados, {ja_existiam} ja existiam, {len(erros)} erros",
+        user["id"], user["name"],
+    )
+    return {
+        "success": True,
+        "adicionados": adicionados,
+        "ja_existiam": ja_existiam,
+        "erros": erros,
+        "total_processados": len(data.cliente_ids),
+    }
 
 
 class WhitelistAdd(BaseModel):
