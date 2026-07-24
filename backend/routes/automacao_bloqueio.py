@@ -414,8 +414,9 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
     motivo = cfg.get("motivo_bloqueio", 15)
 
     # SALVAGUARDA: sincroniza status com Asaas antes de decidir quem bloquear
+    # (skip em dry_run: dry_run e apenas simulacao rapida sem chamadas ao Asaas)
     sync_result = None
-    if cfg.get("sync_asaas_antes_bloqueio", True) and _sync_asaas_fn:
+    if not dry_run and cfg.get("sync_asaas_antes_bloqueio", True) and _sync_asaas_fn:
         try:
             sync_result = await _sync_asaas_fn()
             logger.info(f"Sync Asaas pre-bloqueio: {sync_result}")

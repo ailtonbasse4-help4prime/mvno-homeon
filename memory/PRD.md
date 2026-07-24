@@ -146,10 +146,21 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Desbloqueio automatico via webhook Asaas: `POST /api/webhooks/asaas` foi ampliado para chamar `desbloquear_por_pagamento` ao receber CONFIRMED/RECEIVED (best-effort)
 - [x] Endpoints admin: GET/PUT /config, GET/POST/DELETE /whitelist, GET /simular (dry-read), POST /executar (dry_run opcional), GET /historico
 - [x] Feature vem DESATIVADA por padrao (ativo=false) - salvaguarda maxima
-- [x] Whitelist VIP: clientes marcados nunca sao bloqueados automaticamente
-- [x] Frontend: nova pagina `/automacao-bloqueio` (menu Financeiro) com toggle master, config, simulador, whitelist, historico. Confirmacao obrigatoria ao ligar ou executar real
+- [x] Whitelist VIP: clientes marcados nunca sao bloqueados automaticamente. Ordenacao alfabetica. Adicao em lote via POST /whitelist/lote
+- [x] Frontend: nova pagina `/automacao-bloqueio` (menu Financeiro) com toggle master, config, simulador, whitelist (lote), historico, botoes em portugues
+- [x] Lista de simulacao mostra TODOS os inadimplentes (sem limite 20) + botao Exportar CSV
 - [x] BACKUP mongodb feito antes do deploy: /root/backup-20260724-003051 (21MB) + git tag before-automacao-20260724-003056
-- [x] Testado (iteration_28): 21/21 backend + 100% frontend. Zero dados alterados.
+- [x] Testado (iterations 28-31): 32/32 backend + 100% frontend. Zero dados alterados.
+
+### FIX CRITICA - Anti-Bloqueio-Indevido (07/24/2026)
+- [x] BUG resolvido: Cliente que pagava no Asaas continuava com status PENDING no banco (webhook nao configurado) -> risco de bloqueio indevido
+- [x] Backend: dupla-checagem individual `_verificar_pagamento_final_asaas(cobranca_id)` - consulta Asaas para CADA cobranca antes de bloquear
+- [x] Fail-safe: em caso de erro/timeout/rate-limit na consulta, PULA o bloqueio (protege o cliente)
+- [x] Retry com backoff exponencial em 429 (rate limit Asaas)
+- [x] Sync global antes do bloqueio: aumentou limite 500->5000, delay 0.5s a cada 10 requests para evitar 429
+- [x] Frontend: botao "Sincronizar TODAS as cobrancas com Asaas" (cyan) + aviso emerald "Proteção fail-safe ativa"
+- [x] Toast do executar mostra 'X ja pagos (fail-safe)' alem dos outros contadores
+- [x] Testado (iteration_31): 32/32 backend + 100% frontend
 
 
 ## Backlog
