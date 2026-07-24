@@ -4410,6 +4410,132 @@ async def _sync_cobrancas_com_asaas(limit: int = 5000) -> dict:
     return {"total_checked": len(pendentes), "updated": updated_count, "errors": errors}
 
 
+@api_router.post("/carteira/reconciliar-cliente/{cliente_id}")
+async def reconciliar_cliente_asaas(cliente_id: str, request: Request):
+    """
+    Reconcilia TODAS as cobrancas do cliente com o Asaas.
+    Puxa histórico completo de pagamentos do cliente (RECEIVED/CONFIRMED),
+    e para cada cobranca local do cliente que ainda esta PENDING/OVERDUE,
+    verifica se ha pagamento equivalente no Asaas (mesmo valor + janela de 45 dias)
+    e marca como paga.
+    Resolve o caso: cliente paga boleto seguinte, o antigo fica PENDING mesmo estando em dia.
+    """
+    user = await require_admin(request)
+    if not asaas_service.is_configured:
+        raise HTTPException(status_code=400, detail="Asaas nao configurado")
+
+    try:
+        cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="cliente_id invalido")
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    asaas_customer_id = cliente.get("asaas_customer_id")
+    if not asaas_customer_id:
+        raise HTTPException(status_code=400, detail="Cliente sem asaas_customer_id")
+
+    # 1. Puxar todos payments RECEIVED e CONFIRMED do cliente no Asaas
+    todos_payments = []
+    for st in ("RECEIVED", "CONFIRMED"):
+        try:
+            r = await asaas_service.list_payments(customer_id=asaas_customer_id, status=st, limit=100)
+            todos_payments.extend(r.get("data", []) if isinstance(r, dict) else [])
+        except Exception as e:
+            logger.warning(f"Erro list_payments status={st} cliente={cliente_id}: {e}")
+
+    # 2. Atualizar cobrancas locais que tem asaas_payment_id correspondente (sync direto)
+    updated_direct = 0
+    paid_payment_ids = set()
+    for p in todos_payments:
+        pid = p.get("id")
+        if not pid:
+            continue
+        paid_payment_ids.add(pid)
+        local = await db.cobrancas.find_one({"asaas_payment_id": pid})
+        if local and local.get("status") not in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+            new_status = p.get("status")
+            paid_at = p.get("paymentDate") or p.get("confirmedDate") or p.get("clientPaymentDate")
+            await db.cobrancas.update_one({"_id": local["_id"]}, {"$set": {"status": new_status, "paid_at": paid_at}})
+            updated_direct += 1
+
+    # 3. Cobrancas locais PENDING/OVERDUE que NAO tem match direto: buscar por (valor + janela)
+    from datetime import datetime as _dt, timedelta as _td
+    pendentes_locais = await db.cobrancas.find({
+        "cliente_id": cliente_id,
+        "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
+    }).to_list(200)
+
+    matched_por_valor = 0
+    sugestoes = []
+    for cob in pendentes_locais:
+        valor_local = float(cob.get("valor", 0))
+        venc_local = cob.get("vencimento", "")
+        if not venc_local:
+            continue
+        try:
+            venc_local_date = _dt.strptime(venc_local, "%Y-%m-%d").date()
+        except Exception:
+            continue
+
+        # Procurar payment RECEIVED no Asaas com mesmo valor e dueDate proximo (+-45 dias)
+        candidatos = []
+        for p in todos_payments:
+            if p.get("id") == cob.get("asaas_payment_id"):
+                continue  # ja foi tratado no passo 2 (nao aplicavel aqui, pois estamos em pendentes)
+            valor_asaas = float(p.get("value", 0))
+            if abs(valor_asaas - valor_local) > 0.01:
+                continue
+            due_asaas = p.get("dueDate")
+            if not due_asaas:
+                continue
+            try:
+                due_date = _dt.strptime(due_asaas[:10], "%Y-%m-%d").date()
+            except Exception:
+                continue
+            diff_days = abs((due_date - venc_local_date).days)
+            if diff_days <= 45:
+                candidatos.append({"payment_id": p.get("id"), "valor": valor_asaas, "dueDate": due_asaas, "diff": diff_days, "paymentDate": p.get("paymentDate")})
+
+        if candidatos:
+            # Pegar o mais proximo
+            candidatos.sort(key=lambda x: x["diff"])
+            best = candidatos[0]
+            # Marcar como paga automaticamente (o pagamento equivalente ja foi feito)
+            await db.cobrancas.update_one(
+                {"_id": cob["_id"]},
+                {"$set": {
+                    "status": "RECEIVED",
+                    "paid_at": best["paymentDate"] or datetime.now(timezone.utc).isoformat(),
+                    "reconciliada_por": best["payment_id"],
+                    "reconciliada_em": datetime.now(timezone.utc),
+                }},
+            )
+            matched_por_valor += 1
+            sugestoes.append({
+                "cobranca_id": str(cob["_id"]),
+                "vencimento_local": venc_local,
+                "valor": valor_local,
+                "matched_payment_id": best["payment_id"],
+                "matched_due_date": best["dueDate"],
+                "diff_days": best["diff"],
+            })
+
+    await create_log(
+        "financeiro",
+        f"Reconciliacao Asaas cliente {cliente.get('nome')}: {updated_direct} direto + {matched_por_valor} por valor/janela",
+        user["id"], user["name"],
+    )
+    return {
+        "success": True,
+        "cliente_nome": cliente.get("nome"),
+        "total_payments_asaas": len(todos_payments),
+        "atualizadas_por_payment_id": updated_direct,
+        "atualizadas_por_conciliacao": matched_por_valor,
+        "reconciliacoes": sugestoes,
+    }
+
+
 
 # ==================== REVENDEDORES ====================
 class RevendedorCreate(BaseModel):

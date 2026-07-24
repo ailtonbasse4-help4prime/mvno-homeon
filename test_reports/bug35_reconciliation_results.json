@@ -1,0 +1,240 @@
+{
+  "tag": "BUG35-4e547ee8",
+  "base_url": "https://chip-manager-3.preview.emergentagent.com",
+  "asaas_scan": {
+    "configured": true,
+    "environment": "production",
+    "api_calls": [
+      {
+        "status": "RECEIVED",
+        "offset": 0,
+        "http": 200
+      }
+    ],
+    "payments": [
+      {
+        "id": "pay_1zowj3ymawbwzn2s",
+        "customer": "cus_000183340858",
+        "value": 23.0,
+        "dueDate": "2026-07-22",
+        "status": "RECEIVED",
+        "paymentDate": "2026-07-22"
+      },
+      {
+        "id": "pay_ggqlt1jgoyysjkpo",
+        "customer": "cus_000188609640",
+        "value": 39.99,
+        "dueDate": "2026-07-25",
+        "status": "RECEIVED",
+        "paymentDate": "2026-07-24"
+      },
+      {
+        "id": "pay_v12yzonz2p21y14n",
+        "customer": "cus_000170770081",
+        "value": 113.98,
+        "dueDate": "2026-07-25",
+        "status": "RECEIVED",
+        "paymentDate": "2026-07-21"
+      }
+    ]
+  },
+  "created": {
+    "nonadmin_user": {
+      "id": "6a63967869ad57e3c5201a4b",
+      "email": "qa-bug35-atendente-bug35-4e547ee8@example.com",
+      "password": "qa123456"
+    },
+    "direct_client": {
+      "id": "6a63967869ad57e3c5201a4c",
+      "nome": "QA BUG35 DIRECT BUG35-4e547ee8",
+      "asaas_customer_id": "cus_000183340858"
+    },
+    "direct_cobranca_id": "6a63967869ad57e3c5201a4e",
+    "recon_client": {
+      "id": "6a63967869ad57e3c5201a4f",
+      "nome": "QA BUG35 RECON BUG35-4e547ee8",
+      "asaas_customer_id": "cus_000188609640"
+    },
+    "recon_cobranca_id": "6a63967869ad57e3c5201a51",
+    "no_pending_client": {
+      "id": "6a63967869ad57e3c5201a52",
+      "nome": "QA BUG35 NO PENDING BUG35-4e547ee8",
+      "asaas_customer_id": "cus_000188609640"
+    },
+    "no_pending_cobranca_id": "6a63967869ad57e3c5201a54",
+    "no_asaas_client": {
+      "id": "6a63967869ad57e3c5201a55",
+      "nome": "QA BUG35 NO ASAAS BUG35-4e547ee8",
+      "asaas_customer_id": null
+    },
+    "ui_client": {
+      "id": "6a63967869ad57e3c5201a57",
+      "nome": "QA BUG35 UI RECON BUG35-4e547ee8",
+      "asaas_customer_id": "cus_000170770081"
+    },
+    "ui_cobranca_id": "6a63967869ad57e3c5201a59",
+    "payments_used": {
+      "direct": {
+        "id": "pay_1zowj3ymawbwzn2s",
+        "customer": "cus_000183340858",
+        "value": 23.0,
+        "dueDate": "2026-07-22",
+        "status": "RECEIVED",
+        "paymentDate": "2026-07-22"
+      },
+      "recon": {
+        "id": "pay_ggqlt1jgoyysjkpo",
+        "customer": "cus_000188609640",
+        "value": 39.99,
+        "dueDate": "2026-07-25",
+        "status": "RECEIVED",
+        "paymentDate": "2026-07-24"
+      },
+      "ui": {
+        "id": "pay_v12yzonz2p21y14n",
+        "customer": "cus_000170770081",
+        "value": 113.98,
+        "dueDate": "2026-07-25",
+        "status": "RECEIVED",
+        "paymentDate": "2026-07-21"
+      }
+    }
+  },
+  "responses": {
+    "noauth": {
+      "status": 401,
+      "body": "{\"detail\":\"Nao autenticado\"}"
+    },
+    "forbidden": {
+      "status": 403,
+      "body": "{\"detail\":\"Acesso negado. Requer permissao de administrador.\"}"
+    },
+    "invalid": {
+      "status": 400,
+      "body": "{\"detail\":\"cliente_id invalido\"}"
+    },
+    "missing": {
+      "status": 404,
+      "body": "{\"detail\":\"Cliente nao encontrado\"}"
+    },
+    "noasaas": {
+      "status": 400,
+      "body": "{\"detail\":\"Cliente sem asaas_customer_id\"}"
+    },
+    "nopending": {
+      "status": 200,
+      "body": "{\"success\":true,\"cliente_nome\":\"QA BUG35 NO PENDING BUG35-4e547ee8\",\"total_payments_asaas\":1,\"atualizadas_por_payment_id\":0,\"atualizadas_por_conciliacao\":0,\"reconciliacoes\":[]}"
+    },
+    "direct": {
+      "status": 200,
+      "body": "{\"success\":true,\"cliente_nome\":\"QA BUG35 DIRECT BUG35-4e547ee8\",\"total_payments_asaas\":4,\"atualizadas_por_payment_id\":1,\"atualizadas_por_conciliacao\":0,\"reconciliacoes\":[]}"
+    },
+    "recon": {
+      "status": 200,
+      "body": "{\"success\":true,\"cliente_nome\":\"QA BUG35 RECON BUG35-4e547ee8\",\"total_payments_asaas\":1,\"atualizadas_por_payment_id\":0,\"atualizadas_por_conciliacao\":1,\"reconciliacoes\":[{\"cobranca_id\":\"6a63967869ad57e3c5201a51\",\"vencimento_local\":\"2026-07-25\",\"valor\":39.99,\"matched_payment_id\":\"pay_ggqlt1jgoyysjkpo\",\"matched_due_date\":\"2026-07-25\",\"diff_days\":0}]}"
+    },
+    "clarice": {
+      "status": 200,
+      "body": "{\"success\":true,\"cliente_nome\":\"Clarice Santos De Freitas\",\"total_payments_asaas\":3,\"atualizadas_por_payment_id\":0,\"atualizadas_por_conciliacao\":0,\"reconciliacoes\":[]}"
+    }
+  },
+  "checks": [
+    {
+      "name": "real Asaas paid payment candidates found",
+      "passed": true,
+      "detail": "{\"configured\": true, \"environment\": \"production\", \"api_calls\": [{\"status\": \"RECEIVED\", \"offset\": 0, \"http\": 200}], \"payments\": [{\"id\": \"pay_1zowj3ymawbwzn2s\", \"customer\": \"cus_000183340858\", \"value\": 23.0, \"dueDate\": \"2026-07-22\", \"status\": \"RECEIVED\", \"paymentDate\": \"2026-07-22\"}, {\"id\": \"pay_ggqlt1jgoyysjkpo\", \"customer\": \"cus_000188609640\", \"value\": 39.99, \"dueDate\": \"2026-07-25\", \"status\": \"RECEIVED\", \"paymentDate\": \"2026-07-24\"}, {\"id\": \"pay_v12yzonz2p21y14n\", \"customer\": \"cus_000170770081\", \"value\": 113.98, \"dueDate\": \"2026-07-25\", \"status\": \"RECEIVED\", \"paymentDate\": \"2026-07-21\"}]}"
+    },
+    {
+      "name": "admin login succeeds",
+      "passed": true,
+      "detail": "HTTP 200: {\"id\":\"69cbfc5ee53a77ec56042df3\",\"email\":\"admin@mvno.com\",\"name\":\"Administrador\",\"role\":\"admin\",\"created_at\":\"2026-03-31T16:54:54.229000\"}"
+    },
+    {
+      "name": "reconcile requires auth (401)",
+      "passed": true,
+      "detail": "{\"status\": 401, \"body\": \"{\\\"detail\\\":\\\"Nao autenticado\\\"}\"}"
+    },
+    {
+      "name": "non-admin login succeeds",
+      "passed": true,
+      "detail": "HTTP 200: {\"id\":\"6a63967869ad57e3c5201a4b\",\"email\":\"qa-bug35-atendente-bug35-4e547ee8@example.com\",\"name\":\"QA BUG35 Atendente BUG35-4e547ee8\",\"role\":\"atendente\",\"created_at\":\"2026-07-24T16:44:40.314000\"}"
+    },
+    {
+      "name": "reconcile rejects non-admin (403)",
+      "passed": true,
+      "detail": "{\"status\": 403, \"body\": \"{\\\"detail\\\":\\\"Acesso negado. Requer permissao de administrador.\\\"}\"}"
+    },
+    {
+      "name": "invalid cliente_id returns 400",
+      "passed": true,
+      "detail": "{\"status\": 400, \"body\": \"{\\\"detail\\\":\\\"cliente_id invalido\\\"}\"}"
+    },
+    {
+      "name": "nonexistent cliente_id returns 404",
+      "passed": true,
+      "detail": "{\"status\": 404, \"body\": \"{\\\"detail\\\":\\\"Cliente nao encontrado\\\"}\"}"
+    },
+    {
+      "name": "cliente without asaas_customer_id returns 400",
+      "passed": true,
+      "detail": "{\"status\": 400, \"body\": \"{\\\"detail\\\":\\\"Cliente sem asaas_customer_id\\\"}\"}"
+    },
+    {
+      "name": "no-pending client returns 200",
+      "passed": true,
+      "detail": "{\"success\":true,\"cliente_nome\":\"QA BUG35 NO PENDING BUG35-4e547ee8\",\"total_payments_asaas\":1,\"atualizadas_por_payment_id\":0,\"atualizadas_por_conciliacao\":0,\"reconciliacoes\":[]}"
+    },
+    {
+      "name": "no-pending client updates zero",
+      "passed": true,
+      "detail": "{\"success\": true, \"cliente_nome\": \"QA BUG35 NO PENDING BUG35-4e547ee8\", \"total_payments_asaas\": 1, \"atualizadas_por_payment_id\": 0, \"atualizadas_por_conciliacao\": 0, \"reconciliacoes\": []}"
+    },
+    {
+      "name": "direct payment-id sync returns 200",
+      "passed": true,
+      "detail": "{\"success\":true,\"cliente_nome\":\"QA BUG35 DIRECT BUG35-4e547ee8\",\"total_payments_asaas\":4,\"atualizadas_por_payment_id\":1,\"atualizadas_por_conciliacao\":0,\"reconciliacoes\":[]}"
+    },
+    {
+      "name": "direct payment-id sync count is 1",
+      "passed": true,
+      "detail": "{\"success\": true, \"cliente_nome\": \"QA BUG35 DIRECT BUG35-4e547ee8\", \"total_payments_asaas\": 4, \"atualizadas_por_payment_id\": 1, \"atualizadas_por_conciliacao\": 0, \"reconciliacoes\": []}"
+    },
+    {
+      "name": "direct cobrança persisted as paid",
+      "passed": true,
+      "detail": "{\"status\": \"RECEIVED\", \"paid_at\": \"2026-07-22\", \"asaas_payment_id\": \"pay_1zowj3ymawbwzn2s\"}"
+    },
+    {
+      "name": "value/date reconciliation returns 200",
+      "passed": true,
+      "detail": "{\"success\":true,\"cliente_nome\":\"QA BUG35 RECON BUG35-4e547ee8\",\"total_payments_asaas\":1,\"atualizadas_por_payment_id\":0,\"atualizadas_por_conciliacao\":1,\"reconciliacoes\":[{\"cobranca_id\":\"6a63967869ad57e3c5201a51\",\"vencimento_local\":\"2026-07-25\",\"valor\":39.99,\"matched_payment_id\":\"pay_ggqlt1jgoyysjkpo\",\"matched_due_date\":\"2026-07-25\",\"diff_days\":0}]}"
+    },
+    {
+      "name": "value/date reconciliation count is 1",
+      "passed": true,
+      "detail": "{\"success\": true, \"cliente_nome\": \"QA BUG35 RECON BUG35-4e547ee8\", \"total_payments_asaas\": 1, \"atualizadas_por_payment_id\": 0, \"atualizadas_por_conciliacao\": 1, \"reconciliacoes\": [{\"cobranca_id\": \"6a63967869ad57e3c5201a51\", \"vencimento_local\": \"2026-07-25\", \"valor\": 39.99, \"matched_payment_id\": \"pay_ggqlt1jgoyysjkpo\", \"matched_due_date\": \"2026-07-25\", \"diff_days\": 0}]}"
+    },
+    {
+      "name": "value/date cobrança persisted RECEIVED with reconciliada_por",
+      "passed": true,
+      "detail": "{\"status\": \"RECEIVED\", \"paid_at\": \"2026-07-24\", \"reconciliada_por\": \"pay_ggqlt1jgoyysjkpo\", \"asaas_payment_id\": \"pay_bug35_different_db22e013\"}"
+    },
+    {
+      "name": "Clarice June R$74.99 cobrança exists in preview",
+      "passed": true,
+      "detail": "before=1 after=1"
+    },
+    {
+      "name": "Clarice June R$74.99 cobrança is not pending after reconcile",
+      "passed": true,
+      "detail": "{\"before\": [{\"id\": \"69e25ee679c76c1991551b02\", \"status\": \"RECEIVED\", \"reconciliada_por\": null}], \"after\": [{\"id\": \"69e25ee679c76c1991551b02\", \"status\": \"RECEIVED\", \"reconciliada_por\": null}], \"response\": {\"status\": 200, \"body\": \"{\\\"success\\\":true,\\\"cliente_nome\\\":\\\"Clarice Santos De Freitas\\\",\\\"total_payments_asaas\\\":3,\\\"atualizadas_por_payment_id\\\":0,\\\"atualizadas_por_conciliacao\\\":0,\\\"reconciliacoes\\\":[]}\"}}"
+    },
+    {
+      "name": "/cobrancas API shows Clarice June charge not pending",
+      "passed": true,
+      "detail": "[{\"id\": \"69e25ee679c76c1991551b02\", \"cliente_id\": \"69d023bc83caf2c1f9c09efe\", \"cliente_nome\": \"Clarice Santos De Freitas\", \"linha_id\": null, \"msisdn\": null, \"oferta_nome\": null, \"billing_type\": \"BOLETO\", \"valor\": 74.99, \"vencimento\": \"2026-06-25\", \"descricao\": \"Parcela 3 de 11. Plano Telefonia Móvel 40GB\", \"status\": \"RECEIVED\", \"modalidade\": \"parcelado\", \"parcela_num\": 3, \"parcela_total\": null, \"assinatura_id\": null, \"asaas_payment_id\": \"pay_u3a23rurn78fht3f\", \"asaas_invoice_url\": \"https://www.asaas.com/i/u3a23rurn78fht3f\", \"asaas_bankslip_url\": \"https://www.asaas.com/b/pdf/u3a23rurn78fht3f\", \"asaas_pix_code\": null, \"asaas_pix_qrcode\": null, \"barcode\": \"46191110000000000004231811419014614880000007499\", \"paid_at\": \"2026-06-03\", \"created_at\": \"2026-04-17T16:25:10.342000\"}]"
+    }
+  ],
+  "failures": [],
+  "cleanup": "pending - run bug_verification_35_cleanup.py after browser/UI test"
+}

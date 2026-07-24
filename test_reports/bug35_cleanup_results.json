@@ -1,0 +1,16 @@
+{
+  "tag": "BUG35-4e547ee8",
+  "deleted": {
+    "clientes": 5,
+    "cobrancas": 4,
+    "linhas": 5,
+    "usuarios": 1
+  },
+  "remaining": {
+    "clientes": 0,
+    "cobrancas": 0,
+    "linhas": 0,
+    "usuarios": 0
+  },
+  "success": true
+}

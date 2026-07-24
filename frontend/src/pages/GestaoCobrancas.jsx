@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import {
   Plus, Search, Trash2, Edit, RefreshCw, ExternalLink,
   DollarSign, Clock, AlertCircle, FileText, Copy, CreditCard,
-  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download, Mail, MessageCircle, CalendarDays,
+  Printer, Share2, Eye, QrCode, Barcode, CheckCircle, X, Settings, Download, Mail, MessageCircle, CalendarDays, ShieldCheck,
 } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
@@ -467,6 +467,23 @@ export function GestaoCobrancas() {
     setSyncing(false);
   };
 
+  const handleReconciliarCliente = async (cliente_id, cliente_nome) => {
+    if (!window.confirm(`Reconciliar TODAS as cobranças de "${cliente_nome}" com o Asaas?\n\nIsso vai marcar como pagas cobranças locais pendentes que tenham pagamento equivalente no Asaas (mesmo valor + janela de 45 dias).`)) return;
+    try {
+      const res = await axios.post(`${API_URL}/api/carteira/reconciliar-cliente/${cliente_id}`, {}, { withCredentials: true });
+      const { atualizadas_por_payment_id, atualizadas_por_conciliacao, total_payments_asaas } = res.data;
+      const total = (atualizadas_por_payment_id || 0) + (atualizadas_por_conciliacao || 0);
+      if (total > 0) {
+        toast.success(`✅ ${total} cobrança(s) reconciliada(s) (${atualizadas_por_payment_id} diretas + ${atualizadas_por_conciliacao} por valor/data). ${total_payments_asaas} pagamentos analisados no Asaas.`);
+      } else {
+        toast.info(`Nenhuma cobrança pendente encontrada para reconciliar. ${total_payments_asaas} pagamentos analisados no Asaas.`);
+      }
+      fetchAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao reconciliar');
+    }
+  };
+
   const handleImportAsaas = async () => {
     if (!window.confirm('Importar TODAS as cobrancas existentes no Asaas que ainda nao estao no sistema? Esta operacao pode demorar alguns minutos.')) return;
     setImporting(true);
@@ -688,6 +705,14 @@ export function GestaoCobrancas() {
                     <button onClick={() => handleRefreshCobranca(c)} className="p-1.5 hover:bg-zinc-800 rounded" title="Atualizar dados do Asaas">
                       <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
                     </button>
+                    {isAdmin && !['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'].includes(c.status) && (
+                      <button onClick={() => handleReconciliarCliente(c.cliente_id, c.cliente_nome)}
+                        className="p-1.5 hover:bg-purple-900/40 rounded"
+                        title="Reconciliar cliente com Asaas (marca como paga se cliente pagou outro boleto equivalente)"
+                        data-testid={`reconciliar-${c.id}`}>
+                        <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+                      </button>
+                    )}
                     <button onClick={() => handleShareWhatsApp(c)} disabled={sendingWhats === c.id} className="p-1.5 hover:bg-zinc-800 rounded disabled:opacity-50" title="Enviar por WhatsApp (Z-API)" data-testid={`whats-row-btn-${c.id}`}>
                       <MessageCircle className={`w-3.5 h-3.5 text-emerald-400 ${sendingWhats === c.id ? 'animate-pulse' : ''}`} />
                     </button>
