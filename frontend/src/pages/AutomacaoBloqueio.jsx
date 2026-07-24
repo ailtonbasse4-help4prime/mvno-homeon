@@ -413,7 +413,7 @@ export default function AutomacaoBloqueio() {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-400">Todos os {simulacao.itens.length} clientes:</span>
                 <button onClick={() => {
-                  const rows = [['Cliente', 'Documento', 'Telefone', 'Valor', 'Vencimento', 'MSISDN', 'Status']];
+                  const rows = [['Cliente', 'Documento', 'Telefone', 'Valor', 'Vencimento', 'Expira Tá', 'Origem', 'MSISDN', 'Status']];
                   simulacao.itens.forEach(it => {
                     rows.push([
                       it.cliente_nome || '',
@@ -421,6 +421,8 @@ export default function AutomacaoBloqueio() {
                       it.telefone || '',
                       (it.valor || 0).toFixed(2),
                       it.vencimento || '',
+                      it.data_expiracao_ta || '',
+                      it.origem || 'cobranca',
                       (it.linhas_afetadas || []).map(l => l.msisdn).join(' | '),
                       it.na_whitelist ? 'VIP (poupado)' : 'Seria bloqueado',
                     ]);
@@ -440,8 +442,11 @@ export default function AutomacaoBloqueio() {
               <div className="max-h-72 overflow-y-auto space-y-1 text-xs border border-zinc-800 rounded p-1" data-testid="lista-inadimplentes">
                 {simulacao.itens.map((it, idx) => (
                   <div key={it.cliente_id} className="flex justify-between bg-zinc-900 rounded px-2 py-1 gap-2 items-center" data-testid={`sim-item-${idx}`}>
-                    <span className="truncate flex-1" title={it.cliente_nome}>
+                    <span className="truncate flex-1" title={`${it.cliente_nome} • Expira Tá: ${it.data_expiracao_ta || '—'} • Origem: ${it.origem || 'cobranca'}`}>
                       <span className="text-zinc-500 mr-1">{idx + 1}.</span>{it.cliente_nome}
+                      {it.data_expiracao_ta && (
+                        <span className="ml-2 text-[10px] text-zinc-500">exp Tá: {it.data_expiracao_ta}</span>
+                      )}
                     </span>
                     <span className={`shrink-0 ${it.na_whitelist ? 'text-cyan-400' : 'text-orange-400'}`}>
                       {it.na_whitelist ? '★ VIP' : `R$ ${it.valor?.toFixed(2)}`}

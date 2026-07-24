@@ -1,0 +1,38 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "Ao clicar em 'Simular agora' na tela Automacao de Bloqueio, o sistema esta listando clientes ERRADOS. Especificamente: Joelson e Valdo (que expiram na Ta Telecom em 02/08/2026) apareceram para bloqueio HOJE (24/07/2026), o que e matematicamente impossivel — deveriam ser bloqueados so a partir de 31/07 (D-2 de 02/08). Ao mesmo tempo, Gilmar (que expira 25/07/2026) NAO apareceu na lista, mas deveria (hoje 24/07 >= 25/07-2 = 23/07). A regra de negocio e: bloquear quando `hoje >= data_expiracao_ta - 2 dias`.",
+  "summary": "No relevant testing skill found. Focused backend verification passed: seeded isolated clients matching Joelson/Valdo expiring 2026-08-02 and Gilmar expiring 2026-07-25, then verified /api/automacao/bloqueio/simular excludes the future clients and includes Gilmar with origem=expiracao_ta/data_expiracao_ta. Also verified requested edge fixtures: exp=hoje+10 excluded, exp=hoje+1 included, exp=hoje-3 included, missing data_expiracao_ta excluded, paid inside Ta cycle skipped, payment >30 days before expiration not skipped, whitelist returns SKIP_WHITELIST, diagnosticar returns 200, and /executar dry_run follows the same D-2 logic without mutating line status. Did not call Ta Telecom-dependent sync/desbloqueio POST endpoints to avoid real external operations in preview.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bug_verification_iteration37.py",
+    "/app/backend/tests/test_auto_bloqueio_v2_expiracao_math.py",
+    "/app/test_reports/bug_verification_37.json",
+    "/app/test_reports/iteration_37.json"
+  ],
+  "action_items": [
+    "No action needed for the reported Simular agora D-2 bug. If broader regression is required for Ta Telecom sync/desbloqueio POST, test with an approved sandbox/stub to avoid real carrier operations."
+  ],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_bug_verification_iteration37.py",
+    "/app/test_reports/bug_verification_37.json",
+    "/app/test_reports/iteration_37.json"
+  ],
+  "success_rate": {
+    "backend": "100% for focused tested backend cases (3/3 pytest tests passed)",
+    "frontend": "N/A - backend-only testing requested"
+  },
+  "seed_data_creation": "Created temporary Mongo fixtures with prefix BUGVERIFY_D2_* for Joelson, Valdo, Gilmar, D-2 edge cases, paid-window cases, and whitelist; cleanup ran after each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: export backend .env and REACT_APP_BACKEND_URL, then pytest -q /app/backend/tests/test_bug_verification_iteration37.py /app/backend/tests/test_auto_bloqueio_v2_expiracao_math.py. Current preview date was verified as 2026-07-24.",
+  "rca_of_the_issue": "The verified fix uses only linhas.data_expiracao_ta as the blocking source, filters candidates by data_expiracao_ta <= hoje+2 (D-2), removes legacy fallback for missing expiration, and rechecks ISO dates in Python. Runtime API evidence shows the reported wrong-client list no longer reproduces."
+}

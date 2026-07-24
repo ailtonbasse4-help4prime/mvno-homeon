@@ -237,62 +237,65 @@ async def remove_whitelist(cliente_id: str, request: Request):
 
 async def _find_cobrancas_para_bloquear(dias_tolerancia: int = 0) -> List[dict]:
     """
-    NOVA LOGICA v2 (2026-07): usa `linhas.data_expiracao_ta` como referencia (nao mais vencimento manual).
-    Retorna linhas ativas onde:
-      - data_expiracao_ta esta no futuro proximo (D+2 = data de bloqueio)
-      - E cliente tem cobranca em atraso E nao pagou nada recente
+    LOGICA v2 (2026-07): usa `linhas.data_expiracao_ta` como UNICA fonte de verdade.
+    Regra: bloquear quando hoje >= data_expiracao_ta - 2 dias (ou seja, 2 dias antes da Ta cobrar novo ciclo).
+    Equivale a: data_expiracao_ta <= hoje + 2.
+    Alem disso, so bloqueia se cliente NAO tiver pago o ciclo atual (verificado em _build_simulacao).
 
-    Fallback (fase de transicao): se linha nao tem data_expiracao_ta, usa logica antiga por cobranca.
+    IMPORTANTE: nao ha fallback legacy. Se linha nao tem `data_expiracao_ta` sincronizado,
+    ela NUNCA sera bloqueada por esta rotina — comportamento seguro (fail-safe).
     """
     hoje = datetime.now(timezone.utc).date()
-    return await _find_via_expiracao_ta(hoje, dias_tolerancia) + await _find_via_cobranca_legacy(hoje, dias_tolerancia)
+    return await _find_via_expiracao_ta(hoje, dias_tolerancia)
+
+
+def _is_valid_iso_date(s) -> bool:
+    if not isinstance(s, str) or len(s) < 10:
+        return False
+    try:
+        datetime.strptime(s[:10], "%Y-%m-%d")
+        return True
+    except Exception:
+        return False
 
 
 async def _find_via_expiracao_ta(hoje, dias_tolerancia: int) -> List[dict]:
-    """Novo algoritmo v2: bloqueia D-2 da expiracao Ta."""
-    # data alvo do bloqueio = hoje. Ou seja, buscamos linhas com expiracao_ta = hoje + 2 dias
-    alvo = (hoje + timedelta(days=2)).isoformat()
+    """Algoritmo v2: bloqueia D-2 da expiracao Ta.
+    Filtro: data_expiracao_ta <= hoje + 2 dias (equivalente a hoje >= data_expiracao_ta - 2).
+    dias_tolerancia adiciona dias EXTRAS de graca (empurra o bloqueio para depois).
+    """
+    limite_dt = hoje + timedelta(days=2 - dias_tolerancia)
+    alvo = limite_dt.isoformat()
     linhas = await _db.linhas.find({
         "status": "ativo",
-        "data_expiracao_ta": {"$lte": alvo},
+        "data_expiracao_ta": {"$lte": alvo, "$ne": None},
     }).to_list(5000)
-    # Retorna documentos pseudo-cobranca (marker) para _build_simulacao processar
+
     fake_cobrancas = []
     for l in linhas:
         cid = l.get("cliente_id")
         if not cid:
             continue
+        exp = l.get("data_expiracao_ta")
+        # Validacao STRICT: so aceita YYYY-MM-DD para evitar comparacoes lexicograficas erradas
+        if not _is_valid_iso_date(exp):
+            logger.warning(f"Linha {l['_id']} tem data_expiracao_ta invalida: {exp!r} — ignorada")
+            continue
+        # Recheck em Python (defesa contra dados corrompidos no DB)
+        exp_normalized = exp[:10]
+        if exp_normalized > alvo:
+            continue
         fake_cobrancas.append({
             "_id": l["_id"],
             "cliente_id": cid,
-            "vencimento": l.get("data_expiracao_ta"),
+            "vencimento": exp_normalized,
             "valor": 0,
             "linha_id": str(l["_id"]),
             "origem": "expiracao_ta",
-            "data_expiracao_ta": l.get("data_expiracao_ta"),
+            "data_expiracao_ta": exp_normalized,
         })
+    logger.info(f"[auto-bloqueio v2] hoje={hoje.isoformat()} alvo(<=)={alvo} candidatos={len(fake_cobrancas)}")
     return fake_cobrancas
-
-
-async def _find_via_cobranca_legacy(hoje, dias_tolerancia: int) -> List[dict]:
-    """Fallback: usa cobrancas locais (comportamento antigo).
-    Skip linhas que ja tem data_expiracao_ta (elas usam a nova rota)."""
-    limite_str = (hoje - timedelta(days=dias_tolerancia)).isoformat()
-    cobrancas = await _db.cobrancas.find({
-        "vencimento": {"$lte": limite_str},
-        "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
-    }).to_list(5000)
-    # Filtrar: skip clientes que ja tem alguma linha ativa com data_expiracao_ta (nao duplica)
-    result = []
-    for c in cobrancas:
-        cid = c.get("cliente_id")
-        if not cid:
-            continue
-        tem_expira = await _db.linhas.find_one({"cliente_id": cid, "data_expiracao_ta": {"$ne": None}, "status": "ativo"})
-        if tem_expira:
-            continue  # ja tratado via expiracao Ta
-        result.append(c)
-    return result
 
 
 # ==================== SYNC DATA EXPIRACAO TA ====================
@@ -555,20 +558,80 @@ async def _get_whitelist_set() -> set:
     return {d["cliente_id"] for d in docs}
 
 
-async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
+async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str, origem: str = "cobranca") -> bool:
     """
-    Verifica se o cliente esta "em dia" — logica robusta com multiplas condicoes:
-    1. Tem cobranca paga (LOCAL) no mesmo mes do vencimento pendente
-    2. Tem cobranca paga (LOCAL) com vencimento >= vencimento pendente (pagou uma futura)
-    3. Pagou algo nos ultimos 60 dias corridos (LOCAL)
-    4. ASAAS: consulta direto o Asaas — se cliente tem QUALQUER pagamento
-       CONFIRMED/RECEIVED nos ultimos 60 dias, considera em dia (fonte da verdade)
-    Se qualquer condicao verdadeira -> considera em dia -> NAO bloqueia.
+    Verifica se o cliente esta "em dia" para o CICLO ATUAL.
+
+    - origem="expiracao_ta" (rota v2, bloqueio por expiracao Ta): a janela do ciclo
+      e [vencimento - 30d, vencimento]. Considera em dia se pagou algo nessa janela.
+      Isso e crucial: quem pagou o ciclo anterior mas NAO pagou o atual sera bloqueado.
+    - origem="cobranca" (rota antiga): mantem janela mensal e 60 dias corridos
+      (retrocompatibilidade — nao usada mais no fluxo principal).
     """
     if not vencimento:
         return False
     paid_statuses = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]
 
+    # ============ ROTA V2 (expiracao_ta): janela de 30 dias do ciclo Ta ============
+    if origem == "expiracao_ta":
+        try:
+            venc_dt = datetime.strptime(vencimento[:10], "%Y-%m-%d").date()
+        except Exception:
+            return False
+        # Janela: [venc - 30d, venc + 3d] (3 dias de graca pos-vencimento p/ pagamentos tardios)
+        ciclo_inicio = (venc_dt - timedelta(days=30)).isoformat()
+        ciclo_fim = (venc_dt + timedelta(days=3)).isoformat()
+
+        # (1) LOCAL: cobranca paga com vencimento dentro do ciclo atual
+        paga_ciclo = await _db.cobrancas.find_one({
+            "cliente_id": str(cliente_id),
+            "vencimento": {"$gte": ciclo_inicio, "$lte": ciclo_fim},
+            "status": {"$in": paid_statuses},
+        })
+        if paga_ciclo:
+            return True
+
+        # (2) LOCAL: paid_at dentro do ciclo atual (cobranca de outro periodo mas paga no ciclo)
+        limite_dt = datetime.now(timezone.utc) - timedelta(days=30)
+        paga_recente = await _db.cobrancas.find_one({
+            "cliente_id": str(cliente_id),
+            "status": {"$in": paid_statuses},
+            "$or": [
+                {"paid_at": {"$gte": limite_dt}},
+                {"paid_at": {"$gte": limite_dt.isoformat()}},
+            ],
+        })
+        if paga_recente:
+            return True
+
+        # (3) ASAAS: pagamento confirmado nos ultimos 30 dias
+        if _asaas_service and getattr(_asaas_service, "is_configured", False):
+            try:
+                cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)})
+                asaas_customer_id = cliente.get("asaas_customer_id") if cliente else None
+                if asaas_customer_id:
+                    for st in ("RECEIVED", "CONFIRMED"):
+                        result = await _asaas_service.list_payments(
+                            customer_id=asaas_customer_id, limit=20, status=st,
+                        )
+                        pagamentos = result.get("data", []) if isinstance(result, dict) else []
+                        limite_30d = (datetime.now(timezone.utc) - timedelta(days=30)).date()
+                        for p in pagamentos:
+                            pd_raw = p.get("paymentDate") or p.get("confirmedDate") or p.get("clientPaymentDate")
+                            if not pd_raw:
+                                continue
+                            try:
+                                pd = datetime.strptime(pd_raw[:10], "%Y-%m-%d").date()
+                                if pd >= limite_30d:
+                                    return True
+                            except Exception:
+                                pass
+            except Exception as e:
+                logger.warning(f"Falha ao consultar historico Asaas cliente {cliente_id}: {e}")
+
+        return False
+
+    # ============ ROTA LEGACY (origem=cobranca): comportamento antigo ============
     # (1) mesma janela mensal
     try:
         ano, mes, _ = vencimento.split("-")
@@ -596,8 +659,7 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
         return True
 
     # (3) pagou algo nos ultimos 60 dias corridos (paid_at recente)
-    from datetime import datetime as _dt2, timezone as _tz, timedelta as _td
-    limite_dt = _dt2.now(_tz.utc) - _td(days=60)
+    limite_dt = datetime.now(timezone.utc) - timedelta(days=60)
     paga_recente = await _db.cobrancas.find_one({
         "cliente_id": str(cliente_id),
         "status": {"$in": paid_statuses},
@@ -615,36 +677,22 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
             cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)})
             asaas_customer_id = cliente.get("asaas_customer_id") if cliente else None
             if asaas_customer_id:
-                from datetime import datetime as _dt3
-                # busca ultimos 20 pagamentos do cliente com status RECEIVED
-                result = await _asaas_service.list_payments(
-                    customer_id=asaas_customer_id,
-                    limit=20,
-                    status="RECEIVED",
-                )
-                pagamentos = result.get("data", []) if isinstance(result, dict) else []
-                # aceita tambem CONFIRMED
-                if not pagamentos:
-                    result_c = await _asaas_service.list_payments(
-                        customer_id=asaas_customer_id,
-                        limit=20,
-                        status="CONFIRMED",
+                for st in ("RECEIVED", "CONFIRMED"):
+                    result = await _asaas_service.list_payments(
+                        customer_id=asaas_customer_id, limit=20, status=st,
                     )
-                    pagamentos = result_c.get("data", []) if isinstance(result_c, dict) else []
-
-                # Se pagou algo nos ultimos 60 dias -> em dia (STRICT: exige data valida e recente)
-                limite_60d = (_dt3.now(_tz.utc) - _td(days=60)).date()
-                for p in pagamentos:
-                    payment_date = p.get("paymentDate") or p.get("confirmedDate") or p.get("clientPaymentDate")
-                    if payment_date:
+                    pagamentos = result.get("data", []) if isinstance(result, dict) else []
+                    limite_60d = (datetime.now(timezone.utc) - timedelta(days=60)).date()
+                    for p in pagamentos:
+                        pd_raw = p.get("paymentDate") or p.get("confirmedDate") or p.get("clientPaymentDate")
+                        if not pd_raw:
+                            continue
                         try:
-                            pd = _dt3.strptime(payment_date[:10], "%Y-%m-%d").date()
+                            pd = datetime.strptime(pd_raw[:10], "%Y-%m-%d").date()
                             if pd >= limite_60d:
                                 return True
                         except Exception:
                             pass
-                # STRICT: sem fallback - se nenhum pagamento tem data recente,
-                # nao considera em dia (evita mascarar inadimplentes com historico antigo)
         except Exception as e:
             logger.warning(f"Falha ao consultar historico Asaas cliente {cliente_id}: {e}")
 
@@ -797,8 +845,9 @@ async def _build_simulacao(dias_tolerancia: int = 0) -> List[dict]:
         if not cliente_id or cliente_id in processados:
             continue
 
-        # Ja pagou algum boleto do mes? Skip
-        if await _cliente_ja_pagou_no_mes(cliente_id, cob.get("vencimento", "")):
+        # Ja pagou algum boleto do ciclo? Skip
+        origem = cob.get("origem", "cobranca")
+        if await _cliente_ja_pagou_no_mes(cliente_id, cob.get("vencimento", ""), origem=origem):
             continue
 
         cliente = None
@@ -827,7 +876,9 @@ async def _build_simulacao(dias_tolerancia: int = 0) -> List[dict]:
             "valor": cob.get("valor"),
             "vencimento": cob.get("vencimento"),
             "descricao": cob.get("descricao"),
-            "linhas_afetadas": [{"linha_id": str(l["_id"]), "msisdn": l.get("msisdn") or l.get("numero")} for l in linhas_ativas],
+            "origem": cob.get("origem", "cobranca"),
+            "data_expiracao_ta": cob.get("data_expiracao_ta"),
+            "linhas_afetadas": [{"linha_id": str(l["_id"]), "msisdn": l.get("msisdn") or l.get("numero"), "data_expiracao_ta": l.get("data_expiracao_ta")} for l in linhas_ativas],
             "na_whitelist": na_whitelist,
             "acao": "SKIP_WHITELIST" if na_whitelist else "BLOQUEAR",
         })

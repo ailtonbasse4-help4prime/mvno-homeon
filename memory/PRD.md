@@ -176,15 +176,25 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Frontend: botao verde "Sync Expiracao Ta" no header de /linhas, botao amber Unlock em linhas bloqueadas abre dialog confianca-dialog
 - [x] Testado (iteration_36): 13/13 backend + 100% frontend
 
+### Fix Bug D-2 Simulacao Auto-Bloqueio (07/24/2026 - iteration_37)
+- [x] **BUG RCA**: `_find_cobrancas_para_bloquear` concatenava resultado do caminho v2 (expiracao_ta) com fallback legacy (por vencimento de cobranca). Legacy pegava clientes com boletos antigos em atraso e os injetava na simulacao mesmo com expiracao futura (ex.: Joelson exp 02/08 aparecia em 24/07).
+- [x] **Fix**: REMOVIDO fallback legacy. `_find_cobrancas_para_bloquear` agora usa APENAS `_find_via_expiracao_ta`. Linhas sem data_expiracao_ta NUNCA sao bloqueadas por esta rotina (fail-safe).
+- [x] `_find_via_expiracao_ta`: adicionada validacao STRICT de formato ISO (YYYY-MM-DD) + recheck em Python para evitar comparacoes lexicograficas com dados corrompidos + logging DEBUG.
+- [x] `_cliente_ja_pagou_no_mes` agora aceita `origem`: para expiracao_ta usa janela [exp - 30d, exp + 3d] (ciclo Ta real); legacy mantem 60d retroativos.
+- [x] `_build_simulacao` retorna `data_expiracao_ta` e `origem` no payload; UI mostra `exp Ta:` na lista e no CSV exportado.
+- [x] Teste de regressao: `/app/backend/tests/test_auto_bloqueio_v2_expiracao_math.py` valida (a) exp+10d NAO aparece, (b) exp+1d APARECE, (c) exp-3d APARECE, (d) sem data_expiracao_ta NAO aparece.
+- [x] Verificado pelo bug_testing_agent (verdict=fixed): 100% dos casos passaram, incluindo whitelist, dry-run e diagnostico.
+
 
 ## Backlog
 
 ### P1 - Alta Prioridade
+- [ ] **Fase B - Geracao de boletos por Expiracao Ta**: usar `data_expiracao_ta - 5 dias` como vencimento sugerido em CobrancaLotePorVencimentoDialog
 - [ ] Configurar autenticacao interna do MongoDB (habilitar `--auth` no Docker, criar usuario root forte, atualizar `MONGO_URL` no .env)
-- [ ] Desmembrar server.py (5900+ linhas) em roteadores separados
+- [ ] Desmembrar server.py (6100+ linhas) em roteadores separados (`/app/backend/routes/`)
 - [ ] Backup externo do MongoDB (S3/Backblaze) - hoje so backup local na VPS
 
 ### P2 - Media Prioridade
-- [ ] Bloqueio automatico por inadimplencia (webhook Asaas)
+- [ ] Dashboard Executivo com metricas de recuperacao de receita via auto-bloqueio
 - [ ] Historico de ativacoes
-- [ ] Expansao Multi-Tenant (SaaS)
+- [ ] Expansao Multi-Tenant (SaaS - Fase 1)
