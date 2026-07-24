@@ -159,8 +159,22 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Retry com backoff exponencial em 429 (rate limit Asaas)
 - [x] Sync global antes do bloqueio: aumentou limite 500->5000, delay 0.5s a cada 10 requests para evitar 429
 - [x] Frontend: botao "Sincronizar TODAS as cobrancas com Asaas" (cyan) + aviso emerald "Proteção fail-safe ativa"
-- [x] Toast do executar mostra 'X ja pagos (fail-safe)' alem dos outros contadores
-- [x] Testado (iteration_31): 32/32 backend + 100% frontend
+- [x] Testado (iteration_31-34): 32/32 + fix Clarice + fix reconciliar
+
+### Reconciliar Cliente + Diagnostico (07/24/2026)
+- [x] Novo endpoint POST /api/carteira/reconciliar-cliente/{cliente_id}: puxa payments RECEIVED do cliente no Asaas e concilia cobrancas locais com matching por valor + janela +-45 dias (resolve caso "cliente pagou boleto do proximo mes")
+- [x] Novo endpoint GET /api/automacao/bloqueio/diagnosticar/{cliente_id}: auditoria completa do cliente (cobrancas, linhas, motivo)
+- [x] Frontend: botao ShieldCheck (purpura) em cada cobranca pendente + modal 🔍 diagnostico com tabela completa
+
+### Fase A - Auto-bloqueio via Expiracao Ta Telecom (07/24/2026)
+- [x] Novo endpoint POST /api/automacao/bloqueio/sincronizar-expiracao-ta: consulta /estoque/{iccid} Ta para cada linha e salva `linhas.data_expiracao_ta`
+- [x] Helper _extrair_data_expiracao: reconhece varios formatos DD/MM/YYYY, YYYY-MM-DD, ISO, e nomes: data_expiracao, expiration_date, plan_expiration, expira_em, expiresAt, etc
+- [x] Nova logica _find_via_expiracao_ta: bloqueia D-2 da expiracao Ta (2 dias antes)
+- [x] Fallback _find_via_cobranca_legacy para linhas sem data_expiracao_ta (skip clientes ja tratados na rota nova)
+- [x] Novo endpoint POST /api/automacao/bloqueio/linhas/{linha_id}/desbloqueio-confianca: admin desbloqueia temporariamente (1-30 dias)
+- [x] Worker _executar_reblock_confianca_expirada: a cada 5min re-bloqueia linhas com confianca expirada e ainda inadimplentes
+- [x] Frontend: botao verde "Sync Expiracao Ta" no header de /linhas, botao amber Unlock em linhas bloqueadas abre dialog confianca-dialog
+- [x] Testado (iteration_36): 13/13 backend + 100% frontend
 
 
 ## Backlog
