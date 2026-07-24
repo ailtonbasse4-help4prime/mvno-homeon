@@ -1,0 +1,41 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "Página de cobranças mostra boleto do mês 6 da Clarice como pendente, mas ela já pagou faz tempo. Botão Sincronizar Status não atualiza a tabela mesmo forçando. Isso é a maior causa de bloqueio equivocado.",
+  "summary": "No relevant testing skill found. Focused backend + UI verification passed: Clarice's 25/06/2026 R$74.99 cobrança is no longer pending in /api/carteira/cobrancas, and the new reconciliation endpoint correctly fixes the same paid-on-different-payment-id scenario on seeded data. The /cobrancas ShieldCheck button appeared for a pending row, asked confirmation, called POST /api/carteira/reconciliar-cliente/{cliente_id}, showed a success toast, refreshed the row to Recebida, and removed the reconcile button.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/bug_verification_35_reconciliation.py",
+    "/app/tests/bug_verification_35_cleanup.py",
+    "/app/test_reports/bug35_reconciliation_results.json",
+    "/app/test_reports/bug35_cleanup_results.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Inspected /app/backend/server.py and /app/frontend/src/pages/GestaoCobrancas.jsx. No blocking issue found in the tested reconciliation flow. Note for future hardening: the endpoint fetches up to 100 RECEIVED and 100 CONFIRMED payments per customer, not paginated truly unbounded history. This did not affect Clarice or the seeded reproduction cases."
+  ],
+  "updated_files": [
+    "/app/tests/bug_verification_35_reconciliation.py",
+    "/app/tests/bug_verification_35_cleanup.py",
+    "/app/test_reports/bug35_reconciliation_results.json",
+    "/app/test_reports/bug35_cleanup_results.json",
+    "/app/test_reports/bug_verification_35.json",
+    "/app/test_reports/iteration_35.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "seed_data_creation": "Created tagged BUG35 MongoDB-only data: 5 clients, 4 cobranças, 5 linhas, and 1 non-admin user. Used REAL read-only Asaas production list_payments to select paid payments; no product APIs were MOCKED. Browser test reconciled the seeded UI row. Cleanup verified 0 remaining BUG35 tagged clientes/cobrancas/linhas/usuarios.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mandatory skill search 'cobranças boleto sincronizar status reconciliar cliente' returned no relevant testing skill. Test credentials read from /app/memory/test_credentials.md and admin@mvno.com/admin123 worked. git status showed uncommitted M backend/server.py and M frontend/src/pages/GestaoCobrancas.jsx. Backend API tests ran against REACT_APP_BACKEND_URL=https://chip-manager-3.preview.emergentagent.com. API checks passed for 401 no auth, 403 non-admin, 400 invalid id, 404 missing id, 400 missing asaas_customer_id, no-pending returns zero updates, direct payment-id sync, and value/date reconciliation with different local asaas_payment_id. Clarice id 69d023bc83caf2c1f9c09efe exists; her 2026-06-25 R$74.99 cobrança was already RECEIVED before this run and remained RECEIVED after reconciliation; /api/carteira/cobrancas shows it not pending. Browser test used data-testid reconciliar-6a63967869ad57e3c5201a59 on /cobrancas, accepted confirmation, observed POST 200 with atualizadas_por_conciliacao=1, success toast, and row status Recebida.",
+  "rca_of_the_issue": "Original RCA confirmed: regular Sincronizar Status only checks the local cobrança's stored asaas_payment_id, so it cannot detect when the customer paid another equivalent Asaas payment. The new reconciliation endpoint queries paid Asaas payments for the customer and matches pending local cobranças by payment id or by same value plus due-date window, persisting RECEIVED/reconciliada_por for the mismatch case."
+}
