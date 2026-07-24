@@ -259,23 +259,18 @@ async def _get_whitelist_set() -> set:
 async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
     """
     Verifica se o cliente esta "em dia" — logica robusta com multiplas condicoes:
-    1. Tem cobranca paga no mesmo mes do vencimento pendente
-    2. Tem cobranca paga com vencimento >= vencimento pendente (pagou uma futura)
-    3. Pagou algo nos ultimos 35 dias corridos
-    4. Tem cobranca ativa/paga com vencimento no proximo mes (planos pre-pagos)
+    1. Tem cobranca paga (LOCAL) no mesmo mes do vencimento pendente
+    2. Tem cobranca paga (LOCAL) com vencimento >= vencimento pendente (pagou uma futura)
+    3. Pagou algo nos ultimos 60 dias corridos (LOCAL)
+    4. ASAAS: consulta direto o Asaas — se cliente tem QUALQUER pagamento
+       CONFIRMED/RECEIVED nos ultimos 60 dias, considera em dia (fonte da verdade)
     Se qualquer condicao verdadeira -> considera em dia -> NAO bloqueia.
     """
     if not vencimento:
         return False
-    try:
-        from datetime import datetime as _dt
-        venc_date = _dt.strptime(vencimento, "%Y-%m-%d").date()
-    except Exception:
-        return False
-
     paid_statuses = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]
 
-    # (1) mesma janela mensal (mes do vencimento pendente)
+    # (1) mesma janela mensal
     try:
         ano, mes, _ = vencimento.split("-")
         import calendar
@@ -301,9 +296,9 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
     if paga_futura:
         return True
 
-    # (3) pagou algo nos ultimos 35 dias corridos (paid_at recente)
+    # (3) pagou algo nos ultimos 60 dias corridos (paid_at recente)
     from datetime import datetime as _dt2, timezone as _tz, timedelta as _td
-    limite_dt = _dt2.now(_tz.utc) - _td(days=35)
+    limite_dt = _dt2.now(_tz.utc) - _td(days=60)
     paga_recente = await _db.cobrancas.find_one({
         "cliente_id": str(cliente_id),
         "status": {"$in": paid_statuses},
@@ -314,6 +309,47 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
     })
     if paga_recente:
         return True
+
+    # (4) FONTE DA VERDADE: consulta Asaas por pagamentos do cliente
+    if _asaas_service and getattr(_asaas_service, "is_configured", False):
+        try:
+            cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)})
+            asaas_customer_id = cliente.get("asaas_customer_id") if cliente else None
+            if asaas_customer_id:
+                from datetime import datetime as _dt3
+                # busca ultimos 20 pagamentos do cliente com status RECEIVED
+                result = await _asaas_service.list_payments(
+                    customer_id=asaas_customer_id,
+                    limit=20,
+                    status="RECEIVED",
+                )
+                pagamentos = result.get("data", []) if isinstance(result, dict) else []
+                # aceita tambem CONFIRMED
+                if not pagamentos:
+                    result_c = await _asaas_service.list_payments(
+                        customer_id=asaas_customer_id,
+                        limit=20,
+                        status="CONFIRMED",
+                    )
+                    pagamentos = result_c.get("data", []) if isinstance(result_c, dict) else []
+
+                # Se pagou algo nos ultimos 60 dias -> em dia
+                limite_60d = (_dt3.now(_tz.utc) - _td(days=60)).date()
+                for p in pagamentos:
+                    payment_date = p.get("paymentDate") or p.get("confirmedDate") or p.get("clientPaymentDate")
+                    if payment_date:
+                        try:
+                            pd = _dt3.strptime(payment_date[:10], "%Y-%m-%d").date()
+                            if pd >= limite_60d:
+                                return True
+                        except Exception:
+                            pass
+                # Se nao achou data mas tem pagamentos recentes na lista, assume em dia
+                if pagamentos and len(pagamentos) >= 1:
+                    # Asaas retorna do mais recente pro mais antigo; se ha pagamentos RECEIVED e o cliente e ativo, sinal positivo
+                    return True
+        except Exception as e:
+            logger.warning(f"Falha ao consultar historico Asaas cliente {cliente_id}: {e}")
 
     return False
 

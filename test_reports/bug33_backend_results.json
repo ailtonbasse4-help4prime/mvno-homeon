@@ -1,0 +1,263 @@
+{
+  "tag": "BUG33-5a736458",
+  "base_url": "https://chip-manager-3.preview.emergentagent.com",
+  "test_plan": [
+    "Verify admin /api/automacao/bloqueio/simular excludes a locally overdue customer when Asaas has a RECEIVED/CONFIRMED payment within 60 days.",
+    "Verify Clarice is absent and /diagnosticar reports she would not be blocked.",
+    "Verify local same-month, future-paid, and 50-days paid_at protections still work.",
+    "Verify truly delinquent and whitelist customers still appear with correct actions.",
+    "Verify old Asaas payments outside 60 days do not incorrectly protect a delinquent customer."
+  ],
+  "asaas_scan": {
+    "configured": true,
+    "environment": "production",
+    "cutoff": "2026-05-25",
+    "recent": {
+      "customer_id": "cus_000183340858",
+      "max_date": "2026-07-22",
+      "min_date": "2026-06-23",
+      "statuses": [
+        "RECEIVED"
+      ]
+    },
+    "old_only": {
+      "customer_id": "cus_000170771434",
+      "max_date": "2026-05-24",
+      "min_date": "2026-04-27",
+      "statuses": [
+        "RECEIVED"
+      ]
+    },
+    "customers_seen": 120,
+    "api_calls": [
+      {
+        "status": "RECEIVED",
+        "offset": 0,
+        "http": 200
+      },
+      {
+        "status": "RECEIVED",
+        "offset": 100,
+        "http": 200
+      },
+      {
+        "status": "RECEIVED",
+        "offset": 200,
+        "http": 200
+      },
+      {
+        "status": "CONFIRMED",
+        "offset": 0,
+        "http": 200
+      }
+    ]
+  },
+  "created": {
+    "asaas_recent_only": {
+      "id": "6a6390b6f9fcd5132c0a9085",
+      "nome": "QA BUG33 ASAAS RECENT ONLY BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a9087"
+      ],
+      "asaas_customer_id": "cus_000183340858"
+    },
+    "asaas_old_only": {
+      "id": "6a6390b6f9fcd5132c0a9088",
+      "nome": "QA BUG33 ASAAS OLD ONLY BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a908a"
+      ],
+      "asaas_customer_id": "cus_000170771434"
+    },
+    "local_same_month": {
+      "id": "6a6390b6f9fcd5132c0a908b",
+      "nome": "QA BUG33 LOCAL SAME MONTH BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a908d",
+        "6a6390b6f9fcd5132c0a908e"
+      ],
+      "asaas_customer_id": null
+    },
+    "local_future": {
+      "id": "6a6390b6f9fcd5132c0a908f",
+      "nome": "QA BUG33 LOCAL FUTURE BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a9091",
+        "6a6390b6f9fcd5132c0a9092"
+      ],
+      "asaas_customer_id": null
+    },
+    "local_60d": {
+      "id": "6a6390b6f9fcd5132c0a9093",
+      "nome": "QA BUG33 LOCAL 60D BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a9095",
+        "6a6390b6f9fcd5132c0a9096"
+      ],
+      "asaas_customer_id": null
+    },
+    "true_delinquent": {
+      "id": "6a6390b6f9fcd5132c0a9097",
+      "nome": "QA BUG33 TRUE DELINQUENT BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a9099"
+      ],
+      "asaas_customer_id": null
+    },
+    "whitelist": {
+      "id": "6a6390b6f9fcd5132c0a909a",
+      "nome": "QA BUG33 WHITELIST BUG33-5a736458",
+      "cobrancas": [
+        "6a6390b6f9fcd5132c0a909c"
+      ],
+      "asaas_customer_id": null
+    }
+  },
+  "simular_counts": {
+    "total": 5,
+    "a_bloquear": 4,
+    "skip_whitelist": 1
+  },
+  "simular_elapsed_seconds": 6.53,
+  "diag_recent_summary": {
+    "seria_bloqueado": false,
+    "motivo": "cliente_em_dia (pagou recente/futura/mesmo_mes)"
+  },
+  "diag_old_summary": {
+    "seria_bloqueado": false,
+    "motivo": "cliente_em_dia (pagou recente/futura/mesmo_mes)"
+  },
+  "direct_helper": [
+    {
+      "case": "asaas_recent_received_returns_true",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "case": "asaas_old_received_outside_60d_returns_false",
+      "expected": false,
+      "actual": true,
+      "passed": false
+    },
+    {
+      "case": "asaas_error_does_not_crash_returns_false",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "admin login succeeds",
+      "passed": true,
+      "detail": "HTTP 200: {\"id\":\"69cbfc5ee53a77ec56042df3\",\"email\":\"admin@mvno.com\",\"name\":\"Administrador\",\"role\":\"admin\",\"created_at\":\"2026-03-31T16:54:54.229000\"}"
+    },
+    {
+      "name": "simular HTTP 200",
+      "passed": true,
+      "detail": "HTTP 200: {\"total\":5,\"a_bloquear\":4,\"skip_whitelist\":1,\"itens\":[{\"cliente_id\":\"69d023bf83caf2c1f9c09f11\",\"cliente_nome\":\"Eliseu Costa\",\"documento\":\"01996596802\",\"telefone\":\"5519920098792\",\"cobranca_id\":\"69e25ed779c76c1991551ad2\",\"valor\":38.0,\"vencimento\":\"2026-06-10\",\"descricao\":\"Parcela 1 de 8. Plano Telefon"
+    },
+    {
+      "name": "simular performance under 60s",
+      "passed": true,
+      "detail": "elapsed=6.53s"
+    },
+    {
+      "name": "Asaas recent paid but local outdated customer absent from simular",
+      "passed": true,
+      "detail": "null"
+    },
+    {
+      "name": "Asaas old-only paid customer still appears as delinquent",
+      "passed": false,
+      "detail": "null"
+    },
+    {
+      "name": "local_same_month protected and absent from simular",
+      "passed": true,
+      "detail": "null"
+    },
+    {
+      "name": "local_future protected and absent from simular",
+      "passed": true,
+      "detail": "null"
+    },
+    {
+      "name": "local_60d protected and absent from simular",
+      "passed": true,
+      "detail": "null"
+    },
+    {
+      "name": "true delinquent appears with BLOQUEAR",
+      "passed": true,
+      "detail": "{\"cliente_id\": \"6a6390b6f9fcd5132c0a9097\", \"cliente_nome\": \"QA BUG33 TRUE DELINQUENT BUG33-5a736458\", \"documento\": \"33615968520\", \"telefone\": \"11999999999\", \"cobranca_id\": \"6a6390b6f9fcd5132c0a9099\", \"valor\": 44.04, \"vencimento\": \"2026-04-25\", \"descricao\": \"QA BUG33 TRUE DELINQUENT\", \"linhas_afetadas\": [{\"linha_id\": \"6a6390b6f9fcd5132c0a9098\", \"msisdn\": \"11930623577\"}], \"na_whitelist\": false, \"acao\": \"BLOQUEAR\"}"
+    },
+    {
+      "name": "whitelist customer appears with SKIP_WHITELIST",
+      "passed": true,
+      "detail": "{\"cliente_id\": \"6a6390b6f9fcd5132c0a909a\", \"cliente_nome\": \"QA BUG33 WHITELIST BUG33-5a736458\", \"documento\": \"33255726501\", \"telefone\": \"11999999999\", \"cobranca_id\": \"6a6390b6f9fcd5132c0a909c\", \"valor\": 45.05, \"vencimento\": \"2026-04-25\", \"descricao\": \"QA BUG33 WHITELIST\", \"linhas_afetadas\": [{\"linha_id\": \"6a6390b6f9fcd5132c0a909b\", \"msisdn\": \"11916629667\"}], \"na_whitelist\": true, \"acao\": \"SKIP_WHITELIST\"}"
+    },
+    {
+      "name": "Clarice absent from current simular",
+      "passed": true,
+      "detail": "null"
+    },
+    {
+      "name": "diagnosticar Clarice HTTP 200",
+      "passed": true,
+      "detail": "{\"cliente\":{\"id\":\"69d023bc83caf2c1f9c09efe\",\"nome\":\"Clarice Santos De Freitas\",\"documento\":\"08338120847\",\"telefone\":\"5519993862667\"},\"na_whitelist\":false,\"motivo_whitelist\":null,\"total_cobrancas\":12,\"cobrancas\":[{\"id\":\"69e25ee479c76c1991551af9\",\"vencimento\":\"2027-02-25\",\"status\":\"PENDING\",\"valor\":74"
+    },
+    {
+      "name": "diagnosticar Clarice says not blocked",
+      "passed": true,
+      "detail": "{\"seria_bloqueado\": false, \"motivo\": \"sem_cobrancas_vencidas\"}"
+    },
+    {
+      "name": "diagnosticar Asaas recent HTTP 200",
+      "passed": true,
+      "detail": "{\"cliente\":{\"id\":\"6a6390b6f9fcd5132c0a9085\",\"nome\":\"QA BUG33 ASAAS RECENT ONLY BUG33-5a736458\",\"documento\":\"33950226284\",\"telefone\":\"11999999999\"},\"na_whitelist\":false,\"motivo_whitelist\":null,\"total_cobrancas\":1,\"cobrancas\":[{\"id\":\"6a6390b6f9fcd5132c0a9087\",\"vencimento\":\"2026-04-25\",\"status\":\"PENDIN"
+    },
+    {
+      "name": "diagnosticar Asaas recent says not blocked",
+      "passed": true,
+      "detail": "{\"seria_bloqueado\": false, \"motivo\": \"cliente_em_dia (pagou recente/futura/mesmo_mes)\"}"
+    },
+    {
+      "name": "diagnosticar Asaas old-only HTTP 200",
+      "passed": true,
+      "detail": "{\"cliente\":{\"id\":\"6a6390b6f9fcd5132c0a9088\",\"nome\":\"QA BUG33 ASAAS OLD ONLY BUG33-5a736458\",\"documento\":\"33508821409\",\"telefone\":\"11999999999\"},\"na_whitelist\":false,\"motivo_whitelist\":null,\"total_cobrancas\":1,\"cobrancas\":[{\"id\":\"6a6390b6f9fcd5132c0a908a\",\"vencimento\":\"2026-04-25\",\"status\":\"PENDING\","
+    },
+    {
+      "name": "diagnosticar Asaas old-only says blocked",
+      "passed": false,
+      "detail": "{\"seria_bloqueado\": false, \"motivo\": \"cliente_em_dia (pagou recente/futura/mesmo_mes)\"}"
+    },
+    {
+      "name": "direct helper asaas_recent_received_returns_true",
+      "passed": true,
+      "detail": "expected=True actual=True"
+    },
+    {
+      "name": "direct helper asaas_old_received_outside_60d_returns_false",
+      "passed": false,
+      "detail": "expected=False actual=True"
+    },
+    {
+      "name": "direct helper asaas_error_does_not_crash_returns_false",
+      "passed": true,
+      "detail": "expected=False actual=False"
+    }
+  ],
+  "failures": [
+    "Asaas old-only paid customer still appears as delinquent: null",
+    "diagnosticar Asaas old-only says blocked: {\"seria_bloqueado\": false, \"motivo\": \"cliente_em_dia (pagou recente/futura/mesmo_mes)\"}",
+    "direct helper asaas_old_received_outside_60d_returns_false: expected=False actual=True"
+  ],
+  "cleanup": {
+    "clientes": 7,
+    "linhas": 7,
+    "cobrancas": 10,
+    "whitelist": 1
+  }
+}
