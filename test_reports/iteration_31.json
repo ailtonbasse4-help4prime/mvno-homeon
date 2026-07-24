@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 31: BUG-FIX critico - dupla-checagem individual anti-bloqueio-indevido validada. Backend 5/5 novos testes (test_failsafe_asaas_iteration31.py) + 27/27 regressao (test_automacao_bloqueio.py) passaram. Frontend: btn-sync-asaas presente (cyan) no card Simular/Executar, aviso emerald 'Proteção fail-safe ativa' renderiza acima dos botoes, clique em btn-sync-asaas dispara POST /carteira/sincronizar-status (retorno real: '0 cobranças atualizadas de 106 pendentes'). Regressoes OK: btn-add-lote, btn-executar-dry, btn-executar-real, status DESATIVADO permanece false.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/automacao/bloqueio/executar (dry_run=true)", "issue": "Endpoint eh lento (~57s), pois roda sync_asaas_antes_bloqueio antes do dry_run. Recebeu 502 Cloudflare em 1 execucao (flaky, mesmo padrao de iteration_30). Passou no retry. Sugestao: em dry_run pular a chamada _sync_asaas_fn tambem (ja que dry_run ja pula a dupla-checagem individual)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_failsafe_asaas_iteration31.py",
+    "/app/backend/tests/test_automacao_bloqueio.py",
+    "/app/test_reports/pytest/pytest_iteration31.xml",
+    "/app/test_reports/pytest/pytest_iteration31_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OK: _verificar_pagamento_final_asaas retorna pode_bloquear=False em TODO caminho de erro (asaas_nao_configurado, cobranca_nao_encontrada, resposta vazia, 429 esgotado, exception). Fail-safe correto.",
+    "OK: dupla-checagem so acontece em dry_run=False (linha 442). Em dry_run pagamentos_verificados_asaas=0 e pulados_pagamento_asaas=0 - confirmado nos testes.",
+    "OK: retry 429 com backoff exponencial (2s, 4s) em ambos _sync_cobrancas_com_asaas e _verificar_pagamento_final_asaas.",
+    "OK: init_automacao_bloqueio passa asaas_service (linha 6146+ server.py) - dependencia disponivel.",
+    "OK: _sync_cobrancas_com_asaas aceita limit=5000 (era 500), delay 0.5s a cada 10 requests.",
+    "Sugestao (nao bloqueante): quando dry_run=true, considerar pular tambem o _sync_asaas_fn no _executar_job_bloqueio para tornar dry_run instantaneo. Atualmente dry_run demora ~1 min pois roda o sync completo (SALVAGUARDA) primeiro.",
+    "Observacao: 106 cobrancas pendentes no ambiente e 11 clientes na simulacao de bloqueio - dados de producao Ta Telecom. Executar bloqueio REAL nao foi feito."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_failsafe_asaas_iteration31.py (novo)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 novos + 27/27 regressao; 8 skipped por falta de usuario nao-admin)",
+    "frontend": "100% (btn-sync-asaas com label/cor corretos; aviso emerald renderiza; clique dispara sincronizar-status com toast de sucesso; regressoes OK)"
+  },
+  "test_credentials": "admin@mvno.com / admin123",
+  "seed_data_creation": "Nenhum. Testes usam dados existentes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 31 validou fail-safe/dupla-checagem individual. config.ativo continua FALSE. Sync Asaas retornou 0 atualizadas de 106 pendentes (todas as 106 continuam PENDING no Asaas tambem, entao provavelmente estao mesmo pendentes; nenhum falso negativo detectado). NAO executar POST /executar com dry_run=false. Endpoint /executar em dry_run pode dar 502 Cloudflare flaky por causa do sync que roda antes - retry uma vez.",
+  "rca of the issue": "N/A - feature implementada corretamente. Backend + frontend integrados."
+}

@@ -4370,8 +4370,9 @@ async def sync_cobrancas_status(request: Request):
     return result
 
 
-async def _sync_cobrancas_com_asaas(limit: int = 500) -> dict:
-    """Sync core reutilizavel (usado tanto pelo endpoint manual quanto pela automacao)."""
+async def _sync_cobrancas_com_asaas(limit: int = 5000) -> dict:
+    """Sync core reutilizavel (usado tanto pelo endpoint manual quanto pela automacao).
+    Inclui retry com backoff para 429 e delay entre requests."""
     if not asaas_service.is_configured:
         return {"total_checked": 0, "updated": 0, "errors": ["Asaas nao configurado"]}
 
@@ -4382,18 +4383,29 @@ async def _sync_cobrancas_com_asaas(limit: int = 500) -> dict:
 
     updated_count = 0
     errors = []
-    for cob in pendentes:
-        try:
-            payment_data = await asaas_service.get_payment(cob["asaas_payment_id"])
-            new_status = payment_data.get("status")
-            if new_status and new_status != cob.get("status"):
-                update_fields = {"status": new_status}
-                if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
-                    update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
-                await db.cobrancas.update_one({"_id": cob["_id"]}, {"$set": update_fields})
-                updated_count += 1
-        except Exception as e:
-            errors.append(f"{cob['asaas_payment_id']}: {str(e)}")
+    for idx, cob in enumerate(pendentes):
+        # Delay pequeno a cada 10 requests para evitar 429
+        if idx > 0 and idx % 10 == 0:
+            await asyncio.sleep(0.5)
+        # Retry com backoff se der 429
+        for tentativa in range(3):
+            try:
+                payment_data = await asaas_service.get_payment(cob["asaas_payment_id"])
+                new_status = payment_data.get("status")
+                if new_status and new_status != cob.get("status"):
+                    update_fields = {"status": new_status}
+                    if new_status in ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]:
+                        update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                    await db.cobrancas.update_one({"_id": cob["_id"]}, {"$set": update_fields})
+                    updated_count += 1
+                break  # sucesso -> proximo
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg and tentativa < 2:
+                    await asyncio.sleep(2 * (tentativa + 1))
+                    continue
+                errors.append(f"{cob['asaas_payment_id']}: {err_msg[:150]}")
+                break
 
     return {"total_checked": len(pendentes), "updated": updated_count, "errors": errors}
 
@@ -6135,6 +6147,7 @@ init_automacao_bloqueio(
     db=db, get_current_user=get_current_user, require_admin=require_admin,
     create_log=create_log, operadora_service=operadora_service, zapi_service=_zapi_service_ref,
     sync_asaas_fn=_sync_cobrancas_com_asaas,
+    asaas_service=asaas_service,
 )
 api_router_automacao = APIRouter(prefix="/api")
 api_router_automacao.include_router(automacao_bloqueio_router)

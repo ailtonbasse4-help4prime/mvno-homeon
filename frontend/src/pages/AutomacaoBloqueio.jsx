@@ -114,8 +114,22 @@ export default function AutomacaoBloqueio() {
     setExecutando(true);
     try {
       const r = await axios.post(`${API_URL}/api/automacao/bloqueio/executar`, { dry_run, dias_tolerancia: 0 }, { withCredentials: true });
-      toast.success(`${dry_run ? '[DRY RUN]' : '[REAL]'} ${r.data.bloqueadas} bloqueadas | ${r.data.puladas_whitelist} whitelist | ${r.data.erros?.length || 0} erros`);
+      const msg = `${dry_run ? '[DRY RUN]' : '[REAL]'} ${r.data.bloqueadas} bloqueadas | ${r.data.puladas_whitelist} VIP | ${r.data.pulados_pagamento_asaas || 0} já pagos (fail-safe) | ${r.data.erros?.length || 0} erros`;
+      toast.success(msg);
       await fetchAll();
+      await simular();
+    } catch (e) {
+      toast.error('Erro: ' + (e.response?.data?.detail || e.message));
+    }
+    setExecutando(false);
+  };
+
+  const sincronizarAsaas = async () => {
+    if (!window.confirm('Sincronizar TODAS as cobrancas pendentes com o Asaas? Isso pode demorar 1-2 minutos se tiver muitas.')) return;
+    setExecutando(true);
+    try {
+      const r = await axios.post(`${API_URL}/api/carteira/sincronizar-status`, {}, { withCredentials: true });
+      toast.success(`✅ Sincronização: ${r.data.updated} cobranças atualizadas de ${r.data.total_checked} pendentes`);
       await simular();
     } catch (e) {
       toast.error('Erro: ' + (e.response?.data?.detail || e.message));
@@ -355,6 +369,13 @@ export default function AutomacaoBloqueio() {
         <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-5 space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2"><PlayCircle className="w-5 h-5 text-violet-400" /> Simular / Executar</h2>
 
+          <Button onClick={sincronizarAsaas} disabled={executando} variant="outline"
+            className="w-full border-cyan-700 text-cyan-300 hover:bg-cyan-900/20" data-testid="btn-sync-asaas">
+            {executando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+            Sincronizar TODAS as cobranças com Asaas
+          </Button>
+          <p className="text-xs text-zinc-500 -mt-2">Recomendado antes de simular/executar. Atualiza status das cobranças pendentes.</p>
+
           <Button onClick={simular} disabled={simulando} variant="outline"
             className="w-full border-zinc-700 hover:bg-zinc-800" data-testid="btn-simular">
             {simulando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
@@ -414,6 +435,9 @@ export default function AutomacaoBloqueio() {
           )}
 
           <div className="border-t border-zinc-800 pt-3 space-y-2">
+            <div className="bg-emerald-900/20 border border-emerald-800/50 rounded p-2 text-xs text-emerald-300">
+              🛡️ <strong>Proteção fail-safe ativa:</strong> Antes de bloquear CADA cliente, o sistema consulta o Asaas individualmente. Se pago ou erro na consulta, pula.
+            </div>
             <Button onClick={() => executar(true)} disabled={executando} variant="outline"
               className="w-full border-zinc-700 hover:bg-zinc-800" data-testid="btn-executar-dry">
               {executando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}

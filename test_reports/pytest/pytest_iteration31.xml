@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="98.862" timestamp="2026-07-24T14:37:36.181296+00:00" hostname="agent-env-58ff9a95-de9d-43a1-b856-2ee4ddc56e2b"><testcase classname="backend.tests.test_failsafe_asaas_iteration31.TestSincronizarStatus" name="test_sincronizar_status_admin_ok" time="38.172" /><testcase classname="backend.tests.test_failsafe_asaas_iteration31.TestSincronizarStatus" name="test_sincronizar_status_requires_auth" time="0.204" /><testcase classname="backend.tests.test_failsafe_asaas_iteration31.TestExecutarDryRunFailsafe" name="test_dry_run_returns_new_fields" time="60.056"><failure message="AssertionError: Expected 200, got 502 - &lt;!DOCTYPE html&gt;&#10;  &lt;!--[if lt IE 7]&gt; &lt;html class=&quot;no-js ie6 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 7]&gt;    &lt;html class=&quot;no-js ie7 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if IE 8]&gt;    &lt;html class=&quot;no-js ie8 oldie&quot; lang=&quot;en-US&quot;&gt; &lt;![endif]--&gt;&#10;  &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class=&quot;no-js&quot; lang=&quot;en-US&quot;&gt; &lt;!--&lt;![endif]--&gt;&#10;  &lt;head&gt;&#10;  &#10;  &lt;title&gt;preview.emergentagent.com | 502: Bad gateway&lt;/title&gt;&#10;  &lt;meta charset=&quot;UT&#10;assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_failsafe_asaas_iteration31.py:67: in test_dry_run_returns_new_fields
+    assert r.status_code == 200, f"Expected 200, got {r.status_code} - {r.text[:400]}"
+E   AssertionError: Expected 200, got 502 - &lt;!DOCTYPE html&gt;
+E     &lt;!--[if lt IE 7]&gt; &lt;html class="no-js ie6 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E     &lt;!--[if IE 7]&gt;    &lt;html class="no-js ie7 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E     &lt;!--[if IE 8]&gt;    &lt;html class="no-js ie8 oldie" lang="en-US"&gt; &lt;![endif]--&gt;
+E     &lt;!--[if gt IE 8]&gt;&lt;!--&gt; &lt;html class="no-js" lang="en-US"&gt; &lt;!--&lt;![endif]--&gt;
+E     &lt;head&gt;
+E     
+E     &lt;title&gt;preview.emergentagent.com | 502: Bad gateway&lt;/title&gt;
+E     &lt;meta charset="UT
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_failsafe_asaas_iteration31.TestExecutarDryRunFailsafe" name="test_executar_requires_admin" time="0.143" /><testcase classname="backend.tests.test_failsafe_asaas_iteration31.TestConfigAtivoFalse" name="test_ativo_permanece_false" time="0.066" /></testsuite></testsuites>
