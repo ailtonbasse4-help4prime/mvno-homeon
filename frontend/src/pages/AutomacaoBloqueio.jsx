@@ -308,16 +308,46 @@ export default function AutomacaoBloqueio() {
           )}
 
           {simulacao?.itens?.length > 0 && (
-            <div className="max-h-48 overflow-y-auto space-y-1 text-xs">
-              {simulacao.itens.slice(0, 20).map(it => (
-                <div key={it.cliente_id} className="flex justify-between bg-zinc-900 rounded px-2 py-1">
-                  <span className="truncate">{it.cliente_nome}</span>
-                  <span className={it.na_whitelist ? 'text-cyan-400' : 'text-orange-400'}>
-                    {it.na_whitelist ? '★ VIP' : `R$ ${it.valor?.toFixed(2)}`}
-                  </span>
-                </div>
-              ))}
-              {simulacao.itens.length > 20 && <div className="text-zinc-500 text-center">+ {simulacao.itens.length - 20} outros</div>}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Todos os {simulacao.itens.length} clientes:</span>
+                <button onClick={() => {
+                  const rows = [['Cliente', 'Documento', 'Telefone', 'Valor', 'Vencimento', 'MSISDN', 'Status']];
+                  simulacao.itens.forEach(it => {
+                    rows.push([
+                      it.cliente_nome || '',
+                      it.documento || '',
+                      it.telefone || '',
+                      (it.valor || 0).toFixed(2),
+                      it.vencimento || '',
+                      (it.linhas_afetadas || []).map(l => l.msisdn).join(' | '),
+                      it.na_whitelist ? 'VIP (poupado)' : 'Seria bloqueado',
+                    ]);
+                  });
+                  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                  const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `inadimplentes-${new Date().toISOString().slice(0,10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }} className="text-cyan-400 hover:text-cyan-300 underline text-xs" data-testid="btn-export-csv">
+                  📥 Exportar CSV
+                </button>
+              </div>
+              <div className="max-h-72 overflow-y-auto space-y-1 text-xs border border-zinc-800 rounded p-1" data-testid="lista-inadimplentes">
+                {simulacao.itens.map((it, idx) => (
+                  <div key={it.cliente_id} className="flex justify-between bg-zinc-900 rounded px-2 py-1 gap-2" data-testid={`sim-item-${idx}`}>
+                    <span className="truncate flex-1" title={it.cliente_nome}>
+                      <span className="text-zinc-500 mr-1">{idx + 1}.</span>{it.cliente_nome}
+                    </span>
+                    <span className={`shrink-0 ${it.na_whitelist ? 'text-cyan-400' : 'text-orange-400'}`}>
+                      {it.na_whitelist ? '★ VIP' : `R$ ${it.valor?.toFixed(2)}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
