@@ -4365,10 +4365,20 @@ async def sync_cobrancas_status(request: Request):
     if not asaas_service.is_configured:
         raise HTTPException(status_code=400, detail="Asaas nao configurado")
 
+    result = await _sync_cobrancas_com_asaas()
+    await create_log("financeiro", f"Sync Asaas: {result['updated']} cobrancas atualizadas de {result['total_checked']} pendentes", user["id"], user["name"])
+    return result
+
+
+async def _sync_cobrancas_com_asaas(limit: int = 500) -> dict:
+    """Sync core reutilizavel (usado tanto pelo endpoint manual quanto pela automacao)."""
+    if not asaas_service.is_configured:
+        return {"total_checked": 0, "updated": 0, "errors": ["Asaas nao configurado"]}
+
     pendentes = await db.cobrancas.find({
         "asaas_payment_id": {"$ne": None, "$exists": True},
         "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
-    }).to_list(200)
+    }).to_list(limit)
 
     updated_count = 0
     errors = []
@@ -4385,7 +4395,6 @@ async def sync_cobrancas_status(request: Request):
         except Exception as e:
             errors.append(f"{cob['asaas_payment_id']}: {str(e)}")
 
-    await create_log("financeiro", f"Sync Asaas: {updated_count} cobrancas atualizadas de {len(pendentes)} pendentes", user["id"], user["name"])
     return {"total_checked": len(pendentes), "updated": updated_count, "errors": errors}
 
 
@@ -6125,6 +6134,7 @@ from services.zapi_service import zapi_service as _zapi_service_ref
 init_automacao_bloqueio(
     db=db, get_current_user=get_current_user, require_admin=require_admin,
     create_log=create_log, operadora_service=operadora_service, zapi_service=_zapi_service_ref,
+    sync_asaas_fn=_sync_cobrancas_com_asaas,
 )
 api_router_automacao = APIRouter(prefix="/api")
 api_router_automacao.include_router(automacao_bloqueio_router)

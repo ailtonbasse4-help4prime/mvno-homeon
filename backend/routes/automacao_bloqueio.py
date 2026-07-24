@@ -33,6 +33,7 @@ _require_admin = None
 _create_log = None
 _operadora_service = None
 _zapi_service = None
+_sync_asaas_fn = None
 
 DEFAULT_CONFIG = {
     "ativo": False,
@@ -42,6 +43,7 @@ DEFAULT_CONFIG = {
     "aviso_dia_vencimento": False, # WhatsApp no dia do vencimento
     "motivo_bloqueio": 15,         # codigo Ta Telecom para bloqueio total
     "desbloqueio_automatico": True,
+    "sync_asaas_antes_bloqueio": True,  # SALVAGUARDA: sincroniza status com Asaas antes do job de bloqueio
     "notificar_admin": True,
     "mensagem_aviso": "Ola {nome}, seu boleto no valor de R$ {valor} vence amanha ({vencimento}). Para evitar o bloqueio da sua linha, efetue o pagamento ate 23h. Portal: https://mvno.homeonapp.com.br/portal",
     "mensagem_bloqueado": "Ola {nome}, sua linha foi bloqueada por inadimplencia. Regularize o pagamento para reativacao automatica.",
@@ -49,14 +51,15 @@ DEFAULT_CONFIG = {
 }
 
 
-def init(db, get_current_user, require_admin, create_log, operadora_service, zapi_service):
-    global _db, _get_current_user, _require_admin, _create_log, _operadora_service, _zapi_service
+def init(db, get_current_user, require_admin, create_log, operadora_service, zapi_service, sync_asaas_fn=None):
+    global _db, _get_current_user, _require_admin, _create_log, _operadora_service, _zapi_service, _sync_asaas_fn
     _db = db
     _get_current_user = get_current_user
     _require_admin = require_admin
     _create_log = create_log
     _operadora_service = operadora_service
     _zapi_service = zapi_service
+    _sync_asaas_fn = sync_asaas_fn
 
 
 # ==================== CONFIG ====================
@@ -298,6 +301,17 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
     """Core do job: percorre inadimplentes e bloqueia. Retorna resumo."""
     cfg = await _get_config()
     motivo = cfg.get("motivo_bloqueio", 15)
+
+    # SALVAGUARDA: sincroniza status com Asaas antes de decidir quem bloquear
+    sync_result = None
+    if cfg.get("sync_asaas_antes_bloqueio", True) and _sync_asaas_fn:
+        try:
+            sync_result = await _sync_asaas_fn()
+            logger.info(f"Sync Asaas pre-bloqueio: {sync_result}")
+        except Exception as e:
+            logger.error(f"Falha ao sincronizar com Asaas antes do bloqueio: {e}")
+            sync_result = {"error": str(e)}
+
     itens = await _build_simulacao(dias_tolerancia)
 
     bloqueadas = 0
@@ -384,6 +398,7 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
         "puladas_whitelist": puladas_whitelist,
         "erros": erros,
         "detalhes": detalhes,
+        "sync_asaas": sync_result,
         "executado_em": datetime.now(timezone.utc).isoformat(),
     }
 
