@@ -43,6 +43,11 @@ export function Linhas() {
   const [historicoDialog, setHistoricoDialog] = useState(false);
   const [novoNumeroHistorico, setNovoNumeroHistorico] = useState('');
 
+  // Desbloqueio de confianca
+  const [confiancaDialog, setConfiancaDialog] = useState(false);
+  const [confiancaDias, setConfiancaDias] = useState(2);
+  const [confiancaMotivo, setConfiancaMotivo] = useState('');
+
   const fetchLinhas = useCallback(async () => {
     try {
       const params = statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {};
@@ -243,6 +248,39 @@ export function Linhas() {
     }
   };
 
+  const handleDesbloqueioConfianca = async () => {
+    if (!selectedLinha) return;
+    setProcessing(true);
+    try {
+      const r = await axios.post(
+        `${API_URL}/api/automacao/bloqueio/linhas/${selectedLinha.id}/desbloqueio-confianca`,
+        { dias: confiancaDias, motivo: confiancaMotivo || null },
+        { withCredentials: true },
+      );
+      if (r.data.success) {
+        toast.success(`Desbloqueio de confiança concedido por ${confiancaDias} dias`);
+        setConfiancaDialog(false);
+        setConfiancaMotivo('');
+        setConfiancaDias(2);
+        fetchLinhas();
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao desbloquear');
+    }
+    setProcessing(false);
+  };
+
+  const handleSyncExpiracaoTa = async () => {
+    if (!window.confirm('Sincronizar a data de expiração do plano na Tá Telecom para TODAS as linhas ativas? Pode demorar 1-3 minutos.')) return;
+    try {
+      const r = await axios.post(`${API_URL}/api/automacao/bloqueio/sincronizar-expiracao-ta`, {}, { withCredentials: true });
+      toast.success(`✅ Sync Ta: ${r.data.atualizadas} atualizadas, ${r.data.sem_expiracao} sem campo, ${r.data.erros?.length || 0} erros`);
+      fetchLinhas();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro na sincronizacao');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const styles = {
       ativo: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40',
@@ -277,6 +315,11 @@ export function Linhas() {
         <Button onClick={fetchLinhas} variant="outline" className="btn-secondary flex items-center gap-2 w-full sm:w-auto" data-testid="refresh-linhas">
           <RefreshCw className="w-4 h-4" />Atualizar
         </Button>
+        {isAdmin && (
+          <Button onClick={handleSyncExpiracaoTa} variant="outline" className="border-emerald-700 text-emerald-300 hover:bg-emerald-900/20 flex items-center gap-2 w-full sm:w-auto" data-testid="btn-sync-expiracao-ta">
+            <Activity className="w-4 h-4" /> Sync Expiração Tá
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -393,6 +436,11 @@ export function Linhas() {
                       {isAdmin && (
                         <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setNovoNumeroHistorico(''); setHistoricoDialog(true); }} className="text-zinc-400 hover:text-cyan-400" title="Numeros historicos (portabilidade)" data-testid={`historico-numero-${linha.id}`}>
                           <History className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {isAdmin && linha.status === 'bloqueado' && (
+                        <Button variant="ghost" size="sm" onClick={() => { setSelectedLinha(linha); setConfiancaDias(2); setConfiancaMotivo(''); setConfiancaDialog(true); }} className="text-zinc-400 hover:text-amber-400" title="Desbloqueio de Confianca" data-testid={`confianca-btn-${linha.id}`}>
+                          <Unlock className="w-4 h-4" />
                         </Button>
                       )}
                       {isAdmin && linha.status !== 'cancelado' && (
@@ -698,6 +746,47 @@ export function Linhas() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setHistoricoDialog(false)} className="border-zinc-700 hover:bg-zinc-800" data-testid="btn-close-historico">
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Desbloqueio de Confianca */}
+      <Dialog open={confiancaDialog} onOpenChange={setConfiancaDialog}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md" data-testid="confianca-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Unlock className="w-5 h-5 text-amber-400" /> Desbloqueio de Confiança
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              Desbloqueia temporariamente. Se o cliente não pagar até o prazo, o sistema re-bloqueia automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-zinc-900 rounded p-3">
+              <div className="text-xs text-zinc-500">Linha</div>
+              <p className="text-white font-mono">{selectedLinha?.msisdn || selectedLinha?.numero}</p>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Prazo (dias)</label>
+              <input type="number" min="1" max="30" value={confiancaDias}
+                onChange={e => setConfiancaDias(parseInt(e.target.value) || 2)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm"
+                data-testid="input-confianca-dias" />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Motivo (opcional)</label>
+              <input type="text" value={confiancaMotivo}
+                onChange={e => setConfiancaMotivo(e.target.value)}
+                placeholder="Ex: cliente enviou comprovante final de semana"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm"
+                data-testid="input-confianca-motivo" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfiancaDialog(false)} className="border-zinc-700" disabled={processing}>Cancelar</Button>
+            <Button onClick={handleDesbloqueioConfianca} disabled={processing} className="btn-primary" data-testid="btn-confirmar-confianca">
+              {processing ? 'Desbloqueando...' : `Desbloquear por ${confiancaDias} dia${confiancaDias === 1 ? '' : 's'}`}
             </Button>
           </DialogFooter>
         </DialogContent>
