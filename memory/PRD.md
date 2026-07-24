@@ -135,10 +135,21 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] BUG resolvido: Cliente que fazia portabilidade perdia acesso ao Portal (msisdn Ta Telecom original era sobrescrito pelo numero portado)
 - [x] Backend: `verificar_portabilidade_chip` agora faz `$addToSet msisdn_historico` do msisdn anterior antes de sobrescrever (chip + linha)
 - [x] Backend: `portal_login` busca msisdn atual + `numero` + array `msisdn_historico` (linha e chip)
-- [x] Novo endpoint admin `POST /api/linhas/{linha_id}/msisdn-historico` body `{numero}` para backfill manual de numeros antigos de clientes que ja portaram antes do fix
-- [x] Novo endpoint admin `DELETE /api/linhas/{linha_id}/msisdn-historico/{numero}` para remover
+- [x] Novo endpoint admin `POST /api/linhas/{linha_id}/msisdn-historico` body `{numero}` para backfill manual
 - [x] Frontend: botao History (cyan) na lista de linhas abre dialog para gerenciar numeros historicos
 - [x] Testado (iteration_27): 13/13 backend + 100% frontend
+
+### Automacao Bloqueio/Desbloqueio por Inadimplencia (07/24/2026)
+- [x] Novo modulo `/app/backend/routes/automacao_bloqueio.py` com worker background (asyncio task) que roda diariamente
+- [x] Job de bloqueio: as 23h (config) varre cobrancas vencidas do dia -> `bloqueio_total` Ta Telecom + WhatsApp opcional
+- [x] Job de aviso: as 09h envia WhatsApp para clientes com cobranca vencendo amanha
+- [x] Desbloqueio automatico via webhook Asaas: `POST /api/webhooks/asaas` foi ampliado para chamar `desbloquear_por_pagamento` ao receber CONFIRMED/RECEIVED (best-effort)
+- [x] Endpoints admin: GET/PUT /config, GET/POST/DELETE /whitelist, GET /simular (dry-read), POST /executar (dry_run opcional), GET /historico
+- [x] Feature vem DESATIVADA por padrao (ativo=false) - salvaguarda maxima
+- [x] Whitelist VIP: clientes marcados nunca sao bloqueados automaticamente
+- [x] Frontend: nova pagina `/automacao-bloqueio` (menu Financeiro) com toggle master, config, simulador, whitelist, historico. Confirmacao obrigatoria ao ligar ou executar real
+- [x] BACKUP mongodb feito antes do deploy: /root/backup-20260724-003051 (21MB) + git tag before-automacao-20260724-003056
+- [x] Testado (iteration_28): 21/21 backend + 100% frontend. Zero dados alterados.
 
 
 ## Backlog
