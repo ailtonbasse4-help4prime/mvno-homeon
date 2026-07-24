@@ -4345,6 +4345,16 @@ async def asaas_webhook(request: Request):
             await create_log("financeiro", f"Webhook Asaas: cobranca {payment_id} -> {status}", None, "Sistema")
             logger.info(f"Cobranca {payment_id} atualizada para {status}")
 
+            # Desbloqueio automatico se pagamento confirmado (best-effort, nao quebra webhook se falhar)
+            if status in ["CONFIRMED", "RECEIVED"]:
+                try:
+                    from routes.automacao_bloqueio import desbloquear_por_pagamento
+                    cob_atualizada = {**cobranca, **update_fields}
+                    r_desb = await desbloquear_por_pagamento(cob_atualizada)
+                    logger.info(f"Desbloqueio auto (webhook Asaas): {r_desb}")
+                except Exception as e:
+                    logger.error(f"Falha no desbloqueio automatico via webhook: {e}", exc_info=True)
+
     return {"received": True}
 
 # --- Sync status from Asaas ---
@@ -6061,6 +6071,13 @@ async def startup_event():
         logger.warning(f"Startup cleanup error (non-fatal): {e}")
     # Iniciar worker de retry automatico em background
     asyncio.create_task(_process_retry_queue())
+    # Iniciar worker de automacao de bloqueio por inadimplencia
+    try:
+        from routes.automacao_bloqueio import start_worker as start_automacao_bloqueio
+        start_automacao_bloqueio()
+        logger.info("Worker de automacao de bloqueio iniciado")
+    except Exception as e:
+        logger.warning(f"Falha ao iniciar worker de automacao: {e}")
     logger.info("Application started successfully (retry worker ativo)")
 
 app.include_router(api_router)
@@ -6101,6 +6118,17 @@ init_whatsapp(db=db, get_current_user=get_current_user, require_admin=require_ad
 api_router_whatsapp = APIRouter(prefix="/api")
 api_router_whatsapp.include_router(whatsapp_router)
 app.include_router(api_router_whatsapp)
+
+# Automacao de bloqueio/desbloqueio por inadimplencia (Ta Telecom + Asaas)
+from routes.automacao_bloqueio import router as automacao_bloqueio_router, init as init_automacao_bloqueio
+from services.zapi_service import zapi_service as _zapi_service_ref
+init_automacao_bloqueio(
+    db=db, get_current_user=get_current_user, require_admin=require_admin,
+    create_log=create_log, operadora_service=operadora_service, zapi_service=_zapi_service_ref,
+)
+api_router_automacao = APIRouter(prefix="/api")
+api_router_automacao.include_router(automacao_bloqueio_router)
+app.include_router(api_router_automacao)
 
 # Carrega config Z-API no startup
 from services.zapi_service import zapi_service as _zapi_service
