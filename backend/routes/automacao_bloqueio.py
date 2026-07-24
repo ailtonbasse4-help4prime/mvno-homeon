@@ -34,6 +34,7 @@ _create_log = None
 _operadora_service = None
 _zapi_service = None
 _sync_asaas_fn = None
+_asaas_service = None
 
 DEFAULT_CONFIG = {
     "ativo": False,
@@ -51,8 +52,8 @@ DEFAULT_CONFIG = {
 }
 
 
-def init(db, get_current_user, require_admin, create_log, operadora_service, zapi_service, sync_asaas_fn=None):
-    global _db, _get_current_user, _require_admin, _create_log, _operadora_service, _zapi_service, _sync_asaas_fn
+def init(db, get_current_user, require_admin, create_log, operadora_service, zapi_service, sync_asaas_fn=None, asaas_service=None):
+    global _db, _get_current_user, _require_admin, _create_log, _operadora_service, _zapi_service, _sync_asaas_fn, _asaas_service
     _db = db
     _get_current_user = get_current_user
     _require_admin = require_admin
@@ -60,6 +61,7 @@ def init(db, get_current_user, require_admin, create_log, operadora_service, zap
     _operadora_service = operadora_service
     _zapi_service = zapi_service
     _sync_asaas_fn = sync_asaas_fn
+    _asaas_service = asaas_service
 
 
 # ==================== CONFIG ====================
@@ -272,6 +274,62 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str) -> bool:
     return bool(paga)
 
 
+async def _verificar_pagamento_final_asaas(cobranca_id: str) -> dict:
+    """
+    DUPLA-CHECAGEM CRITICA (anti-bloqueio-indevido).
+    Consulta o pagamento diretamente no Asaas antes de bloquear.
+    Retorna dict com {pode_bloquear: bool, motivo: str, status: str}
+    Se qualquer duvida -> pode_bloquear=False (fail-safe: nao bloqueia em caso de erro).
+    """
+    if not _asaas_service or not getattr(_asaas_service, "is_configured", False):
+        # Asaas nao configurado -> nao arriscar
+        return {"pode_bloquear": False, "motivo": "asaas_nao_configurado", "status": None}
+
+    try:
+        cob = await _db.cobrancas.find_one({"_id": ObjectId(cobranca_id)})
+    except Exception:
+        return {"pode_bloquear": False, "motivo": "cobranca_id_invalido", "status": None}
+    if not cob:
+        return {"pode_bloquear": False, "motivo": "cobranca_nao_encontrada", "status": None}
+
+    payment_id = cob.get("asaas_payment_id")
+    if not payment_id:
+        # Sem payment_id no Asaas (cobranca puramente local) - usa status local
+        st = cob.get("status")
+        if st in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+            return {"pode_bloquear": False, "motivo": "ja_paga_local", "status": st}
+        return {"pode_bloquear": True, "motivo": "sem_asaas_id_status_pendente", "status": st}
+
+    # Tentar consultar Asaas com retry (429 rate limit)
+    import asyncio as _asyncio
+    for tentativa in range(3):
+        try:
+            payment_data = await _asaas_service.get_payment(payment_id)
+            status_asaas = payment_data.get("status") if payment_data else None
+            if not status_asaas:
+                return {"pode_bloquear": False, "motivo": "resposta_asaas_vazia", "status": None}
+            # Atualiza local ja aproveitando a consulta
+            if status_asaas != cob.get("status"):
+                update_fields = {"status": status_asaas}
+                if status_asaas in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+                    update_fields["paid_at"] = payment_data.get("confirmedDate") or datetime.now(timezone.utc).isoformat()
+                await _db.cobrancas.update_one({"_id": cob["_id"]}, {"$set": update_fields})
+            if status_asaas in ("CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"):
+                return {"pode_bloquear": False, "motivo": "pago_no_asaas", "status": status_asaas}
+            return {"pode_bloquear": True, "motivo": "confirmado_pendente_asaas", "status": status_asaas}
+        except Exception as e:
+            err_msg = str(e)
+            # Rate limit -> retry com backoff
+            if "429" in err_msg and tentativa < 2:
+                await _asyncio.sleep(2 * (tentativa + 1))
+                continue
+            logger.warning(f"Falha consulta final Asaas cobranca={cobranca_id} tentativa={tentativa+1}: {err_msg}")
+            # Fail-safe: nao bloquear em caso de erro
+            return {"pode_bloquear": False, "motivo": f"erro_asaas: {err_msg[:100]}", "status": None}
+
+    return {"pode_bloquear": False, "motivo": "esgotou_tentativas", "status": None}
+
+
 async def _build_simulacao(dias_tolerancia: int = 0) -> List[dict]:
     cobrancas = await _find_cobrancas_para_bloquear(dias_tolerancia)
     whitelist = await _get_whitelist_set()
@@ -356,8 +414,9 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
     motivo = cfg.get("motivo_bloqueio", 15)
 
     # SALVAGUARDA: sincroniza status com Asaas antes de decidir quem bloquear
+    # (skip em dry_run: dry_run e apenas simulacao rapida sem chamadas ao Asaas)
     sync_result = None
-    if cfg.get("sync_asaas_antes_bloqueio", True) and _sync_asaas_fn:
+    if not dry_run and cfg.get("sync_asaas_antes_bloqueio", True) and _sync_asaas_fn:
         try:
             sync_result = await _sync_asaas_fn()
             logger.info(f"Sync Asaas pre-bloqueio: {sync_result}")
@@ -371,11 +430,30 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
     puladas_whitelist = 0
     erros = []
     detalhes = []
+    pulados_pagamento_asaas = 0
+    pagamentos_verificados = 0
 
     for item in itens:
         if item["na_whitelist"]:
             puladas_whitelist += 1
             continue
+
+        # DUPLA-CHECAGEM INDIVIDUAL: consulta o Asaas naquele pagamento especifico
+        # Fail-safe: em caso de erro NAO bloqueia (evita bloqueio indevido)
+        if not dry_run:
+            verificacao = await _verificar_pagamento_final_asaas(item["cobranca_id"])
+            pagamentos_verificados += 1
+            if not verificacao["pode_bloquear"]:
+                pulados_pagamento_asaas += 1
+                detalhes.append({
+                    "cliente_nome": item.get("cliente_nome"),
+                    "cobranca_id": item["cobranca_id"],
+                    "acao": "PULADO",
+                    "motivo": verificacao["motivo"],
+                    "status_asaas": verificacao.get("status"),
+                })
+                logger.info(f"Bloqueio pulado (fail-safe): cliente={item.get('cliente_nome')} motivo={verificacao['motivo']}")
+                continue
 
         for l_info in item["linhas_afetadas"]:
             linha_id = l_info["linha_id"]
@@ -449,6 +527,8 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
         "total_inadimplentes": len(itens),
         "bloqueadas": bloqueadas,
         "puladas_whitelist": puladas_whitelist,
+        "pulados_pagamento_asaas": pulados_pagamento_asaas,
+        "pagamentos_verificados_asaas": pagamentos_verificados,
         "erros": erros,
         "detalhes": detalhes,
         "sync_asaas": sync_result,
@@ -458,7 +538,7 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
     if not dry_run:
         await _create_log(
             "automacao_bloqueio",
-            f"Job de bloqueio: {bloqueadas} bloqueadas, {puladas_whitelist} whitelist, {len(erros)} erros",
+            f"Job de bloqueio: {bloqueadas} bloqueadas, {puladas_whitelist} whitelist, {pulados_pagamento_asaas} pulados por pagamento/erro Asaas (fail-safe), {len(erros)} erros",
             (disparado_por or {}).get("id"),
             (disparado_por or {}).get("name", "Automacao"),
         )
