@@ -1,0 +1,28 @@
+{
+  "summary": "Fase A auto-bloqueio: backend + frontend testados. 13/13 backend tests PASS (auth 401/403, dias fora [1,30]=400, linha_id invalido=400, linha inexistente=404, list ordenada por expira_em, helpers _normalize_date e _extrair_data_expiracao com todos os formatos DD/MM/YYYY, YYYY-MM-DD, ISO e todos os nomes de campo). NAO executamos POST /sincronizar-expiracao-ta como admin (evita 114 chamadas reais Ta prod), apenas validamos 401/403. Regressao OK: /config /whitelist /historico /simular retornam 200. Frontend /linhas OK: btn-sync-expiracao-ta presente (borda emerald rgb(4,120,87), texto 'Sync Expiração Tá'), 22 confianca-btn-{id} presentes nas 22 linhas bloqueadas, dialog confianca-dialog abre com input-confianca-dias, input-confianca-motivo e btn-confirmar-confianca todos presentes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_auto_bloqueio_faseA.py",
+    "/app/test_reports/pytest/pytest_iteration36.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_find_cobrancas_para_bloquear concatena _find_via_expiracao_ta + _find_via_cobranca_legacy; o legacy pula corretamente clientes que ja tem linha ativa com data_expiracao_ta - previne duplicidade. OK.",
+    "_find_via_expiracao_ta: filtro {data_expiracao_ta: {$lte: hoje+2}} bloqueia D-2; correto conforme spec.",
+    "sincronizar-expiracao-ta faz sleep 0.15s entre chamadas para nao estourar rate limit Ta - bom.",
+    "desbloqueio-confianca aciona _operadora_service.desbloquear e persiste desbloqueio_confianca.expira_em; worker _executar_reblock_confianca_expirada roda a cada 5min e re-bloqueia apenas se cliente ainda inadimplente - OK."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auto_bloqueio_faseA.py",
+    "/app/test_reports/iteration_36.json",
+    "/app/test_reports/pytest/pytest_iteration36.xml"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100%"},
+  "test_credentials": "admin@mvno.com / admin123 (arquivo /app/memory/test_credentials.md OK)",
+  "seed_data_creation": "Fixture cria/deleta usuario TEST_faseA_operator@mvno.com (role atendente) para testes de 403. Cleanup best-effort no teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 36. Fase A auto-bloqueio testada. Endpoint sincronizar-expiracao-ta NAO foi executado com admin real - so foi validado 401/403 (evita 114 chamadas Ta prod). Endpoint desbloqueio-confianca validado com fake ObjectId (nao chegou a chamar Ta pq falhou nos guards 400/404 primeiro). Frontend /linhas confirmado com 22 linhas bloqueadas mostrando botao amber Unlock. UI role no usuarios API e 'atendente' (nao 'operador') - importante para futuros testes de RBAC. Login endpoint: POST /api/auth/login com cookie httponly access_token. Nao foi feito teste do worker _executar_reblock_confianca_expirada (roda em background). Note para main agent: role enum aceita apenas 'admin' e 'atendente'.",
+  "rca_of_the_issue": "N/A - implementacao valida conforme spec."
+}

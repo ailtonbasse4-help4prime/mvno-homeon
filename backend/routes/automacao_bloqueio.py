@@ -237,18 +237,317 @@ async def remove_whitelist(cliente_id: str, request: Request):
 
 async def _find_cobrancas_para_bloquear(dias_tolerancia: int = 0) -> List[dict]:
     """
-    Retorna cobrancas vencidas (vencimento <= hoje - dias_tolerancia) sem pagamento.
-    dias_tolerancia=0 significa que cobrancas vencendo HOJE ja entram no lote (para bloqueio as 23h).
+    NOVA LOGICA v2 (2026-07): usa `linhas.data_expiracao_ta` como referencia (nao mais vencimento manual).
+    Retorna linhas ativas onde:
+      - data_expiracao_ta esta no futuro proximo (D+2 = data de bloqueio)
+      - E cliente tem cobranca em atraso E nao pagou nada recente
+
+    Fallback (fase de transicao): se linha nao tem data_expiracao_ta, usa logica antiga por cobranca.
     """
     hoje = datetime.now(timezone.utc).date()
-    limite = hoje - timedelta(days=dias_tolerancia)
-    limite_str = limite.isoformat()
+    return await _find_via_expiracao_ta(hoje, dias_tolerancia) + await _find_via_cobranca_legacy(hoje, dias_tolerancia)
 
+
+async def _find_via_expiracao_ta(hoje, dias_tolerancia: int) -> List[dict]:
+    """Novo algoritmo v2: bloqueia D-2 da expiracao Ta."""
+    # data alvo do bloqueio = hoje. Ou seja, buscamos linhas com expiracao_ta = hoje + 2 dias
+    alvo = (hoje + timedelta(days=2)).isoformat()
+    linhas = await _db.linhas.find({
+        "status": "ativo",
+        "data_expiracao_ta": {"$lte": alvo},
+    }).to_list(5000)
+    # Retorna documentos pseudo-cobranca (marker) para _build_simulacao processar
+    fake_cobrancas = []
+    for l in linhas:
+        cid = l.get("cliente_id")
+        if not cid:
+            continue
+        fake_cobrancas.append({
+            "_id": l["_id"],
+            "cliente_id": cid,
+            "vencimento": l.get("data_expiracao_ta"),
+            "valor": 0,
+            "linha_id": str(l["_id"]),
+            "origem": "expiracao_ta",
+            "data_expiracao_ta": l.get("data_expiracao_ta"),
+        })
+    return fake_cobrancas
+
+
+async def _find_via_cobranca_legacy(hoje, dias_tolerancia: int) -> List[dict]:
+    """Fallback: usa cobrancas locais (comportamento antigo).
+    Skip linhas que ja tem data_expiracao_ta (elas usam a nova rota)."""
+    limite_str = (hoje - timedelta(days=dias_tolerancia)).isoformat()
     cobrancas = await _db.cobrancas.find({
         "vencimento": {"$lte": limite_str},
         "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
     }).to_list(5000)
-    return cobrancas
+    # Filtrar: skip clientes que ja tem alguma linha ativa com data_expiracao_ta (nao duplica)
+    result = []
+    for c in cobrancas:
+        cid = c.get("cliente_id")
+        if not cid:
+            continue
+        tem_expira = await _db.linhas.find_one({"cliente_id": cid, "data_expiracao_ta": {"$ne": None}, "status": "ativo"})
+        if tem_expira:
+            continue  # ja tratado via expiracao Ta
+        result.append(c)
+    return result
+
+
+# ==================== SYNC DATA EXPIRACAO TA ====================
+
+async def _extrair_data_expiracao(raw_data: dict) -> Optional[str]:
+    """Extrai data de expiracao do plano do payload da Ta. Tenta multiplos nomes de campo."""
+    if not raw_data or not isinstance(raw_data, dict):
+        return None
+    campos = [
+        "data_expiracao", "expiration_date", "plan_expiration", "expira_em",
+        "expiresAt", "expiration", "expires", "valid_until", "validade",
+        "prox_recarga", "next_recharge", "planExpiration", "expiration_plan",
+        "dataExpiracao", "endDate", "end_date",
+    ]
+    # Busca no root
+    for c in campos:
+        if c in raw_data and raw_data[c]:
+            return _normalize_date(raw_data[c])
+    # Busca em subobjetos (plano, subscription)
+    for sub in ("plan", "plano", "subscription", "assinatura", "details"):
+        if sub in raw_data and isinstance(raw_data[sub], dict):
+            for c in campos:
+                if c in raw_data[sub] and raw_data[sub][c]:
+                    return _normalize_date(raw_data[sub][c])
+    return None
+
+
+def _normalize_date(v) -> Optional[str]:
+    """Converte varias formas de data para YYYY-MM-DD."""
+    if not v:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    # DD/MM/YYYY -> YYYY-MM-DD
+    if "/" in s:
+        try:
+            parts = s.split("/")
+            if len(parts) == 3:
+                d, m, y = parts
+                if len(y) == 4 and len(m) <= 2 and len(d) <= 2:
+                    return f"{y}-{int(m):02d}-{int(d):02d}"
+        except Exception:
+            pass
+    # ISO com T
+    if "T" in s:
+        return s.split("T")[0]
+    # Se ja tem formato YYYY-MM-DD
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:10]
+    return None
+
+
+@router.post("/sincronizar-expiracao-ta")
+async def sincronizar_expiracao_ta(request: Request):
+    """Consulta a API Ta para cada linha ativa e salva data_expiracao_ta no banco."""
+    user = await _require_admin(request)
+    if not _operadora_service or not getattr(_operadora_service, "is_configured", True):
+        raise HTTPException(status_code=400, detail="Operadora nao configurada")
+
+    linhas = await _db.linhas.find({"status": "ativo"}).to_list(5000)
+    updated = 0
+    sem_expiracao = 0
+    erros = []
+    for l in linhas:
+        try:
+            chip_id = l.get("chip_id")
+            if not chip_id:
+                continue
+            chip = await _db.chips.find_one({"_id": ObjectId(chip_id)})
+            iccid = chip.get("iccid") if chip else None
+            if not iccid:
+                continue
+            resp = await _operadora_service.consultar_linha(
+                iccid=iccid, db=_db, user_id=user["id"], user_name=user["name"],
+            )
+            if not getattr(resp, "success", False):
+                erros.append({"linha_id": str(l["_id"]), "iccid": iccid, "erro": getattr(resp, "message", "falha")})
+                continue
+            raw = getattr(resp, "data", None) or {}
+            data_expiracao = await _extrair_data_expiracao(raw)
+            if not data_expiracao:
+                sem_expiracao += 1
+                continue
+            await _db.linhas.update_one(
+                {"_id": l["_id"]},
+                {"$set": {"data_expiracao_ta": data_expiracao, "data_expiracao_ta_sync_em": datetime.now(timezone.utc)}},
+            )
+            updated += 1
+            # Delay leve para nao estourar rate limit
+            import asyncio as _asyncio
+            await _asyncio.sleep(0.15)
+        except Exception as e:
+            erros.append({"linha_id": str(l["_id"]), "erro": str(e)})
+
+    await _create_log(
+        "automacao_bloqueio",
+        f"Sync expiracao Ta: {updated} atualizadas, {sem_expiracao} sem campo, {len(erros)} erros de {len(linhas)}",
+        user["id"], user["name"],
+    )
+    return {"total_linhas": len(linhas), "atualizadas": updated, "sem_expiracao": sem_expiracao, "erros": erros}
+
+
+# ==================== DESBLOQUEIO DE CONFIANCA ====================
+
+class DesbloqueioConfiancaRequest(BaseModel):
+    dias: int = 2  # prazo em dias
+    motivo: Optional[str] = None
+
+
+@router.post("/linhas/{linha_id}/desbloqueio-confianca")
+async def desbloqueio_confianca(linha_id: str, data: DesbloqueioConfiancaRequest, request: Request):
+    """Admin desbloqueia temporariamente uma linha. Se boleto nao for pago ate expira_em, sistema re-bloqueia."""
+    user = await _require_admin(request)
+    if data.dias < 1 or data.dias > 30:
+        raise HTTPException(status_code=400, detail="Prazo deve estar entre 1 e 30 dias")
+    try:
+        linha = await _db.linhas.find_one({"_id": ObjectId(linha_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="linha_id invalido")
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+
+    chip_id = linha.get("chip_id")
+    if not chip_id:
+        raise HTTPException(status_code=400, detail="Linha sem chip vinculado")
+    chip = await _db.chips.find_one({"_id": ObjectId(chip_id)})
+    if not chip:
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+
+    # Chama desbloqueio na Ta
+    try:
+        resp = await _operadora_service.desbloquear(iccid=chip["iccid"], db=_db, user_id=user["id"], user_name=user["name"])
+        if not resp.success:
+            raise HTTPException(status_code=400, detail=f"Ta Telecom: {resp.message}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro Ta: {e}")
+
+    expira_em = datetime.now(timezone.utc) + timedelta(days=data.dias)
+    await _db.linhas.update_one(
+        {"_id": ObjectId(linha_id)},
+        {"$set": {
+            "status": "ativo",
+            "bloqueio_automatico.ativo": False,
+            "desbloqueio_confianca": {
+                "ativo": True,
+                "concedido_em": datetime.now(timezone.utc),
+                "concedido_por": user["id"],
+                "concedido_por_nome": user["name"],
+                "expira_em": expira_em,
+                "dias": data.dias,
+                "motivo": data.motivo,
+            },
+        }},
+    )
+    await _db.chips.update_one({"_id": ObjectId(chip_id)}, {"$set": {"status": "ativado"}})
+    await _create_log(
+        "automacao_bloqueio",
+        f"Desbloqueio de confianca linha {linha_id} por {data.dias} dias (motivo: {data.motivo or 'nao informado'})",
+        user["id"], user["name"],
+    )
+    return {
+        "success": True,
+        "linha_id": linha_id,
+        "expira_em": expira_em.isoformat(),
+        "dias": data.dias,
+    }
+
+
+@router.get("/desbloqueios-confianca")
+async def list_desbloqueios_confianca(request: Request):
+    """Lista desbloqueios de confianca ATIVOS (nao expirados)."""
+    await _require_admin(request)
+    agora = datetime.now(timezone.utc)
+    linhas = await _db.linhas.find({
+        "desbloqueio_confianca.ativo": True,
+        "desbloqueio_confianca.expira_em": {"$gte": agora},
+    }).to_list(500)
+    result = []
+    for l in linhas:
+        cliente = None
+        if l.get("cliente_id"):
+            try:
+                cliente = await _db.clientes.find_one({"_id": ObjectId(l["cliente_id"])})
+            except Exception:
+                pass
+        dc = l.get("desbloqueio_confianca", {}) or {}
+        result.append({
+            "linha_id": str(l["_id"]),
+            "cliente_nome": cliente.get("nome") if cliente else None,
+            "msisdn": l.get("msisdn") or l.get("numero"),
+            "concedido_em": dc.get("concedido_em"),
+            "concedido_por_nome": dc.get("concedido_por_nome"),
+            "expira_em": dc.get("expira_em"),
+            "dias": dc.get("dias"),
+            "motivo": dc.get("motivo"),
+        })
+    result.sort(key=lambda x: x.get("expira_em") or datetime.max.replace(tzinfo=timezone.utc))
+    return result
+
+
+async def _executar_reblock_confianca_expirada():
+    """Worker: re-bloqueia linhas com desbloqueio de confianca expirado (E ainda inadimplentes)."""
+    agora = datetime.now(timezone.utc)
+    linhas = await _db.linhas.find({
+        "status": "ativo",
+        "desbloqueio_confianca.ativo": True,
+        "desbloqueio_confianca.expira_em": {"$lte": agora},
+    }).to_list(500)
+
+    rebloqueadas = 0
+    for l in linhas:
+        cliente_id = str(l.get("cliente_id") or "")
+        if not cliente_id:
+            continue
+        # Verificacao: ainda esta inadimplente?
+        hoje = agora.date().isoformat()
+        cob_pendente = await _db.cobrancas.find_one({
+            "cliente_id": cliente_id,
+            "vencimento": {"$lte": hoje},
+            "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
+        })
+        if not cob_pendente:
+            # Cliente pagou - apenas desativa a flag (nao precisa re-bloquear)
+            await _db.linhas.update_one({"_id": l["_id"]}, {"$set": {"desbloqueio_confianca.ativo": False}})
+            continue
+
+        # Ainda em atraso -> re-bloquear
+        try:
+            chip = await _db.chips.find_one({"_id": ObjectId(l["chip_id"])}) if l.get("chip_id") else None
+            if not chip:
+                continue
+            result = await _operadora_service.bloquear_total(
+                iccid=chip["iccid"], reason=15, db=_db, user_id="sistema", user_name="Automacao",
+            )
+            if result.success:
+                await _db.linhas.update_one(
+                    {"_id": l["_id"]},
+                    {"$set": {
+                        "status": "bloqueado",
+                        "desbloqueio_confianca.ativo": False,
+                        "desbloqueio_confianca.reblocked_em": agora,
+                        "bloqueio_automatico": {"ativo": True, "data": agora, "motivo": "confianca_expirada"},
+                    }},
+                )
+                await _db.chips.update_one({"_id": chip["_id"]}, {"$set": {"status": "bloqueado"}})
+                rebloqueadas += 1
+        except Exception as e:
+            logger.warning(f"Re-bloqueio confianca falhou linha {l['_id']}: {e}")
+
+    if rebloqueadas > 0:
+        await _create_log("automacao_bloqueio", f"Re-bloqueio confianca expirada: {rebloqueadas} linhas", None, "Automacao")
+    return rebloqueadas
 
 
 async def _get_whitelist_set() -> set:
@@ -870,6 +1169,12 @@ async def _worker_loop():
                     _worker_state["last_aviso_hour"] = marker_aviso
                 except Exception as e:
                     logger.error(f"Job de aviso falhou: {e}", exc_info=True)
+
+            # Re-bloqueio de confianca expirada (a cada hora)
+            try:
+                await _executar_reblock_confianca_expirada()
+            except Exception as e:
+                logger.error(f"Re-bloqueio confianca falhou: {e}", exc_info=True)
 
         except asyncio.CancelledError:
             logger.info("Worker de automacao cancelado")
