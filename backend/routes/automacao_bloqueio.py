@@ -288,16 +288,40 @@ def _is_valid_iso_date(s) -> bool:
         return False
 
 
+def _resolver_expiracao_ta(linha: dict) -> Optional[str]:
+    """
+    Retorna a data efetiva de expiracao Ta da linha (formato YYYY-MM-DD).
+    Ordem de preferencia:
+      1. expirar_dados       — campo manual da Planilha Operacional (coluna "Recarga Ta")
+      2. data_expiracao_ta   — campo do Painel Auto Bloqueio (editavel manual)
+      3. proxima_recarga     — campo auto-calculado (data_ativacao + 30d)
+    Retorna None se nenhum for valido.
+    """
+    if not isinstance(linha, dict):
+        return None
+    for k in ("expirar_dados", "data_expiracao_ta", "proxima_recarga"):
+        v = linha.get(k)
+        if _is_valid_iso_date(v):
+            return v[:10]
+    return None
+
+
 async def _find_via_expiracao_ta(hoje, dias_tolerancia: int) -> List[dict]:
     """Algoritmo v2: bloqueia D-2 da expiracao Ta.
-    Filtro: data_expiracao_ta <= hoje + 2 dias (equivalente a hoje >= data_expiracao_ta - 2).
+    Filtro: data_expiracao_efetiva <= hoje + 2 dias (equivalente a hoje >= exp - 2).
+    Le da linha: expirar_dados OR data_expiracao_ta OR proxima_recarga.
     dias_tolerancia adiciona dias EXTRAS de graca (empurra o bloqueio para depois).
     """
     limite_dt = hoje + timedelta(days=2 - dias_tolerancia)
     alvo = limite_dt.isoformat()
+    # Query no Mongo: qualquer um dos 3 campos <= alvo
     linhas = await _db.linhas.find({
         "status": "ativo",
-        "data_expiracao_ta": {"$lte": alvo, "$ne": None},
+        "$or": [
+            {"expirar_dados": {"$lte": alvo, "$ne": None}},
+            {"data_expiracao_ta": {"$lte": alvo, "$ne": None}},
+            {"proxima_recarga": {"$lte": alvo, "$ne": None}},
+        ],
     }).to_list(5000)
 
     fake_cobrancas = []
@@ -305,23 +329,20 @@ async def _find_via_expiracao_ta(hoje, dias_tolerancia: int) -> List[dict]:
         cid = l.get("cliente_id")
         if not cid:
             continue
-        exp = l.get("data_expiracao_ta")
-        # Validacao STRICT: so aceita YYYY-MM-DD para evitar comparacoes lexicograficas erradas
-        if not _is_valid_iso_date(exp):
-            logger.warning(f"Linha {l['_id']} tem data_expiracao_ta invalida: {exp!r} — ignorada")
+        exp = _resolver_expiracao_ta(l)
+        if not exp:
             continue
-        # Recheck em Python (defesa contra dados corrompidos no DB)
-        exp_normalized = exp[:10]
-        if exp_normalized > alvo:
+        if exp > alvo:
+            # Alguma linha entrou pela query mas o campo priorizado nao bate — pula
             continue
         fake_cobrancas.append({
             "_id": l["_id"],
             "cliente_id": cid,
-            "vencimento": exp_normalized,
+            "vencimento": exp,
             "valor": 0,
             "linha_id": str(l["_id"]),
             "origem": "expiracao_ta",
-            "data_expiracao_ta": exp_normalized,
+            "data_expiracao_ta": exp,
         })
     logger.info(f"[auto-bloqueio v2] hoje={hoje.isoformat()} alvo(<=)={alvo} candidatos={len(fake_cobrancas)}")
     return fake_cobrancas
@@ -450,7 +471,11 @@ async def sincronizar_expiracao_ta(request: Request):
                 continue
             await _db.linhas.update_one(
                 {"_id": l["_id"]},
-                {"$set": {"data_expiracao_ta": data_expiracao, "data_expiracao_ta_sync_em": datetime.now(timezone.utc)}},
+                {"$set": {
+                    "data_expiracao_ta": data_expiracao,
+                    "expirar_dados": data_expiracao,  # sincroniza com Planilha Operacional
+                    "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
+                }},
             )
             updated += 1
             # Delay leve para nao estourar rate limit
@@ -1009,9 +1034,8 @@ async def painel_bloqueio(request: Request):
             continue
 
         status_linha = l.get("status", "ativo")
-        exp_ta = l.get("data_expiracao_ta")
-        exp_ta_valid = _is_valid_iso_date(exp_ta)
-        exp_ta_str = exp_ta[:10] if exp_ta_valid else None
+        exp_ta_str = _resolver_expiracao_ta(l)  # unifica expirar_dados/data_expiracao_ta/proxima_recarga
+        exp_ta_valid = exp_ta_str is not None
 
         # Bloqueio HOMEON = exp_ta - 2 dias
         bloqueio_homeon = None
@@ -1660,6 +1684,7 @@ async def editar_data_expiracao_ta(linha_id: str, data: EditarExpiracaoTaRequest
         {"_id": oid},
         {"$set": {
             "data_expiracao_ta": nova_data,
+            "expirar_dados": nova_data,  # sincroniza com coluna "Recarga Ta" da Planilha Operacional
             "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
             "data_expiracao_ta_editada_manual_por": user["name"],
         }}
@@ -1696,6 +1721,7 @@ async def editar_data_expiracao_ta_lote(data: EditarExpiracaoLoteRequest, reques
         {"_id": {"$in": oids}},
         {"$set": {
             "data_expiracao_ta": nova,
+            "expirar_dados": nova,  # sincroniza com coluna "Recarga Ta" da Planilha Operacional
             "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
             "data_expiracao_ta_editada_manual_por": user["name"],
         }}
