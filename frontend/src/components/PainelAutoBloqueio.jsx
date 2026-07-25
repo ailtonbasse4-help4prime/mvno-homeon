@@ -129,6 +129,19 @@ export default function PainelAutoBloqueio() {
     setEnviando(false);
   };
 
+  const popularExpiracao = async () => {
+    if (!window.confirm('Preencher automaticamente a coluna "Expiração Tá" das linhas vazias usando "Próxima Recarga" (que já é calculada como data_ativação + 30 dias)?')) return;
+    setEnviando(true);
+    try {
+      const { data } = await axios.post(`${API_URL}/api/automacao/bloqueio/popular-expiracao-de-recarga`, {}, { withCredentials: true });
+      toast.success(`${data.atualizadas} linha(s) preenchida(s) automaticamente`);
+      await carregar();
+    } catch (e) {
+      toast.error('Erro: ' + (e.response?.data?.detail || e.message));
+    }
+    setEnviando(false);
+  };
+
   const dispararJobD3 = async () => {
     if (!window.confirm('Disparar o job D-3 agora? (Envia lembrete a TODOS que estao a 3 dias do bloqueio, respeitando dedup)')) return;
     setEnviando(true);
@@ -310,6 +323,10 @@ export default function PainelAutoBloqueio() {
           <Button onClick={dispararJobD0} disabled={enviando} size="sm"
             variant="outline" className="border-orange-800 text-orange-300 hover:bg-orange-900/20" data-testid="btn-disparar-d0">
             <Zap className="w-4 h-4 mr-1" /> Job D-0 completo
+          </Button>
+          <Button onClick={popularExpiracao} disabled={enviando} size="sm"
+            variant="outline" className="border-emerald-800 text-emerald-300 hover:bg-emerald-900/20" data-testid="btn-popular-exp">
+            <TrendingUp className="w-4 h-4 mr-1" /> Preencher Expiração Tá vazia (via Próx.Recarga)
           </Button>
         </div>
       </div>

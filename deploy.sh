@@ -30,14 +30,32 @@ echo "========================================="
 LAST_OK=$(git rev-parse HEAD)
 echo "→ Commit atual: $LAST_OK"
 
-# 2. Atualizar codigo
-echo "→ Pull do GitHub..."
+# 2. Atualizar codigo — com auto-merge de conflict branches (recorrencia Emergent)
+echo "→ Sincronizando com GitHub..."
+git fetch --all --quiet
 git stash 2>/dev/null || true
-git pull || {
-    echo "⚠️  git pull abortou. Tentando limpar yarn.lock e retentar..."
-    rm -f frontend/yarn.lock yarn.lock
-    git pull
-}
+
+CONFLICT_BRANCH=$(git branch -r | grep -i "origin/conflict_" | head -1 | tr -d ' ' || true)
+
+if [ -n "$CONFLICT_BRANCH" ]; then
+    echo "   ⚠ Detectada branch conflict: $CONFLICT_BRANCH — fazendo merge automatico"
+    git checkout main --quiet 2>/dev/null || git checkout -b main
+    git merge "$CONFLICT_BRANCH" --allow-unrelated-histories --no-edit -m "auto-merge deploy $(date '+%Y-%m-%d %H:%M')" || {
+        echo "   ❌ Merge falhou. Resolva manualmente e rode de novo."
+        exit 1
+    }
+    git push origin main --quiet
+    # Limpa branch conflict remota
+    BRANCH_NAME=$(echo "$CONFLICT_BRANCH" | sed 's|origin/||')
+    git push origin --delete "$BRANCH_NAME" --quiet 2>/dev/null || echo "   (branch conflict remota mantida)"
+    echo "   ✓ Conflict mergeado e main sincronizada"
+else
+    git pull origin main || {
+        echo "⚠️  git pull abortou. Tentando limpar yarn.lock e retentar..."
+        rm -f frontend/yarn.lock yarn.lock
+        git pull origin main
+    }
+fi
 
 # 3. Build frontend
 echo "→ Build frontend..."
@@ -68,13 +86,10 @@ sudo find "$WEB_DIR" -mindepth 1 -maxdepth 1 ! -name 'homeon-assets' -exec rm -r
 sudo cp -r "$REPO/frontend/build/." "$WEB_DIR/"
 sudo chown -R www-data:www-data "$WEB_DIR"
 
-# 5. Reiniciar backend
-echo "→ Reiniciando backend (porta 3002)..."
-pkill -9 -f "uvicorn server:app.*3002" 2>/dev/null || true
-sleep 2
-cd "$REPO/backend"
-nohup /app/venv/bin/uvicorn server:app --host 0.0.0.0 --port 3002 > "$LOG" 2>&1 &
-sleep 6
+# 5. Reiniciar backend via systemd (mvno-backend.service)
+echo "→ Reiniciando backend via systemd..."
+systemctl restart mvno-backend.service
+sleep 5
 
 # 6. Validar backend
 echo "→ Validando backend..."
@@ -102,13 +117,11 @@ else
     echo "========================================="
     echo "  ❌ BACKEND NAO RESPONDEU - REVERTENDO"
     echo "========================================="
-    pkill -9 -f "uvicorn server:app.*3002" 2>/dev/null || true
     cd "$REPO"
     git reset --hard "$LAST_OK"
     cd frontend && yarn build
     sudo cp -r "$REPO/frontend/build/." "$WEB_DIR/"
-    cd "$REPO/backend"
-    nohup /app/venv/bin/uvicorn server:app --host 0.0.0.0 --port 3002 > "$LOG" 2>&1 &
+    systemctl restart mvno-backend.service
     echo ""
     echo "↩️  Revertido para o commit anterior: $LAST_OK"
     echo "    Veja o erro: tail -n 80 $LOG"
