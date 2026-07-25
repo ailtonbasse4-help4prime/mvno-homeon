@@ -403,35 +403,56 @@ def _normalize_date(v) -> Optional[str]:
 async def popular_expiracao_de_recarga(request: Request):
     """
     Utilitario 1-clique: preenche linhas.expirar_dados usando proxima_recarga
-    (que ja e calculado como data_ativacao + 30 dias).
+    (que ja e calculado como data_ativacao + 30 dias na Planilha Operacional).
 
     So atualiza linhas onde expirar_dados esta vazio E proxima_recarga esta preenchido.
     Nao sobrescreve valores manualmente definidos.
     """
     user = await _require_admin(request)
-    result = await _db.linhas.update_many(
-        {
-            "$or": [
-                {"expirar_dados": None},
-                {"expirar_dados": {"$exists": False}},
-                {"expirar_dados": ""},
-            ],
-            "proxima_recarga": {"$ne": None, "$exists": True},
-        },
-        [
+
+    # Busca linhas com proxima_recarga preenchido
+    linhas = await _db.linhas.find({
+        "proxima_recarga": {"$ne": None, "$exists": True},
+    }).to_list(10000)
+
+    atualizadas = 0
+    sem_proxima = 0
+    ja_preenchidas = 0
+    for l in linhas:
+        prox = l.get("proxima_recarga")
+        if not _is_valid_iso_date(prox):
+            sem_proxima += 1
+            continue
+        exp_atual = l.get("expirar_dados")
+        if exp_atual and _is_valid_iso_date(exp_atual):
+            ja_preenchidas += 1
+            continue
+        await _db.linhas.update_one(
+            {"_id": l["_id"]},
             {"$set": {
-                "expirar_dados": "$proxima_recarga",
-                "data_expiracao_ta": "$proxima_recarga",
+                "expirar_dados": prox[:10],
+                "data_expiracao_ta": prox[:10],
                 "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
             }}
-        ]
-    )
+        )
+        atualizadas += 1
+
+    total_sem_prox = await _db.linhas.count_documents({
+        "$or": [{"proxima_recarga": None}, {"proxima_recarga": {"$exists": False}}],
+    })
+
     await _create_log(
         "automacao_bloqueio",
-        f"Popular expiracao a partir de proxima_recarga: {result.modified_count} linhas atualizadas",
+        f"Popular expiracao a partir de proxima_recarga: {atualizadas} atualizadas, {ja_preenchidas} ja preenchidas, {total_sem_prox} sem proxima_recarga",
         user["id"], user["name"],
     )
-    return {"ok": True, "atualizadas": result.modified_count}
+    return {
+        "ok": True,
+        "atualizadas": atualizadas,
+        "ja_preenchidas": ja_preenchidas,
+        "sem_proxima_recarga": total_sem_prox,
+        "sem_proxima_recarga_invalida": sem_proxima,
+    }
 
 
 @router.get("/diagnosticar-ta/{linha_id}")
