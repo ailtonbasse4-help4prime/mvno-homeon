@@ -185,6 +185,18 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Teste de regressao: `/app/backend/tests/test_auto_bloqueio_v2_expiracao_math.py` valida (a) exp+10d NAO aparece, (b) exp+1d APARECE, (c) exp-3d APARECE, (d) sem data_expiracao_ta NAO aparece.
 - [x] Verificado pelo bug_testing_agent (verdict=fixed): 100% dos casos passaram, incluindo whitelist, dry-run e diagnostico.
 
+### Painel Central + Automacao Escalonada D-3/D-0/D-Bloqueio (07/25/2026 - iteration_38)
+- [x] Novo endpoint `GET /api/automacao/bloqueio/painel`: retorna todas as linhas ativas+bloqueadas com Boleto vigente, Expiracao Ta, Bloqueio HOMEON (= exp-2), Dias, Situacao, e KPIs (ativas / a_vencer_7d / vence_hoje / bloqueadas / sem_expiracao).
+- [x] 8 situacoes calculadas: em_dia, avisar (D-3 a D-1), vence_hoje (D-0), vencido (< D-0), bloqueado, confianca, vip, sem_expiracao (fail-safe).
+- [x] Novos endpoints: `POST /enviar-lembrete` (massa manual), `POST /executar-lembrete-d3`, `POST /executar-alerta-d0`.
+- [x] Nova collection `automacao_lembretes_log` para dedup D-3 (1x por ciclo Ta por cliente — evita spam de WhatsApp).
+- [x] Worker atualizado com 3 crons: 09h D-3 (WhatsApp lembrete), 12h D-0 (alerta vence hoje), 14h Bloqueio automatico — cada um com toggle independente.
+- [x] Textos WhatsApp profissionais anti-banimento: sem CAPS, tom cordial, sem emojis excessivos. Placeholders: {nome}, {msisdn}, {valor}, {data_bloqueio}, {data_expiracao}, {link}.
+- [x] Frontend: componente `PainelAutoBloqueio.jsx` — nova aba "Painel Central" com 5 KPIs, tabela consolidada, 9 filtros por situacao, busca livre, checkbox de acao em massa, botoes de envio D-3/D-0 selecionados, disparo manual dos jobs completos, export CSV completo, badges coloridos por situacao.
+- [x] Frontend: aba "Configuracoes" ampliada com toggles independentes (enviar_lembrete_d3, enviar_alerta_d0, executar_bloqueio_auto), novo hora_alerta_d0, novo textarea mensagem_alerta_d0.
+- [x] Regra critica reforcada: bloqueio SEMPRE pela coluna "Bloqueio HOMEON" (= data_expiracao_ta - 2 dias), NUNCA pelo vencimento do boleto. Status do boleto e usado apenas como filtro de "pagou/nao pagou".
+- [x] Testado (iteration_38): 6/6 pytest backend + Playwright frontend 100% funcional, 0 issues, painel real com 116 linhas.
+
 
 ## Backlog
 
