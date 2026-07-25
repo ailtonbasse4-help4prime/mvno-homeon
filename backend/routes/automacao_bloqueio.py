@@ -399,6 +399,41 @@ def _normalize_date(v) -> Optional[str]:
     return None
 
 
+@router.post("/popular-expiracao-de-recarga")
+async def popular_expiracao_de_recarga(request: Request):
+    """
+    Utilitario 1-clique: preenche linhas.expirar_dados usando proxima_recarga
+    (que ja e calculado como data_ativacao + 30 dias).
+
+    So atualiza linhas onde expirar_dados esta vazio E proxima_recarga esta preenchido.
+    Nao sobrescreve valores manualmente definidos.
+    """
+    user = await _require_admin(request)
+    result = await _db.linhas.update_many(
+        {
+            "$or": [
+                {"expirar_dados": None},
+                {"expirar_dados": {"$exists": False}},
+                {"expirar_dados": ""},
+            ],
+            "proxima_recarga": {"$ne": None, "$exists": True},
+        },
+        [
+            {"$set": {
+                "expirar_dados": "$proxima_recarga",
+                "data_expiracao_ta": "$proxima_recarga",
+                "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
+            }}
+        ]
+    )
+    await _create_log(
+        "automacao_bloqueio",
+        f"Popular expiracao a partir de proxima_recarga: {result.modified_count} linhas atualizadas",
+        user["id"], user["name"],
+    )
+    return {"ok": True, "atualizadas": result.modified_count}
+
+
 @router.get("/diagnosticar-ta/{linha_id}")
 async def diagnosticar_ta(linha_id: str, request: Request):
     """Retorna a resposta BRUTA da Ta Telecom para uma linha — util para descobrir quais campos existem."""
