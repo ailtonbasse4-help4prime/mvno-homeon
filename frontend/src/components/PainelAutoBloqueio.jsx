@@ -134,7 +134,10 @@ export default function PainelAutoBloqueio() {
     setEnviando(true);
     try {
       const { data } = await axios.post(`${API_URL}/api/automacao/bloqueio/popular-expiracao-de-recarga`, {}, { withCredentials: true });
-      toast.success(`${data.atualizadas} linha(s) preenchida(s) automaticamente`);
+      const semProx = data.sem_proxima_recarga || 0;
+      toast.success(
+        `${data.atualizadas} preenchida(s). ${data.ja_preenchidas || 0} já tinham. ${semProx > 0 ? `${semProx} sem "Próx.Recarga" (precisam de Sync Tá ou edição manual)` : ''}`
+      );
       await carregar();
     } catch (e) {
       toast.error('Erro: ' + (e.response?.data?.detail || e.message));
