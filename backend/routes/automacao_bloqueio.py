@@ -38,17 +38,39 @@ _asaas_service = None
 
 DEFAULT_CONFIG = {
     "ativo": False,
-    "hora_bloqueio": 23,           # bloqueia as 23h do dia do vencimento (D+0)
-    "hora_aviso": 9,               # envia aviso as 9h
-    "aviso_dia_anterior": True,    # WhatsApp 1 dia antes do bloqueio
-    "aviso_dia_vencimento": False, # WhatsApp no dia do vencimento
+    "hora_bloqueio": 14,           # bloqueia as 14h BRT (D-2 da expiracao Ta)
+    "hora_aviso": 9,               # envia lembrete D-3 as 9h BRT
+    "hora_alerta_d0": 12,          # envia alerta D-0 (vence hoje) as 12h BRT
+    "aviso_dia_anterior": True,    # WhatsApp 3 dias antes do bloqueio HOMEON
+    "aviso_dia_vencimento": True,  # WhatsApp no dia do bloqueio (D-0) — vence hoje
     "motivo_bloqueio": 15,         # codigo Ta Telecom para bloqueio total
     "desbloqueio_automatico": True,
     "sync_asaas_antes_bloqueio": True,  # SALVAGUARDA: sincroniza status com Asaas antes do job de bloqueio
     "notificar_admin": True,
-    "mensagem_aviso": "Ola {nome}, seu boleto no valor de R$ {valor} vence amanha ({vencimento}). Para evitar o bloqueio da sua linha, efetue o pagamento ate 23h. Portal: https://mvno.homeonapp.com.br/portal",
-    "mensagem_bloqueado": "Ola {nome}, sua linha foi bloqueada por inadimplencia. Regularize o pagamento para reativacao automatica.",
+    # Textos profissionais (anti-banimento WhatsApp: tom cordial, sem CAPS, sem emojis em excesso)
+    "mensagem_aviso": (
+        "Ola, {nome}. Aqui e da HomeOn Internet.\n\n"
+        "Passando um lembrete: sua linha {msisdn} tem renovacao prevista para {data_bloqueio}. "
+        "Para manter o servico ativo, o boleto no valor de R$ {valor} venceu em {vencimento} e ainda consta em aberto.\n\n"
+        "Link para pagamento: {link}\n\n"
+        "Qualquer duvida, estamos a disposicao."
+    ),
+    "mensagem_alerta_d0": (
+        "Ola, {nome}.\n\n"
+        "Sua linha {msisdn} sera suspensa hoje caso o boleto em aberto nao seja quitado. Valor: R$ {valor}.\n\n"
+        "Pagamento: {link}\n\n"
+        "Apos a confirmacao, a reativacao e automatica em ate 15 minutos."
+    ),
+    "mensagem_bloqueado": (
+        "Ola, {nome}. Sua linha {msisdn} foi temporariamente suspensa por inadimplencia.\n\n"
+        "Para reativar imediatamente, quite o boleto: {link}\n\n"
+        "Apos a confirmacao, a linha volta a funcionar em ate 15 minutos."
+    ),
     "mensagem_desbloqueado": "Ola {nome}, seu pagamento foi confirmado! Sua linha ja esta reativada.",
+    # NOVO: controles independentes por job (podem ser desligados individualmente sem desligar automacao inteira)
+    "enviar_lembrete_d3": True,
+    "enviar_alerta_d0": True,
+    "executar_bloqueio_auto": True,
 }
 
 
@@ -85,14 +107,19 @@ class ConfigUpdate(BaseModel):
     ativo: Optional[bool] = None
     hora_bloqueio: Optional[int] = None
     hora_aviso: Optional[int] = None
+    hora_alerta_d0: Optional[int] = None
     aviso_dia_anterior: Optional[bool] = None
     aviso_dia_vencimento: Optional[bool] = None
     motivo_bloqueio: Optional[int] = None
     desbloqueio_automatico: Optional[bool] = None
     notificar_admin: Optional[bool] = None
     mensagem_aviso: Optional[str] = None
+    mensagem_alerta_d0: Optional[str] = None
     mensagem_bloqueado: Optional[str] = None
     mensagem_desbloqueado: Optional[str] = None
+    enviar_lembrete_d3: Optional[bool] = None
+    enviar_alerta_d0: Optional[bool] = None
+    executar_bloqueio_auto: Optional[bool] = None
 
 
 @router.get("/config")
@@ -111,6 +138,8 @@ async def update_config(data: ConfigUpdate, request: Request):
         raise HTTPException(status_code=400, detail="hora_bloqueio deve ser 0-23")
     if cfg.get("hora_aviso") is not None and not (0 <= cfg["hora_aviso"] <= 23):
         raise HTTPException(status_code=400, detail="hora_aviso deve ser 0-23")
+    if cfg.get("hora_alerta_d0") is not None and not (0 <= cfg["hora_alerta_d0"] <= 23):
+        raise HTTPException(status_code=400, detail="hora_alerta_d0 deve ser 0-23")
     await _save_config(cfg, user["id"])
     await _create_log("automacao_bloqueio", f"Config atualizada: ativo={cfg.get('ativo')}", user["id"], user["name"])
     return cfg
@@ -886,6 +915,205 @@ async def _build_simulacao(dias_tolerancia: int = 0) -> List[dict]:
     return resultado
 
 
+@router.get("/painel")
+async def painel_bloqueio(request: Request):
+    """
+    Painel central: retorna todas as linhas ATIVAS + BLOQUEADAS com informacoes
+    consolidadas para alimentar a tabela de controle da tela.
+
+    Situacoes (badges):
+      - em_dia: pagou o ciclo atual E expira em > +5 dias
+      - avisar: bloqueio HOMEON entre +1 e +5 dias E nao pagou
+      - vence_hoje: bloqueio HOMEON = hoje E nao pagou
+      - vencido: bloqueio HOMEON <= hoje-1 E nao pagou (pronto pra bloquear)
+      - bloqueado: linha ja esta com status "bloqueado"
+      - confianca: possui desbloqueio_confianca_ate >= hoje
+      - vip: cliente esta na whitelist
+      - sem_expiracao: linha ativa sem data_expiracao_ta sincronizada
+    """
+    await _require_admin(request)
+    hoje = datetime.now(timezone.utc).date()
+
+    # Carrega whitelist
+    wl_docs = await _db.automacao_bloqueio_whitelist.find().to_list(5000)
+    whitelist = {d["cliente_id"] for d in wl_docs}
+
+    # Carrega todas as linhas relevantes (ativo + bloqueado)
+    linhas = await _db.linhas.find({"status": {"$in": ["ativo", "bloqueado"]}}).to_list(10000)
+
+    resultado = []
+    kpi_ativas = 0
+    kpi_a_vencer_7d = 0
+    kpi_vence_hoje = 0
+    kpi_bloqueadas = 0
+    kpi_sem_expiracao = 0
+
+    # Cache de clientes por id
+    cliente_cache = {}
+
+    for l in linhas:
+        cliente_id = l.get("cliente_id")
+        if not cliente_id:
+            continue
+
+        # Cliente
+        if cliente_id in cliente_cache:
+            cliente = cliente_cache[cliente_id]
+        else:
+            try:
+                cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)}, {"nome": 1, "documento": 1, "telefone": 1})
+            except Exception:
+                cliente = None
+            cliente_cache[cliente_id] = cliente
+
+        if not cliente:
+            continue
+
+        status_linha = l.get("status", "ativo")
+        exp_ta = l.get("data_expiracao_ta")
+        exp_ta_valid = _is_valid_iso_date(exp_ta)
+        exp_ta_str = exp_ta[:10] if exp_ta_valid else None
+
+        # Bloqueio HOMEON = exp_ta - 2 dias
+        bloqueio_homeon = None
+        dias_ate_bloqueio = None
+        if exp_ta_valid:
+            try:
+                exp_dt = datetime.strptime(exp_ta_str, "%Y-%m-%d").date()
+                bloq_dt = exp_dt - timedelta(days=2)
+                bloqueio_homeon = bloq_dt.isoformat()
+                dias_ate_bloqueio = (bloq_dt - hoje).days
+            except Exception:
+                pass
+
+        # Boleto vigente: pega a cobranca ABERTA mais proxima (menor vencimento >= algum threshold)
+        # Preferimos: PENDING/OVERDUE mais antigo; se nao houver, o pago mais recente
+        cob_aberta = await _db.cobrancas.find({
+            "cliente_id": str(cliente_id),
+            "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "CANCELLED", "REFUNDED"]},
+        }).sort("vencimento", 1).limit(1).to_list(1)
+
+        boleto = None
+        boleto_status = None
+        if cob_aberta:
+            c = cob_aberta[0]
+            venc = c.get("vencimento")
+            venc_dt = None
+            if venc:
+                try:
+                    venc_dt = datetime.strptime(venc[:10], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+            boleto = {
+                "id": str(c.get("_id")),
+                "valor": c.get("valor"),
+                "vencimento": venc,
+                "descricao": c.get("descricao"),
+                "asaas_status": c.get("status"),
+                "asaas_payment_id": c.get("asaas_payment_id"),
+                "asaas_invoice_url": c.get("asaas_invoice_url") or c.get("invoice_url") or c.get("bank_slip_url"),
+            }
+            if venc_dt and venc_dt < hoje:
+                boleto_status = "vencido"
+            else:
+                boleto_status = "pendente"
+        else:
+            # Verifica se ha cobranca paga no ciclo
+            if exp_ta_valid:
+                paga_ciclo = await _db.cobrancas.find_one({
+                    "cliente_id": str(cliente_id),
+                    "status": {"$in": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
+                })
+                if paga_ciclo:
+                    boleto_status = "pago"
+
+        # Desbloqueio de confianca ativo?
+        confianca_ate = l.get("desbloqueio_confianca_ate")
+        confianca_ativo = False
+        if confianca_ate:
+            try:
+                ca_dt = datetime.strptime(confianca_ate[:10], "%Y-%m-%d").date()
+                confianca_ativo = ca_dt >= hoje
+            except Exception:
+                pass
+
+        # === Determinar SITUACAO ===
+        situacao = None
+        na_whitelist = str(cliente_id) in whitelist
+
+        if status_linha == "bloqueado":
+            situacao = "bloqueado"
+            kpi_bloqueadas += 1
+        elif na_whitelist:
+            situacao = "vip"
+        elif confianca_ativo:
+            situacao = "confianca"
+        elif not exp_ta_valid:
+            situacao = "sem_expiracao"
+            kpi_sem_expiracao += 1
+        elif dias_ate_bloqueio is not None:
+            pago_ciclo = boleto_status == "pago"
+            if dias_ate_bloqueio < 0 and not pago_ciclo:
+                situacao = "vencido"
+            elif dias_ate_bloqueio == 0 and not pago_ciclo:
+                situacao = "vence_hoje"
+                kpi_vence_hoje += 1
+            elif 1 <= dias_ate_bloqueio <= 5 and not pago_ciclo:
+                situacao = "avisar"
+                kpi_a_vencer_7d += 1
+            elif dias_ate_bloqueio > 5 or pago_ciclo:
+                situacao = "em_dia"
+            else:
+                situacao = "avisar"
+
+        if status_linha == "ativo":
+            kpi_ativas += 1
+        if dias_ate_bloqueio is not None and 0 <= dias_ate_bloqueio <= 7:
+            if situacao not in ("bloqueado", "vip", "confianca"):
+                kpi_a_vencer_7d += 0  # ja contado acima
+
+        # Verifica se ja enviou lembrete D-3 para este ciclo
+        lembrete_d3_enviado = False
+        if exp_ta_valid:
+            log_l = await _db.automacao_lembretes_log.find_one({
+                "cliente_id": str(cliente_id),
+                "tipo": "d3",
+                "ciclo_ref": exp_ta_str,
+            })
+            lembrete_d3_enviado = bool(log_l)
+
+        resultado.append({
+            "linha_id": str(l["_id"]),
+            "cliente_id": str(cliente_id),
+            "cliente_nome": cliente.get("nome"),
+            "documento": cliente.get("documento"),
+            "telefone": cliente.get("telefone"),
+            "msisdn": l.get("msisdn") or l.get("numero"),
+            "status_linha": status_linha,
+            "data_expiracao_ta": exp_ta_str,
+            "bloqueio_homeon": bloqueio_homeon,
+            "dias_ate_bloqueio": dias_ate_bloqueio,
+            "boleto": boleto,
+            "boleto_status": boleto_status,
+            "situacao": situacao,
+            "na_whitelist": na_whitelist,
+            "desbloqueio_confianca_ate": confianca_ate if confianca_ativo else None,
+            "lembrete_d3_enviado": lembrete_d3_enviado,
+        })
+
+    # KPIs
+    kpis = {
+        "total": len(resultado),
+        "ativas": kpi_ativas,
+        "bloqueadas": kpi_bloqueadas,
+        "vence_hoje": kpi_vence_hoje,
+        "a_vencer_7d": kpi_a_vencer_7d,
+        "sem_expiracao": kpi_sem_expiracao,
+    }
+
+    return {"itens": resultado, "kpis": kpis, "hoje": hoje.isoformat()}
+
+
 @router.get("/simular")
 async def simular_bloqueio(request: Request, dias_tolerancia: int = 0):
     """Mostra quem seria bloqueado se rodasse agora (dry run)."""
@@ -1051,45 +1279,317 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
     return resumo
 
 
+async def _construir_link_boleto(cob: dict) -> str:
+    """Retorna o melhor link disponivel de pagamento para a cobranca."""
+    for k in ("asaas_invoice_url", "invoice_url", "bank_slip_url", "pix_qr_code_image", "pix_copy_paste"):
+        v = cob.get(k)
+        if v:
+            return v
+    return "https://mvno.homeonapp.com.br/portal"
+
+
+async def _linhas_por_situacao(situacoes: List[str]) -> List[dict]:
+    """
+    Retorna linhas ativas cuja situacao esteja em `situacoes` (avisar/vence_hoje/vencido).
+    Reutiliza a mesma logica do endpoint /painel mas de forma simplificada.
+    """
+    hoje = datetime.now(timezone.utc).date()
+    wl_docs = await _db.automacao_bloqueio_whitelist.find().to_list(5000)
+    whitelist = {d["cliente_id"] for d in wl_docs}
+
+    linhas = await _db.linhas.find({"status": "ativo", "data_expiracao_ta": {"$ne": None}}).to_list(10000)
+    out = []
+    for l in linhas:
+        cid = str(l.get("cliente_id") or "")
+        if not cid or cid in whitelist:
+            continue
+        exp = l.get("data_expiracao_ta")
+        if not _is_valid_iso_date(exp):
+            continue
+        try:
+            exp_dt = datetime.strptime(exp[:10], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        dias = (exp_dt - timedelta(days=2) - hoje).days
+
+        # Descobrir situacao
+        situacao = None
+        if dias < 0:
+            situacao = "vencido"
+        elif dias == 0:
+            situacao = "vence_hoje"
+        elif 1 <= dias <= 5:
+            situacao = "avisar"
+        else:
+            continue
+
+        if situacao not in situacoes:
+            continue
+
+        # Confirma que nao pagou o ciclo
+        if await _cliente_ja_pagou_no_mes(cid, exp[:10], origem="expiracao_ta"):
+            continue
+
+        # Confianca ativa? Skip
+        ca = l.get("desbloqueio_confianca_ate")
+        if ca and _is_valid_iso_date(ca):
+            try:
+                if datetime.strptime(ca[:10], "%Y-%m-%d").date() >= hoje:
+                    continue
+            except Exception:
+                pass
+
+        out.append({
+            "linha": l,
+            "situacao": situacao,
+            "data_expiracao_ta": exp[:10],
+            "bloqueio_homeon": (exp_dt - timedelta(days=2)).isoformat(),
+            "dias_ate_bloqueio": dias,
+        })
+    return out
+
+
+async def _enviar_lembrete_para_cliente(cliente: dict, cob: Optional[dict], linha_info: dict, tipo: str, cfg: dict) -> dict:
+    """Envia um lembrete WhatsApp (tipo=d3 ou d0) para um cliente com dedup automatica.
+
+    Regras:
+      - d3: dedup por (cliente, ciclo_ref=data_expiracao_ta) — envia UMA vez por ciclo.
+      - d0: sempre envia (mensagem de urgencia).
+    """
+    if not _zapi_service:
+        return {"ok": False, "erro": "zapi_service nao configurado"}
+    telefone = cliente.get("telefone")
+    if not telefone:
+        return {"ok": False, "erro": "sem telefone"}
+
+    ciclo_ref = linha_info.get("data_expiracao_ta")
+    cliente_id = str(cliente.get("_id"))
+
+    # Dedup para D-3
+    if tipo == "d3":
+        exists = await _db.automacao_lembretes_log.find_one({
+            "cliente_id": cliente_id,
+            "tipo": "d3",
+            "ciclo_ref": ciclo_ref,
+        })
+        if exists:
+            return {"ok": False, "erro": "ja_enviado_no_ciclo", "skipped": True}
+
+    # Escolhe template
+    template = cfg.get("mensagem_aviso") if tipo == "d3" else cfg.get("mensagem_alerta_d0")
+    if not template:
+        return {"ok": False, "erro": "template ausente"}
+
+    msg = template.format(
+        nome=cliente.get("nome") or "",
+        msisdn=linha_info.get("msisdn") or "",
+        valor=f"{(cob or {}).get('valor', 0):.2f}",
+        vencimento=(cob or {}).get("vencimento") or "",
+        data_bloqueio=linha_info.get("bloqueio_homeon") or "",
+        data_expiracao=linha_info.get("data_expiracao_ta") or "",
+        link=await _construir_link_boleto(cob or {}),
+    )
+
+    try:
+        await _zapi_service.send_text(phone=telefone, message=msg)
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}
+
+    # Registra no log de dedup
+    if tipo == "d3":
+        try:
+            await _db.automacao_lembretes_log.insert_one({
+                "cliente_id": cliente_id,
+                "tipo": "d3",
+                "ciclo_ref": ciclo_ref,
+                "enviado_em": datetime.now(timezone.utc),
+                "msisdn": linha_info.get("msisdn"),
+            })
+        except Exception as e:
+            logger.warning(f"Falha ao gravar log dedup lembrete: {e}")
+
+    return {"ok": True}
+
+
 async def _executar_job_aviso() -> dict:
-    """Envia WhatsApp de aviso 1 dia antes do bloqueio."""
+    """
+    Job D-3: envia WhatsApp 3 dias antes do bloqueio HOMEON (= exp_ta - 2 dias).
+    Ou seja: envia quando dias_ate_bloqueio_homeon == 3.
+    Dedup: 1x por cliente por ciclo Ta (usa data_expiracao_ta como ciclo_ref).
+    """
     cfg = await _get_config()
-    amanha = (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat()
+    if not cfg.get("enviar_lembrete_d3", True):
+        return {"skipped": True, "motivo": "enviar_lembrete_d3 desativado"}
 
-    cobrancas = await _db.cobrancas.find({
-        "vencimento": amanha,
-        "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]},
-    }).to_list(5000)
+    candidatos = await _linhas_por_situacao(["avisar"])
+    # Filtrar so os que estao a EXATAMENTE 3 dias do bloqueio (nao inunda a cada dia)
+    candidatos = [c for c in candidatos if c["dias_ate_bloqueio"] == 3]
 
-    whitelist = await _get_whitelist_set()
+    enviados = 0
+    skipped = 0
+    erros = []
+    processados = set()
+
+    for cand in candidatos:
+        l = cand["linha"]
+        cid = str(l.get("cliente_id"))
+        if cid in processados:
+            continue
+        processados.add(cid)
+
+        cliente = await _db.clientes.find_one({"_id": ObjectId(cid)})
+        if not cliente:
+            continue
+
+        # Boleto vigente
+        cob = await _db.cobrancas.find_one({
+            "cliente_id": cid,
+            "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "CANCELLED", "REFUNDED"]},
+        }, sort=[("vencimento", 1)])
+
+        linha_info = {
+            "msisdn": l.get("msisdn") or l.get("numero"),
+            "data_expiracao_ta": cand["data_expiracao_ta"],
+            "bloqueio_homeon": cand["bloqueio_homeon"],
+        }
+        r = await _enviar_lembrete_para_cliente(cliente, cob, linha_info, "d3", cfg)
+        if r.get("ok"):
+            enviados += 1
+        elif r.get("skipped"):
+            skipped += 1
+        else:
+            erros.append({"cliente_id": cid, "erro": r.get("erro")})
+
+    await _create_log("automacao_bloqueio", f"Job D-3: {enviados} enviados, {skipped} dedup, {len(erros)} erros", None, "Automacao")
+    return {"tipo": "d3", "enviados": enviados, "skipped_dedup": skipped, "erros": erros, "candidatos": len(candidatos)}
+
+
+async def _executar_job_alerta_d0() -> dict:
+    """
+    Job D-0: envia WhatsApp no dia do bloqueio HOMEON (situacao=vence_hoje).
+    Sem dedup — se o cron rodar 2x (edge case), enviara 2x (comportamento intencional para urgencia).
+    """
+    cfg = await _get_config()
+    if not cfg.get("enviar_alerta_d0", True):
+        return {"skipped": True, "motivo": "enviar_alerta_d0 desativado"}
+
+    candidatos = await _linhas_por_situacao(["vence_hoje"])
     enviados = 0
     erros = []
     processados = set()
-    for cob in cobrancas:
-        cliente_id = str(cob.get("cliente_id") or "")
-        if cliente_id in processados or cliente_id in whitelist:
-            continue
-        try:
-            cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)})
-            if not cliente or not cliente.get("telefone"):
-                continue
-            # Ja pagou algum boleto do mes? Skip
-            if await _cliente_ja_pagou_no_mes(cliente_id, cob.get("vencimento", "")):
-                continue
-            msg = (cfg.get("mensagem_aviso") or "").format(
-                nome=cliente.get("nome") or "",
-                valor=f"{cob.get('valor', 0):.2f}",
-                vencimento=cob.get("vencimento") or "",
-            )
-            await _zapi_service.send_text(phone=cliente["telefone"], message=msg)
-            enviados += 1
-            processados.add(cliente_id)
-        except Exception as e:
-            logger.warning(f"Aviso WhatsApp falhou cliente {cliente_id}: {e}")
-            erros.append({"cliente_id": cliente_id, "erro": str(e)})
 
-    await _create_log("automacao_bloqueio", f"Job de aviso WhatsApp: {enviados} avisos enviados, {len(erros)} erros", None, "Automacao")
-    return {"enviados": enviados, "erros": erros, "total_candidatos": len(cobrancas)}
+    for cand in candidatos:
+        l = cand["linha"]
+        cid = str(l.get("cliente_id"))
+        if cid in processados:
+            continue
+        processados.add(cid)
+
+        cliente = await _db.clientes.find_one({"_id": ObjectId(cid)})
+        if not cliente:
+            continue
+
+        cob = await _db.cobrancas.find_one({
+            "cliente_id": cid,
+            "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "CANCELLED", "REFUNDED"]},
+        }, sort=[("vencimento", 1)])
+
+        linha_info = {
+            "msisdn": l.get("msisdn") or l.get("numero"),
+            "data_expiracao_ta": cand["data_expiracao_ta"],
+            "bloqueio_homeon": cand["bloqueio_homeon"],
+        }
+        r = await _enviar_lembrete_para_cliente(cliente, cob, linha_info, "d0", cfg)
+        if r.get("ok"):
+            enviados += 1
+        else:
+            erros.append({"cliente_id": cid, "erro": r.get("erro")})
+
+    await _create_log("automacao_bloqueio", f"Job D-0: {enviados} alertas 'vence hoje' enviados, {len(erros)} erros", None, "Automacao")
+    return {"tipo": "d0", "enviados": enviados, "erros": erros, "candidatos": len(candidatos)}
+
+
+# ==================== ENDPOINTS DE LEMBRETE MANUAL ====================
+
+class EnviarLembreteRequest(BaseModel):
+    linha_ids: List[str]
+    tipo: str = "d3"  # d3 ou d0
+
+
+@router.post("/enviar-lembrete")
+async def enviar_lembrete_massa(data: EnviarLembreteRequest, request: Request):
+    """Envia lembrete manual para uma lista de linhas (respeita dedup em d3)."""
+    user = await _require_admin(request)
+    cfg = await _get_config()
+    if data.tipo not in ("d3", "d0"):
+        raise HTTPException(status_code=400, detail="tipo deve ser 'd3' ou 'd0'")
+
+    enviados = 0
+    skipped = 0
+    erros = []
+
+    for lid in data.linha_ids:
+        try:
+            l = await _db.linhas.find_one({"_id": ObjectId(lid)})
+            if not l:
+                erros.append({"linha_id": lid, "erro": "linha nao encontrada"})
+                continue
+            cid = str(l.get("cliente_id") or "")
+            cliente = await _db.clientes.find_one({"_id": ObjectId(cid)}) if cid else None
+            if not cliente:
+                erros.append({"linha_id": lid, "erro": "cliente nao encontrado"})
+                continue
+
+            exp = l.get("data_expiracao_ta")
+            if not _is_valid_iso_date(exp):
+                erros.append({"linha_id": lid, "erro": "linha sem data_expiracao_ta"})
+                continue
+            exp_str = exp[:10]
+            exp_dt = datetime.strptime(exp_str, "%Y-%m-%d").date()
+
+            cob = await _db.cobrancas.find_one({
+                "cliente_id": cid,
+                "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "CANCELLED", "REFUNDED"]},
+            }, sort=[("vencimento", 1)])
+
+            linha_info = {
+                "msisdn": l.get("msisdn") or l.get("numero"),
+                "data_expiracao_ta": exp_str,
+                "bloqueio_homeon": (exp_dt - timedelta(days=2)).isoformat(),
+            }
+            r = await _enviar_lembrete_para_cliente(cliente, cob, linha_info, data.tipo, cfg)
+            if r.get("ok"):
+                enviados += 1
+            elif r.get("skipped"):
+                skipped += 1
+            else:
+                erros.append({"linha_id": lid, "erro": r.get("erro")})
+        except Exception as e:
+            erros.append({"linha_id": lid, "erro": str(e)})
+
+    await _create_log("automacao_bloqueio", f"Envio manual de lembrete {data.tipo}: {enviados} enviados, {skipped} dedup, {len(erros)} erros", user["id"], user["name"])
+    return {"tipo": data.tipo, "enviados": enviados, "skipped_dedup": skipped, "erros": erros, "total": len(data.linha_ids)}
+
+
+@router.post("/executar-lembrete-d3")
+async def executar_lembrete_d3(request: Request):
+    """Dispara manualmente o job D-3 (mesma logica que o cron)."""
+    user = await _require_admin(request)
+    r = await _executar_job_aviso()
+    await _create_log("automacao_bloqueio", f"Job D-3 disparado manualmente por {user['name']}", user["id"], user["name"])
+    return r
+
+
+@router.post("/executar-alerta-d0")
+async def executar_alerta_d0(request: Request):
+    """Dispara manualmente o job D-0 (mesma logica que o cron)."""
+    user = await _require_admin(request)
+    r = await _executar_job_alerta_d0()
+    await _create_log("automacao_bloqueio", f"Job D-0 disparado manualmente por {user['name']}", user["id"], user["name"])
+    return r
+
+
+
 
 
 # ==================== DESBLOQUEIO AUTOMATICO ====================
@@ -1199,27 +1699,38 @@ async def _worker_loop():
             hora_br = (agora.hour - 3) % 24
             data_br_str = (agora - timedelta(hours=3)).strftime("%Y-%m-%d")
 
-            # Job de bloqueio
-            hora_bloqueio = cfg.get("hora_bloqueio", 23)
+            # Job D-3 (lembrete 3 dias antes)
+            hora_aviso = cfg.get("hora_aviso", 9)
+            marker_aviso = f"{data_br_str}-d3"
+            if hora_br == hora_aviso and cfg.get("enviar_lembrete_d3", True) and _worker_state.get("last_aviso_hour") != marker_aviso:
+                logger.info(f"Executando job D-3 (lembrete WhatsApp) ({hora_br}h BRT)")
+                try:
+                    await _executar_job_aviso()
+                    _worker_state["last_aviso_hour"] = marker_aviso
+                except Exception as e:
+                    logger.error(f"Job D-3 falhou: {e}", exc_info=True)
+
+            # Job D-0 (alerta vence hoje)
+            hora_d0 = cfg.get("hora_alerta_d0", 12)
+            marker_d0 = f"{data_br_str}-d0"
+            if hora_br == hora_d0 and cfg.get("enviar_alerta_d0", True) and _worker_state.get("last_d0_hour") != marker_d0:
+                logger.info(f"Executando job D-0 (alerta vence hoje) ({hora_br}h BRT)")
+                try:
+                    await _executar_job_alerta_d0()
+                    _worker_state["last_d0_hour"] = marker_d0
+                except Exception as e:
+                    logger.error(f"Job D-0 falhou: {e}", exc_info=True)
+
+            # Job de bloqueio (D-2 da expiracao Ta)
+            hora_bloqueio = cfg.get("hora_bloqueio", 14)
             marker_bloqueio = f"{data_br_str}-bloq"
-            if hora_br == hora_bloqueio and _worker_state.get("last_bloqueio_hour") != marker_bloqueio:
+            if hora_br == hora_bloqueio and cfg.get("executar_bloqueio_auto", True) and _worker_state.get("last_bloqueio_hour") != marker_bloqueio:
                 logger.info(f"Executando job de bloqueio automatico ({hora_br}h BRT)")
                 try:
                     await _executar_job_bloqueio(dias_tolerancia=0, dry_run=False, disparado_por={"id": "sistema", "name": "Automacao"})
                     _worker_state["last_bloqueio_hour"] = marker_bloqueio
                 except Exception as e:
                     logger.error(f"Job de bloqueio falhou: {e}", exc_info=True)
-
-            # Job de aviso
-            hora_aviso = cfg.get("hora_aviso", 9)
-            marker_aviso = f"{data_br_str}-aviso"
-            if hora_br == hora_aviso and cfg.get("aviso_dia_anterior") and _worker_state.get("last_aviso_hour") != marker_aviso:
-                logger.info(f"Executando job de aviso WhatsApp ({hora_br}h BRT)")
-                try:
-                    await _executar_job_aviso()
-                    _worker_state["last_aviso_hour"] = marker_aviso
-                except Exception as e:
-                    logger.error(f"Job de aviso falhou: {e}", exc_info=True)
 
             # Re-bloqueio de confianca expirada (a cada hora)
             try:

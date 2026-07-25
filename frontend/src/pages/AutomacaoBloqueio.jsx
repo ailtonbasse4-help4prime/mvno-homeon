@@ -5,10 +5,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
+import PainelAutoBloqueio from '../components/PainelAutoBloqueio';
 import {
   Shield, ShieldAlert, ShieldCheck, Zap, Clock, Users, PlayCircle,
   RefreshCw, Trash2, Plus, AlertTriangle, CheckCircle2, XCircle,
-  MessageCircle, History, Loader2,
+  MessageCircle, History, Loader2, LayoutDashboard, Settings,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -291,7 +293,23 @@ export default function AutomacaoBloqueio() {
         </div>
       )}
 
-      {/* Grid de cards */}
+      {/* Tabs */}
+      <Tabs defaultValue="painel" className="w-full">
+        <TabsList className="bg-zinc-900 border border-zinc-800">
+          <TabsTrigger value="painel" data-testid="tab-painel">
+            <LayoutDashboard className="w-4 h-4 mr-1" /> Painel Central
+          </TabsTrigger>
+          <TabsTrigger value="config" data-testid="tab-config">
+            <Settings className="w-4 h-4 mr-1" /> Configurações & Ferramentas
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="painel" className="mt-5">
+          <PainelAutoBloqueio />
+        </TabsContent>
+
+        <TabsContent value="config" className="mt-5">
+          {/* Grid de cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Card: Configuracoes */}
         <div className="lg:col-span-2 bg-zinc-950 border border-zinc-800 rounded-lg p-5 space-y-4">
@@ -299,18 +317,25 @@ export default function AutomacaoBloqueio() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-zinc-400 block mb-1">Hora do bloqueio (0-23)</label>
+              <label className="text-xs text-zinc-400 block mb-1">Hora bloqueio (D-2 exp Tá)</label>
               <Input type="number" min={0} max={23} value={config.hora_bloqueio}
                 onChange={e => setConfig({ ...config, hora_bloqueio: parseInt(e.target.value) })}
                 className="bg-zinc-900 border-zinc-700" data-testid="input-hora-bloqueio" />
-              <p className="text-xs text-zinc-500 mt-1">Padrão 23h (antes da Tá recarregar)</p>
+              <p className="text-xs text-zinc-500 mt-1">Padrão 14h (BRT) — dispara o job de bloqueio</p>
             </div>
             <div>
-              <label className="text-xs text-zinc-400 block mb-1">Hora do aviso (WhatsApp)</label>
+              <label className="text-xs text-zinc-400 block mb-1">Hora lembrete D-3 (WhatsApp)</label>
               <Input type="number" min={0} max={23} value={config.hora_aviso}
                 onChange={e => setConfig({ ...config, hora_aviso: parseInt(e.target.value) })}
                 className="bg-zinc-900 border-zinc-700" data-testid="input-hora-aviso" />
-              <p className="text-xs text-zinc-500 mt-1">1 dia antes do bloqueio</p>
+              <p className="text-xs text-zinc-500 mt-1">Padrão 9h — envia 3 dias antes do bloqueio (1x por ciclo)</p>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Hora alerta D-0 (vence hoje)</label>
+              <Input type="number" min={0} max={23} value={config.hora_alerta_d0 ?? 12}
+                onChange={e => setConfig({ ...config, hora_alerta_d0: parseInt(e.target.value) })}
+                className="bg-zinc-900 border-zinc-700" data-testid="input-hora-d0" />
+              <p className="text-xs text-zinc-500 mt-1">Padrão 12h — alerta urgente no dia do bloqueio</p>
             </div>
             <div>
               <label className="text-xs text-zinc-400 block mb-1">Motivo Tá Telecom</label>
@@ -320,13 +345,25 @@ export default function AutomacaoBloqueio() {
               <p className="text-xs text-zinc-500 mt-1">Código de motivo (padrão 15)</p>
             </div>
             <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3">
-              <label className="text-xs text-zinc-400">Aviso WhatsApp 1 dia antes</label>
-              <Switch checked={config.aviso_dia_anterior}
-                onCheckedChange={v => setConfig({ ...config, aviso_dia_anterior: v })}
-                data-testid="toggle-aviso" />
+              <label className="text-xs text-zinc-400">Enviar lembrete D-3</label>
+              <Switch checked={config.enviar_lembrete_d3 ?? true}
+                onCheckedChange={v => setConfig({ ...config, enviar_lembrete_d3: v })}
+                data-testid="toggle-d3" />
             </div>
             <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3">
-              <label className="text-xs text-zinc-400">Desbloqueio automático (webhook)</label>
+              <label className="text-xs text-zinc-400">Enviar alerta D-0</label>
+              <Switch checked={config.enviar_alerta_d0 ?? true}
+                onCheckedChange={v => setConfig({ ...config, enviar_alerta_d0: v })}
+                data-testid="toggle-d0" />
+            </div>
+            <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3">
+              <label className="text-xs text-zinc-400">Executar bloqueio automático</label>
+              <Switch checked={config.executar_bloqueio_auto ?? true}
+                onCheckedChange={v => setConfig({ ...config, executar_bloqueio_auto: v })}
+                data-testid="toggle-bloq-auto" />
+            </div>
+            <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3">
+              <label className="text-xs text-zinc-400">Desbloqueio automático (webhook Asaas)</label>
               <Switch checked={config.desbloqueio_automatico}
                 onCheckedChange={v => setConfig({ ...config, desbloqueio_automatico: v })}
                 data-testid="toggle-desbloqueio" />
@@ -340,12 +377,6 @@ export default function AutomacaoBloqueio() {
                 onCheckedChange={v => setConfig({ ...config, sync_asaas_antes_bloqueio: v })}
                 data-testid="toggle-sync-asaas" />
             </div>
-            <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3">
-              <label className="text-xs text-zinc-400">Notificar cliente (WhatsApp) ao bloquear</label>
-              <Switch checked={config.notificar_admin}
-                onCheckedChange={v => setConfig({ ...config, notificar_admin: v })}
-                data-testid="toggle-notif" />
-            </div>
           </div>
 
           <details className="bg-zinc-900 rounded-lg p-3">
@@ -354,24 +385,30 @@ export default function AutomacaoBloqueio() {
             </summary>
             <div className="space-y-3 mt-3">
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Aviso 1 dia antes</label>
-                <Textarea rows={2} value={config.mensagem_aviso}
+                <label className="text-xs text-zinc-400 block mb-1">Lembrete D-3 (3 dias antes)</label>
+                <Textarea rows={4} value={config.mensagem_aviso}
                   onChange={e => setConfig({ ...config, mensagem_aviso: e.target.value })}
-                  className="bg-zinc-950 border-zinc-700 text-xs" data-testid="msg-aviso" />
+                  className="bg-zinc-950 border-zinc-700 text-xs font-mono" data-testid="msg-aviso" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 block mb-1">Alerta D-0 (vence hoje)</label>
+                <Textarea rows={4} value={config.mensagem_alerta_d0 || ''}
+                  onChange={e => setConfig({ ...config, mensagem_alerta_d0: e.target.value })}
+                  className="bg-zinc-950 border-zinc-700 text-xs font-mono" data-testid="msg-d0" />
               </div>
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Ao bloquear</label>
-                <Textarea rows={2} value={config.mensagem_bloqueado}
+                <Textarea rows={3} value={config.mensagem_bloqueado}
                   onChange={e => setConfig({ ...config, mensagem_bloqueado: e.target.value })}
-                  className="bg-zinc-950 border-zinc-700 text-xs" data-testid="msg-bloq" />
+                  className="bg-zinc-950 border-zinc-700 text-xs font-mono" data-testid="msg-bloq" />
               </div>
               <div>
                 <label className="text-xs text-zinc-400 block mb-1">Ao desbloquear (pagamento confirmado)</label>
                 <Textarea rows={2} value={config.mensagem_desbloqueado}
                   onChange={e => setConfig({ ...config, mensagem_desbloqueado: e.target.value })}
-                  className="bg-zinc-950 border-zinc-700 text-xs" data-testid="msg-desb" />
+                  className="bg-zinc-950 border-zinc-700 text-xs font-mono" data-testid="msg-desb" />
               </div>
-              <p className="text-xs text-zinc-500">Placeholders: <code>{'{nome}'}</code>, <code>{'{valor}'}</code>, <code>{'{vencimento}'}</code></p>
+              <p className="text-xs text-zinc-500">Placeholders disponíveis: <code>{'{nome}'}</code>, <code>{'{msisdn}'}</code>, <code>{'{valor}'}</code>, <code>{'{vencimento}'}</code>, <code>{'{data_bloqueio}'}</code>, <code>{'{data_expiracao}'}</code>, <code>{'{link}'}</code></p>
             </div>
           </details>
 
@@ -572,6 +609,9 @@ export default function AutomacaoBloqueio() {
       </div>
 
       {/* Modal - Adicionar Varios Clientes a Whitelist */}
+        </TabsContent>
+      </Tabs>
+
       {loteOpen && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setLoteOpen(false)}>
           <div className="bg-zinc-950 border border-zinc-800 rounded-lg max-w-3xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()} data-testid="modal-lote">
