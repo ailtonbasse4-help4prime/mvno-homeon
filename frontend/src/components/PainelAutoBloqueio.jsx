@@ -50,6 +50,10 @@ export default function PainelAutoBloqueio() {
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState(new Set());
   const [enviando, setEnviando] = useState(false);
+  const [editando, setEditando] = useState(null); // linha_id em edicao
+  const [novaData, setNovaData] = useState('');
+  const [loteExpOpen, setLoteExpOpen] = useState(false);
+  const [novaDataLote, setNovaDataLote] = useState('');
 
   const carregar = useCallback(async () => {
     setRefreshing(true);
@@ -181,6 +185,49 @@ export default function PainelAutoBloqueio() {
     URL.revokeObjectURL(url);
   };
 
+  const iniciarEdicao = (it) => {
+    setEditando(it.linha_id);
+    setNovaData(it.data_expiracao_ta || '');
+  };
+
+  const salvarEdicao = async (linha_id) => {
+    try {
+      await axios.put(`${API_URL}/api/automacao/bloqueio/linhas/${linha_id}/data-expiracao-ta`,
+        { data_expiracao_ta: novaData || null },
+        { withCredentials: true });
+      toast.success('Data atualizada');
+      setEditando(null);
+      setNovaData('');
+      await carregar();
+    } catch (e) {
+      toast.error('Erro: ' + (e.response?.data?.detail || e.message));
+    }
+  };
+
+  const aplicarLoteExpiracao = async () => {
+    if (!novaDataLote || !/^\d{4}-\d{2}-\d{2}$/.test(novaDataLote)) {
+      toast.error('Formato inválido. Use YYYY-MM-DD (ex: 2026-08-15)');
+      return;
+    }
+    if (selecionados.size === 0) {
+      toast.error('Selecione ao menos 1 linha');
+      return;
+    }
+    if (!window.confirm(`Aplicar data_expiracao_ta = ${novaDataLote} para ${selecionados.size} linha(s)?`)) return;
+    try {
+      const { data } = await axios.put(`${API_URL}/api/automacao/bloqueio/data-expiracao-ta/lote`,
+        { linha_ids: Array.from(selecionados), data_expiracao_ta: novaDataLote },
+        { withCredentials: true });
+      toast.success(`${data.atualizadas} linha(s) atualizada(s)`);
+      setLoteExpOpen(false);
+      setNovaDataLote('');
+      setSelecionados(new Set());
+      await carregar();
+    } catch (e) {
+      toast.error('Erro: ' + (e.response?.data?.detail || e.message));
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-zinc-500" /></div>;
   }
@@ -242,6 +289,10 @@ export default function PainelAutoBloqueio() {
             <Button onClick={() => enviarLembretes('d0')} disabled={enviando}
               className="bg-orange-700 hover:bg-orange-600 text-white" size="sm" data-testid="btn-lembrete-d0-massa">
               <Send className="w-4 h-4 mr-1" /> Enviar alerta D-0 ({selecionados.size})
+            </Button>
+            <Button onClick={() => setLoteExpOpen(true)} size="sm"
+              className="bg-blue-700 hover:bg-blue-600 text-white" data-testid="btn-editar-exp-lote">
+              <Zap className="w-4 h-4 mr-1" /> Definir Expiração Tá em lote
             </Button>
             <Button onClick={() => setSelecionados(new Set())} variant="outline" size="sm" className="border-zinc-700">
               Limpar seleção
@@ -315,7 +366,29 @@ export default function PainelAutoBloqueio() {
                         <span className="text-zinc-600">—</span>
                       )}
                     </td>
-                    <td className="p-2 font-mono">{formatBR(it.data_expiracao_ta)}</td>
+                    <td className="p-2 font-mono">
+                      {editando === it.linha_id ? (
+                        <div className="flex gap-1 items-center">
+                          <input type="date" value={novaData}
+                            onChange={(e) => setNovaData(e.target.value)}
+                            className="bg-zinc-900 border border-zinc-700 rounded px-1 py-0.5 text-xs"
+                            data-testid={`input-exp-${it.linha_id}`}
+                            autoFocus />
+                          <button onClick={() => salvarEdicao(it.linha_id)}
+                            className="text-emerald-400 hover:text-emerald-300 text-xs px-1"
+                            title="Salvar" data-testid={`btn-salvar-exp-${it.linha_id}`}>✓</button>
+                          <button onClick={() => { setEditando(null); setNovaData(''); }}
+                            className="text-red-400 hover:text-red-300 text-xs px-1"
+                            title="Cancelar">✕</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => iniciarEdicao(it)}
+                          className="text-left hover:bg-zinc-800 rounded px-1 py-0.5 min-w-[80px]"
+                          title="Clique para editar" data-testid={`edit-exp-${it.linha_id}`}>
+                          {it.data_expiracao_ta ? formatBR(it.data_expiracao_ta) : <span className="text-zinc-600 italic">— editar</span>}
+                        </button>
+                      )}
+                    </td>
                     <td className="p-2 font-mono text-yellow-300">{formatBR(it.bloqueio_homeon)}</td>
                     <td className="p-2 text-center">
                       {it.dias_ate_bloqueio != null ? (
@@ -344,6 +417,33 @@ export default function PainelAutoBloqueio() {
           </table>
         </div>
       </div>
+      {/* Modal edicao em lote */}
+      {loteExpOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setLoteExpOpen(false)}>
+          <div className="bg-zinc-950 border border-zinc-700 rounded-lg p-6 max-w-md w-full space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-emerald-400">Definir Expiração Tá em lote</h3>
+            <p className="text-sm text-zinc-400">
+              {selecionados.size} linha(s) selecionada(s). Todas ficarão com a mesma data de expiração Tá — o Bloqueio HOMEON será calculado automaticamente (= expiração − 2 dias).
+            </p>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">Nova data de Expiração Tá</label>
+              <input type="date" value={novaDataLote}
+                onChange={e => setNovaDataLote(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm"
+                data-testid="input-exp-lote" />
+              <p className="text-xs text-zinc-500 mt-1">Formato: YYYY-MM-DD (ex: 2026-08-15)</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button onClick={() => { setLoteExpOpen(false); setNovaDataLote(''); }} variant="outline" size="sm" className="border-zinc-700">
+                Cancelar
+              </Button>
+              <Button onClick={aplicarLoteExpiracao} className="bg-emerald-600 hover:bg-emerald-500" size="sm" data-testid="btn-aplicar-lote">
+                Aplicar a {selecionados.size} linha(s)
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
