@@ -1,0 +1,40 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "Botao 'Preencher Expiração Tá vazia (via Próx.Recarga)' no Painel Central retorna 'Not Found' quando clicado. Endpoint POST /api/automacao/bloqueio/popular-expiracao-de-recarga retorna HTTP 404 no VPS de producao mesmo com o arquivo /opt/mvno-homeon/backend/routes/automacao_bloqueio.py contendo o decorator @router.post('/popular-expiracao-de-recarga'). Outros endpoints do mesmo router (painel, enviar-lembrete, etc) funcionam normalmente.",
+  "summary": "No relevant testing skill found. Focused backend verification in preview: inspected router registration/code, confirmed route is in internal backend /openapi.json, unauthenticated POST returns 401 not 404, admin POST returns 200 with expected JSON keys, and GET painel still returns 200. Public preview /openapi.json is served by the frontend SPA, so OpenAPI proof was taken from internal backend http://127.0.0.1:8001/openapi.json.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/bug_verification_popular_expiracao_40.py",
+    "/app/test_reports/runtime_popular_expiracao_40.json",
+    "/app/test_reports/bug_verification_40.json",
+    "/app/test_reports/iteration_40.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Verified /app/backend/routes/automacao_bloqueio.py has @router.post('/popular-expiracao-de-recarga') on the router with prefix /automacao/bloqueio, and /app/backend/server.py includes that router under /api. Frontend button code calls `${API_URL}/api/automacao/bloqueio/popular-expiracao-de-recarga` with credentials.",
+    "Preview runtime evidence: POST without auth => 401 {detail: 'Nao autenticado'}; admin POST => 200 {'ok': True, 'atualizadas': 0, 'ja_preenchidas': 13, 'sem_proxima_recarga': 101, 'sem_proxima_recarga_invalida': 0}; GET painel => 200. This validates preview only, not the user's external production VPS deployment."
+  ],
+  "updated_files": [
+    "/app/tests/bug_verification_popular_expiracao_40.py",
+    "/app/test_reports/runtime_popular_expiracao_40.json",
+    "/app/test_reports/bug_verification_40.json",
+    "/app/test_reports/iteration_40.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "None. Used existing preview data; endpoint run was idempotent for already-filled rows in this environment.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run /app/tests/bug_verification_popular_expiracao_40.py. It uses REACT_APP_BACKEND_URL for API calls and internal http://127.0.0.1:8001/openapi.json for route registration because public /openapi.json on preview returns the frontend SPA.",
+  "rca_of_the_issue": "The reported 404 is not reproducible in preview after the fix/restart. The route is registered and reachable at POST /api/automacao/bloqueio/popular-expiracao-de-recarga. If production VPS still returns 404, likely deployment/runtime mismatch (old process, router not loaded in deployed server.py, wrong backend service behind proxy, or stale code), not the current preview code path. Runtime checks: [{\"name\": \"openapi route registered\", \"ok\": true, \"status_code\": 200, \"route_registered\": true}, {\"name\": \"unauthenticated POST returns auth error not 404\", \"ok\": true, \"status_code\": 401, \"body\": \"{\\\"detail\\\":\\\"Nao autenticado\\\"}\"}, {\"name\": \"admin login\", \"ok\": true, \"status_code\": 200, \"has_access_cookie\": true, \"body\": \"{\\\"id\\\":\\\"69cbfc5ee53a77ec56042df3\\\",\\\"email\\\":\\\"admin@mvno.com\\\",\\\"name\\\":\\\"Administrador\\\",\\\"role\\\":\\\"admin\\\",\\\"created_at\\\":\\\"2026-03-31T16:54:54.229000\\\"}\"}, {\"name\": \"authenticated POST popular-expiracao-de-recarga returns 200 valid JSON\", \"ok\": true, \"status_code\": 200, \"json\": {\"ok\": true, \"atualizadas\": 0, \"ja_preenchidas\": 13, \"sem_proxima_recarga\": 101, \"sem_proxima_recarga_invalida\": 0}, \"body\": null}, {\"name\": \"GET painel still works\", \"ok\": true, \"status_code\": 200, \"top_level_keys\": [\"hoje\", \"itens\", \"kpis\"], \"body\": null}]"
+}
