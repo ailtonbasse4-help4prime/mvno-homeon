@@ -378,6 +378,45 @@ def _normalize_date(v) -> Optional[str]:
     return None
 
 
+@router.get("/diagnosticar-ta/{linha_id}")
+async def diagnosticar_ta(linha_id: str, request: Request):
+    """Retorna a resposta BRUTA da Ta Telecom para uma linha — util para descobrir quais campos existem."""
+    user = await _require_admin(request)
+    if not _operadora_service:
+        raise HTTPException(status_code=400, detail="Operadora nao configurada")
+    try:
+        linha = await _db.linhas.find_one({"_id": ObjectId(linha_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="linha_id invalido")
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+    chip_id = linha.get("chip_id")
+    chip = await _db.chips.find_one({"_id": ObjectId(chip_id)}) if chip_id else None
+    iccid = chip.get("iccid") if chip else None
+    if not iccid:
+        raise HTTPException(status_code=400, detail="Linha sem ICCID")
+    resp = await _operadora_service.consultar_linha(
+        iccid=iccid, db=_db, user_id=user["id"], user_name=user["name"],
+    )
+    raw = getattr(resp, "data", None) or {}
+    extracted = await _extrair_data_expiracao(raw)
+    return {
+        "linha_id": linha_id,
+        "iccid": iccid,
+        "msisdn": linha.get("msisdn"),
+        "success": getattr(resp, "success", False),
+        "message": getattr(resp, "message", None),
+        "raw_response": raw,
+        "extracted_data_expiracao": extracted,
+        "campos_procurados": [
+            "data_expiracao", "expiration_date", "plan_expiration", "expira_em",
+            "expiresAt", "expiration", "expires", "valid_until", "validade",
+            "prox_recarga", "next_recharge", "planExpiration", "expiration_plan",
+            "dataExpiracao", "endDate", "end_date",
+        ],
+    }
+
+
 @router.post("/sincronizar-expiracao-ta")
 async def sincronizar_expiracao_ta(request: Request):
     """Consulta a API Ta para cada linha ativa e salva data_expiracao_ta no banco."""
@@ -385,7 +424,7 @@ async def sincronizar_expiracao_ta(request: Request):
     if not _operadora_service or not getattr(_operadora_service, "is_configured", True):
         raise HTTPException(status_code=400, detail="Operadora nao configurada")
 
-    linhas = await _db.linhas.find({"status": "ativo"}).to_list(5000)
+    linhas = await _db.linhas.find({"status": {"$in": ["ativo", "bloqueado"]}}).to_list(5000)
     updated = 0
     sem_expiracao = 0
     erros = []
@@ -1587,6 +1626,86 @@ async def executar_alerta_d0(request: Request):
     r = await _executar_job_alerta_d0()
     await _create_log("automacao_bloqueio", f"Job D-0 disparado manualmente por {user['name']}", user["id"], user["name"])
     return r
+
+
+class EditarExpiracaoTaRequest(BaseModel):
+    data_expiracao_ta: Optional[str] = None  # formato YYYY-MM-DD ou null para limpar
+
+
+@router.put("/linhas/{linha_id}/data-expiracao-ta")
+async def editar_data_expiracao_ta(linha_id: str, data: EditarExpiracaoTaRequest, request: Request):
+    """Permite ao admin definir/limpar manualmente a data_expiracao_ta de uma linha.
+
+    Uso: quando a Ta Telecom nao retorna a data via API (linha bloqueada, chip antigo, etc)
+    o admin pode gravar manualmente. Formato aceito: YYYY-MM-DD (ex: 2026-08-15) ou null para limpar.
+    """
+    user = await _require_admin(request)
+    try:
+        oid = ObjectId(linha_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="linha_id invalido")
+
+    linha = await _db.linhas.find_one({"_id": oid})
+    if not linha:
+        raise HTTPException(status_code=404, detail="Linha nao encontrada")
+
+    nova_data = data.data_expiracao_ta
+    if nova_data:
+        nova_data = nova_data.strip()
+        if not _is_valid_iso_date(nova_data):
+            raise HTTPException(status_code=400, detail="Formato invalido. Use YYYY-MM-DD (ex: 2026-08-15)")
+        nova_data = nova_data[:10]
+
+    await _db.linhas.update_one(
+        {"_id": oid},
+        {"$set": {
+            "data_expiracao_ta": nova_data,
+            "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
+            "data_expiracao_ta_editada_manual_por": user["name"],
+        }}
+    )
+    await _create_log(
+        "automacao_bloqueio",
+        f"data_expiracao_ta editada manualmente para linha {linha.get('msisdn') or linha_id}: {nova_data or 'LIMPO'}",
+        user["id"], user["name"],
+    )
+    return {"ok": True, "linha_id": linha_id, "data_expiracao_ta": nova_data}
+
+
+class EditarExpiracaoLoteRequest(BaseModel):
+    linha_ids: List[str]
+    data_expiracao_ta: str  # YYYY-MM-DD
+
+
+@router.put("/data-expiracao-ta/lote")
+async def editar_data_expiracao_ta_lote(data: EditarExpiracaoLoteRequest, request: Request):
+    """Edicao em massa: aplica a mesma data_expiracao_ta a varias linhas."""
+    user = await _require_admin(request)
+    if not _is_valid_iso_date(data.data_expiracao_ta):
+        raise HTTPException(status_code=400, detail="Formato invalido. Use YYYY-MM-DD")
+    nova = data.data_expiracao_ta[:10]
+    oids = []
+    for lid in data.linha_ids:
+        try:
+            oids.append(ObjectId(lid))
+        except Exception:
+            pass
+    if not oids:
+        raise HTTPException(status_code=400, detail="Nenhum linha_id valido")
+    r = await _db.linhas.update_many(
+        {"_id": {"$in": oids}},
+        {"$set": {
+            "data_expiracao_ta": nova,
+            "data_expiracao_ta_sync_em": datetime.now(timezone.utc),
+            "data_expiracao_ta_editada_manual_por": user["name"],
+        }}
+    )
+    await _create_log(
+        "automacao_bloqueio",
+        f"data_expiracao_ta em lote: {nova} aplicado a {r.modified_count} linhas",
+        user["id"], user["name"],
+    )
+    return {"ok": True, "atualizadas": r.modified_count, "total": len(oids)}
 
 
 
