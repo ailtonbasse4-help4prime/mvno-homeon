@@ -1,0 +1,16 @@
+{
+  "summary": "Validated bug fix for POST /api/automacao/bloqueio/popular-expiracao-de-recarga in preview. All 3 targeted tests passed: (1) endpoint does NOT return 404 without auth (returns 401/403 confirming route registered), (2) GET /api/automacao/bloqueio/painel returns 200 confirming router is mounted, (3) POST endpoint authenticated as admin@mvno.com returns HTTP 200 with expected JSON schema {ok:true, atualizadas, ja_preenchidas, sem_proxima_recarga, sem_proxima_recarga_invalida}.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_automacao_bloqueio_popular.py", "/app/test_reports/pytest/popular_expiracao.xml"],
+  "action_items": ["User-reported 'not found' is VPS-production-only; preview is healthy. Main agent should check on the VPS: (a) that VPS backend was redeployed with latest code including routes/automacao_bloqueio.py and the server.py L6270-6280 include_router block; (b) any reverse-proxy (nginx/traefik) path rewriting stripping /api/automacao/bloqueio; (c) compare deployed commit SHA vs repo HEAD."],
+  "critical_code_review_comments": [],
+  "updated_files": ["/app/backend/tests/test_automacao_bloqueio_popular.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A"},
+  "test_credentials": "admin@mvno.com / admin123 (works in preview)",
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Endpoint popular-expiracao-de-recarga confirmed working in preview. If VPS still returns 404, it's a deployment/proxy issue not a code issue.",
+  "rca of the issue": "In preview environment the endpoint works correctly (HTTP 200 with expected JSON). The 'not found' reported by the user is exclusive to the VPS production environment and is out of scope for the preview testing agent. Most likely causes on VPS: stale build without the automacao_bloqueio router registration, or a reverse proxy misrouting the /api/automacao/bloqueio/* path."
+}
