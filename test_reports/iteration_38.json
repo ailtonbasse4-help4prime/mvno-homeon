@@ -1,0 +1,38 @@
+{
+  "summary": "Tested new Painel Central + D-3/D-0 automation feature (backend + frontend). Created /app/backend/tests/test_painel_auto_bloqueio.py with 6 pytest tests covering: painel structure and 8 situacoes (em_dia/avisar/vence_hoje/vencido/bloqueado/vip/confianca/sem_expiracao), PUT /config new fields (hora_alerta_d0/enviar_lembrete_d3/enviar_alerta_d0/executar_bloqueio_auto/mensagem_alerta_d0) plus 400 validation for out-of-range hours, POST /enviar-lembrete tipo validation + d3 dedup + d0 no-dedup, POST /executar-lembrete-d3 and /executar-alerta-d0 job endpoints, and non-regression /simular D-2 rule (exp>hoje+2 excluded). All 6 tests PASS. Frontend Playwright: verified tab-painel + tab-config load, all documented data-testids exist (KPIs, filters, table, atualizar, export-csv, disparar-d3/d0, check-todos, input-hora-d0, toggles-d3/d0/bloq-auto, msg-d0, btn-salvar-config), painel loads 116 real linhas from DB with correct KPIs (Ativas=94, A vencer 7d=1, Vence HOJE=0, Bloqueadas=22, Sem exp=92), filter clicks and refresh work. No console/UI errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/automacao/bloqueio/enviar-lembrete (and jobs D-3/D-0)", "issue": "_enviar_lembrete_para_cliente treats zapi_service.send_text as a raising API but the service returns {success:False,error:...} without raising. So a failed Z-API send is counted as 'enviado' AND a dedup log entry is inserted for D-3, which then blocks legitimate retries next hour. Fix: check return dict's success flag before recording dedup / incrementing enviados."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_painel_auto_bloqueio.py",
+    "/app/backend/tests/test_bug_verification_iteration37.py",
+    "/app/test_reports/pytest/painel_results.xml"
+  ],
+  "action_items": [
+    "Consider fixing _enviar_lembrete_para_cliente to respect zapi_service.send_text return dict ({'success': bool, 'error': ...}); currently a failed send falsely records a dedup log and inflates 'enviados' counter.",
+    "test_bug_verification_iteration37.py has a hard-coded date assertion (today == 2026-07-24) that will fail on any other day; consider parametrizing or dropping the assertion so it does not become a flaky/failing test as time moves forward."
+  ],
+  "critical_code_review_comments": [
+    "automacao_bloqueio.py at 1750 lines exceeds the 700-line guideline; recommend splitting into painel.py / jobs.py / whitelist.py modules.",
+    "PainelAutoBloqueio.jsx uses process.env.REACT_APP_BACKEND_URL correctly; axios calls all use withCredentials=true — OK.",
+    "hora_alerta_d0 validation on PUT /config is correct (0-23) and rejects 25 and -1 with 400.",
+    "Dedup collection automacao_lembretes_log is only written for tipo=d3 (correct per spec), and painel exposes lembrete_d3_enviado flag per linha (verified in response)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_painel_auto_bloqueio.py"
+  ],
+  "success_rate": {"backend": "100% (6/6 pytest tests passed)", "frontend": "100% for testids and core UI flows"},
+  "test_credentials": "admin@mvno.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Seeded 9 Mongo fixtures with prefix TEST_PAINEL_* per test (em_dia, avisar, vence_hoje, vencido, bloqueado, sem_exp, vip, confianca, d3_target). All cleaned up in finally block; verified DB is clean after test run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To rerun: `set -a && source /app/backend/.env && set +a && pytest /app/backend/tests/test_painel_auto_bloqueio.py -v`. Login helper in fixture extracts access_token cookie and sets Authorization: Bearer header (session cookies alone do not survive requests-lib across preview ingress). Backend send_text does NOT raise on failure — tests still pass because response structure is validated, not actual WhatsApp delivery."
+}
