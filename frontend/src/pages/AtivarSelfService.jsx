@@ -206,8 +206,19 @@ export default function AtivarSelfService() {
       setError('CPF invalido — verifique os digitos'); return;
     }
     const telNum = form.telefone.replace(/\D/g, '');
-    if (telNum.length < 10 || telNum.length > 11) {
-      setError('Telefone invalido — deve ter 10 ou 11 digitos com DDD'); return;
+    if (telNum.length !== 11) {
+      setError('WhatsApp inválido — deve ter 11 dígitos com DDD (ex: 11999998888)'); return;
+    }
+    // Celular BR: apos DDD (2 digitos), o proximo digito deve ser 9
+    if (telNum[2] !== '9') {
+      setError('WhatsApp inválido — precisa ser celular (após o DDD deve começar com 9). Fixo não recebe WhatsApp.'); return;
+    }
+    // Se estiver fazendo portabilidade, o WhatsApp NAO pode ser o mesmo numero que ele esta portando
+    if (form.portability) {
+      const portFull = (form.port_ddd || '').replace(/\D/g, '') + (form.port_number || '').replace(/\D/g, '');
+      if (portFull && portFull === telNum) {
+        setError('O WhatsApp de contato não pode ser o mesmo número da portabilidade (a linha nova ainda não estará ativa).'); return;
+      }
     }
     const cepNum = form.cep.replace(/\D/g, '');
     if (cepNum.length !== 8) {
@@ -459,9 +470,12 @@ export default function AtivarSelfService() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-zinc-300 text-xs">Telefone *</Label>
+                  <Label className="text-zinc-300 text-xs">WhatsApp *</Label>
                   <Input value={form.telefone} onChange={e => updateForm('telefone', e.target.value)}
                     className="form-input" placeholder="(11) 99999-9999" data-testid="telefone-input" />
+                  <p className="text-[10px] text-yellow-500/80 mt-1">
+                    ⚠️ Precisa ser um <strong>celular com WhatsApp</strong>, diferente do número novo que está ativando. Fixo NÃO funciona.
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -889,7 +903,7 @@ export default function AtivarSelfService() {
               <ConfRow label="Nome" value={form.nome} />
               <ConfRow label="CPF" value={form.documento} />
               <ConfRow label="Data nascimento" value={form.data_nascimento} />
-              <ConfRow label="Telefone contato" value={form.telefone} />
+              <ConfRow label="WhatsApp" value={form.telefone} />
               {form.email && <ConfRow label="E-mail" value={form.email} />}
               <div className="border-t border-zinc-800 pt-2 mt-2">
                 <p className="text-xs text-zinc-500 mb-1">Endereço</p>
