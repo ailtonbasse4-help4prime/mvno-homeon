@@ -375,9 +375,27 @@ export function AtivacoesSelfService() {
                           </span>
                         )}
                         {a.status === 'ativando' && (
-                          <span className="text-blue-400 text-xs flex items-center gap-1">
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Processando
-                          </span>
+                          <>
+                            <span className="text-blue-400 text-xs flex items-center gap-1">
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Processando
+                            </span>
+                            <Button size="sm" variant="outline" onClick={() => handleSincronizar(a.id)}
+                              disabled={submitting === a.id}
+                              className="h-7 px-2 text-xs border-blue-500/50 text-blue-300 hover:bg-blue-500/10"
+                              title="Consulta a Tá para atualizar status (útil se ficou travado)"
+                              data-testid={`sinc-processando-btn-${a.id}`}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 mr-1" /> Sincronizar
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleCancel(a.id)}
+                              disabled={submitting === a.id}
+                              className="h-7 px-2 text-xs border-red-700/50 text-red-400 hover:bg-red-500/10"
+                              title="Cancela a ativação travada e libera o chip"
+                              data-testid={`cancel-processando-btn-${a.id}`}
+                            >
+                              <XCircle className="w-3.5 h-3.5 mr-1" /> Cancelar
+                            </Button>
+                          </>
                         )}
                       </div>
                     </td>
