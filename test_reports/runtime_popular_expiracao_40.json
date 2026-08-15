@@ -1,0 +1,50 @@
+{
+  "base_url": "https://chip-manager-3.preview.emergentagent.com",
+  "timestamp": 1785023823,
+  "results": [
+    {
+      "name": "openapi route registered",
+      "ok": true,
+      "status_code": 200,
+      "route_registered": true
+    },
+    {
+      "name": "unauthenticated POST returns auth error not 404",
+      "ok": true,
+      "status_code": 401,
+      "body": "{\"detail\":\"Nao autenticado\"}"
+    },
+    {
+      "name": "admin login",
+      "ok": true,
+      "status_code": 200,
+      "has_access_cookie": true,
+      "body": "{\"id\":\"69cbfc5ee53a77ec56042df3\",\"email\":\"admin@mvno.com\",\"name\":\"Administrador\",\"role\":\"admin\",\"created_at\":\"2026-03-31T16:54:54.229000\"}"
+    },
+    {
+      "name": "authenticated POST popular-expiracao-de-recarga returns 200 valid JSON",
+      "ok": true,
+      "status_code": 200,
+      "json": {
+        "ok": true,
+        "atualizadas": 0,
+        "ja_preenchidas": 13,
+        "sem_proxima_recarga": 101,
+        "sem_proxima_recarga_invalida": 0
+      },
+      "body": null
+    },
+    {
+      "name": "GET painel still works",
+      "ok": true,
+      "status_code": 200,
+      "top_level_keys": [
+        "hoje",
+        "itens",
+        "kpis"
+      ],
+      "body": null
+    }
+  ],
+  "all_passed": true
+}

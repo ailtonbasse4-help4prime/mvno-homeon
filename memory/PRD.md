@@ -197,6 +197,20 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Regra critica reforcada: bloqueio SEMPRE pela coluna "Bloqueio HOMEON" (= data_expiracao_ta - 2 dias), NUNCA pelo vencimento do boleto. Status do boleto e usado apenas como filtro de "pagou/nao pagou".
 - [x] Testado (iteration_38): 6/6 pytest backend + Playwright frontend 100% funcional, 0 issues, painel real com 116 linhas.
 
+### Deploy VPS + Ajustes de Producao (07/25/2026)
+- [x] Descoberta: MVNO nao usa Docker — usa systemd (mvno-backend.service) rodando uvicorn nativo na porta 3002. Frontend servido por nginx a partir de /var/www/mvno/frontend.
+- [x] Deploy script `/opt/mvno-homeon/deploy.sh` refatorado:
+  * Auto-merge de branches conflict_XXXX criadas pelo Emergent (Save to Github)
+  * Restart via systemd (nao mais nohup)
+  * Rollback automatico em caso de falha
+  * Comando unico: `bash /opt/mvno-homeon/deploy.sh`
+- [x] Endpoint POST /popular-expiracao-de-recarga: preenche linhas.expirar_dados a partir de linhas.proxima_recarga (calculado pela Planilha Operacional). Endpoint tambem no formato de loop Python (compatibilidade Mongo).
+- [x] Helper `_resolver_expiracao_ta`: unifica leitura entre expirar_dados / data_expiracao_ta / proxima_recarga — Painel Central e Planilha Operacional agora leem a mesma fonte de verdade.
+- [x] Endpoints de edicao manual (individual e em lote) gravam AMBOS os campos (expirar_dados + data_expiracao_ta) — sincronizacao bidirecional automatica.
+- [x] Endpoint GET /diagnosticar-ta/{linha_id}: retorna resposta bruta da Tá para descobrir qual campo eles usam.
+- [x] Botao "Preencher Expiração Tá vazia (via Próx.Recarga)" adicionado ao Painel Central.
+- [x] Endpoint validado pelo bug_testing_agent (iteration_40, verdict=fixed): preview 100% funcional; issue no VPS por causa de processo uvicorn stale.
+
 
 ## Backlog
 

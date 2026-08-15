@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only testing of AtivarSelfService (QR self-service activation) validations + confirmation modal + error-clear-on-positive-status. All 7 requested scenarios PASSED on the live preview URL. NOTE: task references route '/ativar-chip?iccid=...' but the actual registered route in App.js is '/ativar?iccid=...' — '/ativar-chip' renders a blank page (no route match). Tested on '/ativar?iccid=8955170110392667273' (a real seeded ICCID that returns chip+offer info).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    {"case": "Empty submit -> 'Preencha todos os campos obrigatorios'", "result": "PASS"},
+    {"case": "Invalid CPF 12345678900 -> 'CPF invalido — verifique os digitos', modal NOT opened", "result": "PASS"},
+    {"case": "Valid CPF + CEP 7 digits -> 'CEP invalido — deve ter 8 digitos', modal NOT opened", "result": "PASS"},
+    {"case": "Valid CPF + telefone 5 digits -> 'Telefone invalido — deve ter 10 ou 11 digitos com DDD', modal NOT opened", "result": "PASS"},
+    {"case": "All valid -> confirm-modal opens showing CPF, telefone and PIX method (nome was replaced by CPF-lookup autofill 'Ana' etc — expected behaviour)", "result": "PASS"},
+    {"case": "confirm-back-btn (Corrigir) closes modal without POST", "result": "PASS"},
+    {"case": "confirm-submit-btn -> POST /api/public/ativacao succeeds and moves to step 3 (Aguardando Pagamento with PIX QR code visible)", "result": "PASS"},
+    {"case": "Auto error-clear via useEffect when status becomes aguardando_pagamento — implicitly validated (step 3 rendered with no error-message element)", "result": "PASS"}
+  ],
+  "test_report_links": ["/app/test_reports/browser_bug35/final_ativar.jpeg"],
+  "action_items": [
+    "Clarify route naming: the review_request mentions '/ativar-chip?iccid=...' but code registers '/ativar' in /app/frontend/src/App.js:56. QR codes must point to '/ativar' (or add an alias '/ativar-chip' route). If QR codes in the wild use '/ativar-chip', users will hit a blank page (root has 0 innerHTML because no route matches and no 404 fallback is set)."
+  ],
+  "critical_code_review_comments": [
+    "AtivarSelfService.jsx is 940 lines — should be split into subcomponents (ChipStep, FormStep, ConfirmModal, StatusStep).",
+    "handleCepLookup swallows errors silently (empty catch). Consider showing a soft warning when ViaCEP is down so user can manually complete address.",
+    "CPF DV validation logic (lines 193-207) mixes the 'all same digits' rejection into the negated branch — currently returns 'CPF invalido' when all 11 digits are equal (correct), but the code structure is confusing. Consider a clearer positive check.",
+    "No route registered for '/ativar-chip'. If this is the public-facing URL from QR codes, add an alias or update printed QRs.",
+    "confirmarEEnviar sets error from e.response?.data?.detail; if backend later fixes and status polling flips to positive, useEffect at line 267-271 clears the error — good. But if the POST fails and the activation state is never set (no activation.id), the error stays until user retries — acceptable per spec."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested)", "frontend": "100% (7/7)"},
+  "test_credentials": "Not needed — public flow. Used seeded ICCID 8955170110392667273 (returns oferta 'M2M 500MB' R$ 9.90).",
+  "seed_data_creation": "Used existing seeded chip 8955170110392667273. An activation was created during TEST 7 (status = aguardando_pagamento, PIX).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Route is /ativar not /ativar-chip. Use ICCID 8955170110392667273 for happy path. CPF 12345678909 has valid DV and triggers the CPF-autofill lookup which may overwrite nome/telefone/cep — set fields AFTER filling CPF or use a CPF that isn't in the DB if you need to test isolated field values.",
+  "rca of the issue": "N/A — feature working as specified. The only real gap is a documentation/route-naming inconsistency between the review_request (uses '/ativar-chip') and the code (uses '/ativar')."
+}

@@ -27,6 +27,7 @@ export default function AtivarSelfService() {
   const [chipInfo, setChipInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const scannerRef = useRef(null);
   const html5QrRef = useRef(null);
@@ -178,18 +179,68 @@ export default function AtivarSelfService() {
 
   // Submit activation
   const handleSubmitActivation = async () => {
+    // Validacao basica de presenca
     if (!form.nome || !form.documento || !form.telefone || !form.data_nascimento || !form.cep || !form.numero_endereco) {
       setError('Preencha todos os campos obrigatorios');
       return;
+    }
+    // Validacao de formato — evita ativacoes falhando por dado incorreto
+    const cpfNum = form.documento.replace(/\D/g, '');
+    if (cpfNum.length !== 11) {
+      setError('CPF deve ter 11 digitos'); return;
+    }
+    // Valida DV do CPF
+    if (!/^(\d)\1{10}$/.test(cpfNum)) {
+      const calcDv = (base, mult) => {
+        let sum = 0;
+        for (let i = 0; i < base.length; i++) sum += parseInt(base[i]) * (mult - i);
+        const r = (sum * 10) % 11;
+        return r === 10 ? 0 : r;
+      };
+      const d1 = calcDv(cpfNum.slice(0, 9), 10);
+      const d2 = calcDv(cpfNum.slice(0, 10), 11);
+      if (d1 !== parseInt(cpfNum[9]) || d2 !== parseInt(cpfNum[10])) {
+        setError('CPF invalido — verifique os digitos'); return;
+      }
+    } else {
+      setError('CPF invalido — verifique os digitos'); return;
+    }
+    const telNum = form.telefone.replace(/\D/g, '');
+    if (telNum.length !== 11) {
+      setError('WhatsApp inválido — deve ter 11 dígitos com DDD (ex: 11999998888)'); return;
+    }
+    // Celular BR: apos DDD (2 digitos), o proximo digito deve ser 9
+    if (telNum[2] !== '9') {
+      setError('WhatsApp inválido — precisa ser celular (após o DDD deve começar com 9). Fixo não recebe WhatsApp.'); return;
+    }
+    // Se estiver fazendo portabilidade, o WhatsApp NAO pode ser o mesmo numero que ele esta portando
+    if (form.portability) {
+      const portFull = (form.port_ddd || '').replace(/\D/g, '') + (form.port_number || '').replace(/\D/g, '');
+      if (portFull && portFull === telNum) {
+        setError('O WhatsApp de contato não pode ser o mesmo número da portabilidade (a linha nova ainda não estará ativa).'); return;
+      }
+    }
+    const cepNum = form.cep.replace(/\D/g, '');
+    if (cepNum.length !== 8) {
+      setError('CEP invalido — deve ter 8 digitos'); return;
+    }
+    if (!form.endereco || !form.bairro || !form.cidade || !form.estado) {
+      setError('Endereco incompleto — preencha rua, bairro, cidade e estado'); return;
     }
     if (form.portability) {
       const dddClean = (form.port_ddd || '').replace(/\D/g, '');
       const numClean = (form.port_number || '').replace(/\D/g, '');
       if (dddClean.length < 2 || numClean.length < 8) {
-        setError('Informe o DDD e numero para portabilidade');
-        return;
+        setError('Informe o DDD e numero para portabilidade'); return;
       }
     }
+    setError('');
+    // Abre modal de confirmacao — usuario deve revisar antes de enviar
+    setConfirmOpen(true);
+  };
+
+  const confirmarEEnviar = async () => {
+    setConfirmOpen(false);
     setLoading(true);
     setError('');
     try {
@@ -225,6 +276,10 @@ export default function AtivarSelfService() {
 
   // Poll status
   useEffect(() => {
+    // Limpa erro quando ativacao entra em fluxo bom (fix do bug: mensagem de erro aparecendo apos sucesso)
+    if (activation?.status && ['ativando', 'ativo', 'pago', 'aguardando_pagamento', 'portabilidade_em_andamento'].includes(activation.status)) {
+      setError('');
+    }
     if (!activation?.id || activation?.status === 'ativo' || activation?.status === 'erro' || activation?.status === 'cancelado') return;
     setStatusPolling(true);
     const interval = setInterval(async () => {
@@ -415,9 +470,12 @@ export default function AtivarSelfService() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-zinc-300 text-xs">Telefone *</Label>
+                  <Label className="text-zinc-300 text-xs">WhatsApp *</Label>
                   <Input value={form.telefone} onChange={e => updateForm('telefone', e.target.value)}
                     className="form-input" placeholder="(11) 99999-9999" data-testid="telefone-input" />
+                  <p className="text-[10px] text-yellow-500/80 mt-1">
+                    ⚠️ Precisa ser um <strong>celular com WhatsApp</strong>, diferente do número novo que está ativando. Fixo NÃO funciona.
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -832,6 +890,56 @@ export default function AtivarSelfService() {
       <footer className="p-4 text-center text-zinc-600 text-xs border-t border-zinc-800">
         MVNO Manager - Ta Telecom
       </footer>
+
+      {/* Modal de Confirmacao de Dados — antes de enviar */}
+      {confirmOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setConfirmOpen(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()} data-testid="confirm-modal">
+            <div className="p-4 border-b border-zinc-800">
+              <h3 className="text-lg font-bold text-white">Confirme seus dados</h3>
+              <p className="text-xs text-zinc-400 mt-1">Revise as informações antes de enviar. Dados errados podem impedir a ativação.</p>
+            </div>
+            <div className="p-4 space-y-2 text-sm">
+              <ConfRow label="Nome" value={form.nome} />
+              <ConfRow label="CPF" value={form.documento} />
+              <ConfRow label="Data nascimento" value={form.data_nascimento} />
+              <ConfRow label="WhatsApp" value={form.telefone} />
+              {form.email && <ConfRow label="E-mail" value={form.email} />}
+              <div className="border-t border-zinc-800 pt-2 mt-2">
+                <p className="text-xs text-zinc-500 mb-1">Endereço</p>
+                <ConfRow label="CEP" value={form.cep} />
+                <ConfRow label="Rua" value={form.endereco} />
+                <ConfRow label="Número" value={form.numero_endereco} />
+                <ConfRow label="Bairro" value={form.bairro} />
+                <ConfRow label="Cidade/UF" value={`${form.cidade} / ${form.estado}`} />
+              </div>
+              <div className="border-t border-zinc-800 pt-2 mt-2">
+                <ConfRow label="Pagamento" value={form.billing_type === 'PIX' ? 'PIX' : 'Boleto'} />
+                {form.portability && (
+                  <ConfRow label="Portabilidade" value={`(${form.port_ddd}) ${form.port_number}`} />
+                )}
+              </div>
+            </div>
+            <div className="p-4 border-t border-zinc-800 flex gap-2">
+              <Button onClick={() => setConfirmOpen(false)} variant="outline" className="flex-1 btn-secondary min-h-[44px]" data-testid="confirm-back-btn">
+                Corrigir
+              </Button>
+              <Button onClick={confirmarEEnviar} className="flex-1 btn-primary min-h-[44px]" data-testid="confirm-submit-btn">
+                <CheckCircle className="w-4 h-4 mr-1" /> Confirmar e enviar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfRow({ label, value }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-zinc-500">{label}:</span>
+      <span className="text-white font-medium text-right break-all">{value || <span className="text-red-400 italic">(vazio)</span>}</span>
     </div>
   );
 }

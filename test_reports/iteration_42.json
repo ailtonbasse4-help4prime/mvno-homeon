@@ -1,0 +1,30 @@
+{
+  "summary": "Verified fix for bug: self-service activations stuck in status='ativando' (Processando) can now be cancelled/synced from the admin UI. Backend endpoint POST /api/ativacoes-selfservice/{id}/cancelar correctly accepts status='ativando' and transitions to 'cancelado'. Frontend row shows both 'Sincronizar' (sinc-processando-btn-<id>) and 'Cancelar' (cancel-processando-btn-<id>) buttons alongside the 'Processando' spinner. End-to-end cancel flow works and list refreshes with new status. Regression: 'ativo' rows remain blocked from cancellation (400) and show only 'Concluido'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AtivacoesSelfService search", "issues": ["Search input lowercases the query but compares against raw a.iccid (not lowercased), so uppercase letters in ICCID (e.g. 'UIB') don't match user-typed lowercase. Not part of this bug scope but worth mentioning."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_cancel_ativando_selfservice.py",
+    "/app/test_reports/pytest/pytest_bug_cancel_ativando.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Search filter in AtivacoesSelfService.jsx lowercases search term but compares against raw a.iccid without lowercasing (line ~165). Minor UX quirk.",
+    "cancelar endpoint in server.py L5728 only blocks status='ativo'; consider also blocking 'cancelado' to avoid no-op double cancels (currently returns success even if already cancelado)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_cancel_ativando_selfservice.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@mvno.com / admin123",
+  "seed_data_creation": "Seeded one ativacoes_selfservice doc with status='ativando' and ICCID '89551700000000000UIB' for UI test; cleaned up after test. Backend pytest seeds its own TEST_BUG_PROCESSANDO doc and cleans up via fixture.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_cancel_ativando_selfservice.py (3/3 passing). UI verified manually via Playwright: filter by status='Ativando' to find stuck rows; both Sincronizar+Cancelar buttons appear next to the Processando spinner. Cancel transitions the row to 'Cancelado' which then shows no action buttons.",
+  "rca of the issue": "Bug reported by user: cliente 'Redinei Padro' stuck in 'Processando' with no action buttons. Root cause: original UI only rendered a spinner for status='ativando' without any admin controls, even though the backend cancelar endpoint already accepted 'ativando'. Fix (already applied by main agent): render Sincronizar (data-testid=sinc-processando-btn-<id>) and Cancelar (data-testid=cancel-processando-btn-<id>) buttons in the ativando branch of the actions cell. Verified end-to-end."
+}

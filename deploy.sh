@@ -4,13 +4,15 @@
 # ============================================================================
 # Como usar na sua VPS:
 #   1. cd /opt/mvno-homeon
-#   2. git pull   (pra pegar a versao mais recente do deploy.sh)
-#   3. bash deploy.sh
+#   2. bash deploy.sh
 # ============================================================================
-# REGRAS CRITICAS:
-#  - NUNCA roda comandos destrutivos no MongoDB ($unset, deleteMany)
-#  - Preserva todas as edicoes manuais do usuario
-#  - Faz rollback automatico se backend nao subir
+# REGRAS CRITICAS (validadas por SAFETY GUARDS no inicio do script):
+#  - NUNCA toca /opt/homeon-crm (CRM Atendimento)
+#  - NUNCA toca Docker (homeon-crm-*)
+#  - NUNCA toca portas 3001, 8001, 27017 (reservadas do CRM)
+#  - NUNCA modifica nginx sites do atendimento
+#  - NUNCA roda 'docker compose down'
+#  - Rollback automatico se backend nao subir
 # ============================================================================
 
 set -e  # aborta no primeiro erro
@@ -18,6 +20,61 @@ set -e  # aborta no primeiro erro
 REPO=/opt/mvno-homeon
 WEB_DIR=/var/www/mvno/frontend
 LOG=/var/log/mvno-backend.log
+MVNO_PORT=3002
+MVNO_SERVICE=mvno-backend.service
+MVNO_NGINX=/etc/nginx/sites-enabled/app-ativacao
+
+# ============================================================================
+# SAFETY GUARDS — abortam ANTES de qualquer mudanca se algo estiver errado
+# ============================================================================
+echo "→ Verificando regras de seguranca..."
+
+# Guard 1: estamos na pasta certa
+if [ "$(pwd)" != "$REPO" ] && [ -d "$REPO" ]; then
+    cd "$REPO"
+fi
+if [ ! -d "$REPO/backend" ] || [ ! -d "$REPO/frontend" ]; then
+    echo "❌ SAFETY: nao estamos em $REPO ou estrutura invalida"
+    exit 1
+fi
+
+# Guard 2: o repo git deve ser 'mvno-homeon' (nunca CRM)
+REMOTE_URL=$(git -C "$REPO" remote get-url origin 2>/dev/null || echo "")
+if [[ "$REMOTE_URL" == *"homeon-crm"* ]] || [[ "$REMOTE_URL" == *"atendimento"* ]]; then
+    echo "❌ SAFETY: git remote aponta para repo do CRM Atendimento — abortando"
+    echo "   URL detectada: $REMOTE_URL"
+    exit 1
+fi
+if [[ "$REMOTE_URL" != *"mvno-homeon"* ]]; then
+    echo "⚠️  AVISO: git remote nao parece ser mvno-homeon: $REMOTE_URL"
+    echo "   Continue apenas se tiver certeza. Pressione Ctrl+C para abortar."
+    sleep 3
+fi
+
+# Guard 3: containers do CRM Atendimento devem estar rodando (sinal que nao vamos atropela-los)
+CRM_CONTAINERS=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c "^homeon-crm-" || echo "0")
+if [ "$CRM_CONTAINERS" -eq 0 ]; then
+    echo "⚠️  AVISO: containers homeon-crm-* nao encontrados. CRM Atendimento pode estar parado."
+fi
+
+# Guard 4: portas reservadas do CRM devem estar ocupadas pelo Docker (nao pelo nosso backend)
+CRM_PORT_8001=$(ss -tlnp 2>/dev/null | awk '$4 ~ /:8001$/{print $NF}' | head -1 || echo "")
+if [[ -n "$CRM_PORT_8001" ]] && [[ "$CRM_PORT_8001" != *"docker-proxy"* ]]; then
+    echo "❌ SAFETY: porta 8001 (CRM) esta ocupada por processo NAO-Docker — perigo"
+    echo "   Detectado: $CRM_PORT_8001"
+    exit 1
+fi
+
+# Guard 5: WEB_DIR deve ser /var/www/mvno/frontend (nao qualquer outro)
+if [[ "$WEB_DIR" != "/var/www/mvno/"* ]]; then
+    echo "❌ SAFETY: WEB_DIR fora de /var/www/mvno/ — abortando"
+    exit 1
+fi
+
+echo "   ✓ SAFETY OK — deploy vai afetar SOMENTE MVNO"
+echo "   ✓ Repo git: mvno-homeon"
+echo "   ✓ Alvo: $WEB_DIR + porta $MVNO_PORT + $MVNO_SERVICE"
+echo ""
 
 cd "$REPO"
 
@@ -88,7 +145,14 @@ sudo chown -R www-data:www-data "$WEB_DIR"
 
 # 5. Reiniciar backend via systemd (mvno-backend.service)
 echo "→ Reiniciando backend via systemd..."
-systemctl restart mvno-backend.service
+# Force-kill de processo stale APENAS da porta MVNO (nunca 8001 do CRM)
+STALE=$(ss -tlnp 2>/dev/null | awk -v p=":$MVNO_PORT" '$4 ~ p{print $NF}' | grep -oP 'pid=\K\d+' | head -1)
+if [ -n "$STALE" ]; then
+    echo "   Detectado processo antigo (PID $STALE) na porta $MVNO_PORT — killando"
+    kill -9 "$STALE" 2>/dev/null || true
+    sleep 2
+fi
+systemctl restart "$MVNO_SERVICE"
 sleep 5
 
 # 6. Validar backend

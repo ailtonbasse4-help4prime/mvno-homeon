@@ -28,6 +28,7 @@ import Custos from "./pages/Custos";
 import DemoAcessos from "./pages/DemoAcessos";
 import AutomacaoBloqueio from "./pages/AutomacaoBloqueio";
 import Homeon from "./pages/Homeon";
+import Help4Prime from "./pages/Help4Prime";
 import DemoLogin from "./pages/demo/DemoLogin";
 import DemoLayout from "./pages/demo/DemoLayout";
 import DemoDashboard from "./pages/demo/DemoDashboard";
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/saas" element={<LandingPage />} />
       <Route path="/homeon" element={<ErrorBoundary resetKey={location.pathname}><Homeon /></ErrorBoundary>} />
+      <Route path="/help4prime" element={<ErrorBoundary resetKey={location.pathname}><Help4Prime /></ErrorBoundary>} />
       <Route path="/ativar" element={<ErrorBoundary resetKey={location.pathname}><AtivarSelfService /></ErrorBoundary>} />
       <Route path="/portal" element={<ErrorBoundary resetKey={location.pathname}><PortalLogin /></ErrorBoundary>} />
       <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />
