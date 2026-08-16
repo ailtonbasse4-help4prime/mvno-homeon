@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { safeArray } from '../lib/api';
+import { formatDateBR, formatTimeBR, formatDateTimeBR } from '../lib/dateFormat';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -224,10 +225,10 @@ export function Logs() {
                 <div className="text-right flex-shrink-0 flex items-center gap-2">
                   <div>
                     <p className="text-xs text-zinc-300">
-                      {new Date(log.created_at).toLocaleDateString('pt-BR')}
+                      {formatDateBR(log.created_at)}
                     </p>
                     <p className="text-xs text-zinc-600">
-                      {new Date(log.created_at).toLocaleTimeString('pt-BR')}
+                      {formatTimeBR(log.created_at)}
                     </p>
                   </div>
                   {hasApiDetails(log) && (
@@ -272,7 +273,7 @@ export function Logs() {
                 <div className="p-3 bg-zinc-800/50 rounded-sm">
                   <p className="text-xs text-zinc-500 mb-1">Data/Hora</p>
                   <p className="text-white text-sm">
-                    {new Date(selectedLog.created_at).toLocaleString('pt-BR')}
+                    {formatDateTimeBR(selectedLog.created_at)}
                   </p>
                 </div>
               </div>

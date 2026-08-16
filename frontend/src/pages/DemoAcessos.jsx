@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { StatCard } from '../components/StatCard';
+import { formatDateTimeBR } from '../lib/dateFormat';
 import { Eye, Users, Calendar, TrendingUp, ExternalLink, MessageCircle, UserPlus, ShoppingBag, MousePointerClick } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -119,7 +120,7 @@ export default function DemoAcessos() {
                 const waLink = `https://wa.me/55${wppDigits}?text=${encodeURIComponent(`Olá ${l.nome}! Vi que você se interessou pela demonstração do HELP4PRIME MVNO. Podemos conversar?`)}`;
                 return (
                   <tr key={i} className="border-t border-zinc-800 hover:bg-zinc-950/50 transition" data-testid={`lead-row-${i}`}>
-                    <td className="px-4 py-2.5 text-xs text-zinc-300 font-mono whitespace-nowrap">{new Date(l.timestamp).toLocaleString('pt-BR')}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-300 font-mono whitespace-nowrap">{formatDateTimeBR(l.timestamp)}</td>
                     <td className="px-4 py-2.5 text-sm text-white font-medium">{l.nome}</td>
                     <td className="px-4 py-2.5 text-sm text-zinc-300 font-mono">{wppFmt}</td>
                     <td className="px-4 py-2.5 text-xs">
@@ -212,7 +213,7 @@ export default function DemoAcessos() {
                 <tr><td colSpan={4} className="px-4 py-6 text-center text-zinc-500">Nenhum acesso ainda</td></tr>
               ) : stats.ultimos.map((u, i) => (
                 <tr key={i} className="border-t border-zinc-800">
-                  <td className="px-4 py-2 text-xs text-zinc-300 font-mono">{new Date(u.timestamp).toLocaleString('pt-BR')}</td>
+                  <td className="px-4 py-2 text-xs text-zinc-300 font-mono">{formatDateTimeBR(u.timestamp)}</td>
                   <td className="px-4 py-2 text-xs text-zinc-400 font-mono">{u.ip}</td>
                   <td className="px-4 py-2 text-xs text-zinc-400 font-mono">{u.path || '-'}</td>
                   <td className="px-4 py-2 text-[10px] text-zinc-500 truncate max-w-xs">{u.user_agent}</td>
@@ -329,7 +330,7 @@ export default function DemoAcessos() {
                     <tr><td colSpan={4} className="px-4 py-6 text-center text-zinc-500">Nenhum clique ainda</td></tr>
                   ) : homeon.ultimos.map((u, i) => (
                     <tr key={i} className="border-t border-zinc-800">
-                      <td className="px-4 py-2 text-xs text-zinc-300 font-mono whitespace-nowrap">{new Date(u.timestamp).toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-2 text-xs text-zinc-300 font-mono whitespace-nowrap">{formatDateTimeBR(u.timestamp)}</td>
                       <td className="px-4 py-2 text-xs">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[10px] font-semibold">
                           {PLANO_LABEL[u.plano] || u.plano}

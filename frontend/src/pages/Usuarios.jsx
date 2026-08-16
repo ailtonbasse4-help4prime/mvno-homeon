@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { safeArray } from '../lib/api';
+import { formatDateBR } from '../lib/dateFormat';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -138,7 +139,7 @@ export function Usuarios() {
                       </span>
                     )}
                   </td>
-                  <td className="text-zinc-300 text-sm">{new Date(u.created_at).toLocaleDateString('pt-BR')}</td>
+                  <td className="text-zinc-300 text-sm">{formatDateBR(u.created_at)}</td>
                   <td className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(u)} className="text-zinc-400 hover:text-white" data-testid={`edit-user-${u.id}`}>

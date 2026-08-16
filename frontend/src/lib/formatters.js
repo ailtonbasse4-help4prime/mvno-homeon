@@ -14,9 +14,16 @@ export const formatDateBR = (isoDate) => {
 export const formatDateTimeBR = (isoDateTime) => {
   if (!isoDateTime) return '—';
   try {
-    const d = new Date(isoDateTime);
+    // Backend salva UTC. Se nao houver marker de timezone (Z ou +HH:MM), assumimos UTC.
+    const s = String(isoDateTime);
+    const hasTZ = s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s);
+    const d = new Date(hasTZ ? s : s + 'Z');
     if (isNaN(d.getTime())) return isoDateTime;
-    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'America/Sao_Paulo',
+    });
   } catch {
     return isoDateTime;
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { safeArray } from '../lib/api';
+import { formatDateBR } from '../lib/dateFormat';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -349,7 +350,7 @@ export function Chips() {
                     </td>
                     <td className="text-emerald-400 font-mono text-sm whitespace-nowrap">{formatCurrency(chip.valor)}</td>
                     <td className="text-zinc-400 whitespace-nowrap">{chip.cliente_nome || '-'}</td>
-                    <td className="text-zinc-300 text-sm whitespace-nowrap">{new Date(chip.created_at).toLocaleDateString('pt-BR')}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{formatDateBR(chip.created_at)}</td>
                     {isAdmin && (
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { safeArray } from '../lib/api';
+import { formatDateOnlyBR } from '../lib/dateFormat';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -204,7 +205,7 @@ export function Assinaturas() {
                     </td>
                     <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(ass.valor)}</td>
                     <td className="text-zinc-300 text-sm whitespace-nowrap">{CICLO_MAP[ass.ciclo] || ass.ciclo}</td>
-                    <td className="text-zinc-300 text-sm whitespace-nowrap">{ass.proximo_vencimento ? new Date(ass.proximo_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{formatDateOnlyBR(ass.proximo_vencimento, '-')}</td>
                     <td className="whitespace-nowrap"><StatusBadge status={ass.status} /></td>
                     <td className="font-mono text-zinc-500 text-xs whitespace-nowrap">{ass.asaas_subscription_id || '-'}</td>
                     {isAdmin && (

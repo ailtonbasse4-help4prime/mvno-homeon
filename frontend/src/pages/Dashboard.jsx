@@ -3,6 +3,7 @@ import axios from 'axios';
 import { safeObject } from '../lib/api';
 import { Users, CreditCard, Package, Tag, Phone, Zap, AlertCircle, CheckCircle, Clock, Wifi, WifiOff } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
+import { formatDateTimeBR } from '../lib/dateFormat';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -202,7 +203,7 @@ export function Dashboard() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-zinc-200 truncate">{log.details}</p>
                   <p className="text-xs text-zinc-400 mt-1">
-                    {new Date(log.created_at).toLocaleString('pt-BR')}
+                    {formatDateTimeBR(log.created_at)}
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-sm ${

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Input } from './ui/input';
 import { cn } from '../lib/utils';
 import { CreditCard, Check, X, Loader2, Search, ChevronDown } from 'lucide-react';
+import { formatDateBR } from '../lib/dateFormat';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -362,7 +363,7 @@ export function IccidInput({
               <span className="text-xs text-emerald-400">Chip selecionado</span>
             </div>
             <span className="text-xs text-zinc-500">
-              {new Date(selectedChipData.created_at).toLocaleDateString('pt-BR')}
+              {formatDateBR(selectedChipData.created_at)}
             </span>
           </div>
         </div>

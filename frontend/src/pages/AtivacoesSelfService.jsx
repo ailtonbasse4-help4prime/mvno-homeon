@@ -13,6 +13,7 @@ import {
   RefreshCw, Zap, CreditCard, RotateCw, Timer, ChevronDown, ChevronUp, Hash,
 } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
+import { formatDateBR, formatTimeBR } from '../lib/dateFormat';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -65,7 +66,7 @@ function RetryInfo({ activation }) {
             <div key={i} className="text-xs text-zinc-500">
               <span className="text-zinc-600">#{i + 1}</span>{' '}
               <span className="text-red-400/70">{err.msg?.substring(0, 80)}</span>
-              {err.at && <span className="text-zinc-600 ml-1">({new Date(err.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})</span>}
+              {err.at && <span className="text-zinc-600 ml-1">({formatTimeBR(err.at)})</span>}
             </div>
           ))}
         </div>
@@ -298,9 +299,9 @@ export function AtivacoesSelfService() {
                       <RetryInfo activation={a} />
                     </td>
                     <td className="text-xs text-zinc-400">
-                      {new Date(a.created_at).toLocaleDateString('pt-BR')}
+                      {formatDateBR(a.created_at)}
                       <br />
-                      {new Date(a.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      {formatTimeBR(a.created_at)}
                     </td>
                     <td>
                       <div className="flex items-center gap-1 flex-wrap">
