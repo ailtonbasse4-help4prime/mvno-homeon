@@ -1,0 +1,22 @@
+{
+  "summary": "Frontend-only timezone fix validated on /ativacoes-selfservice. Seeded 3 activations (naive datetime 2026-08-16T01:21:00 UTC, aware UTC same, regression 2026-07-10T14:00Z) with browser context timezone=UTC. All rendered dates matched expected BRT values.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "/api/ativacoes-selfservice", "issue": "created_at serialized WITHOUT trailing 'Z' when stored as naive datetime (e.g. '2026-08-16T01:21:00'). Frontend now compensates, but backend should ideally always store/serialize as timezone-aware UTC with 'Z' suffix to avoid similar bugs elsewhere."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [
+    "(Optional hardening) Update backend to always serialize created_at as UTC-aware ISO with 'Z' suffix so other pages/components don't need the same client-side workaround."
+  ],
+  "critical_code_review_comments": [
+    "AtivacoesSelfService.jsx L300-314: fix is correct (checks Z or +/-HH:MM offset before appending Z, uses timeZone America/Sao_Paulo in toLocale*). Consider extracting to a shared util (e.g., formatBRDateTime) since other list pages likely have the same bug."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "admin@mvno.com / admin123",
+  "seed_data_creation": "Inserted 3 TEST_TZ_* docs in ativacoes_selfservice for validation, cleaned up after test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Timezone fix confirmed. Verified matrix: (a) naive '2026-08-16T01:21:00' -> 15/08/2026 22:21 BRT; (b) aware UTC same instant -> 15/08/2026 22:21 BRT; (c) regression '2026-07-10T14:00Z' -> 10/07/2026 11:00 BRT. Playwright browser timezone was UTC (verified via Intl.DateTimeFormat().resolvedOptions().timeZone) so timeZone option on toLocale* is doing the conversion, not host tz.",
+  "rca of the issue": "Backend salva created_at como datetime UTC no Mongo. FastAPI/Pydantic serializa datetime naive como ISO sem 'Z'. JS new Date() sem sufixo interpreta como horario LOCAL do browser, deslocando +3h em containers UTC. Fix aplicado no frontend anexa 'Z' quando ausente e forca timeZone 'America/Sao_Paulo' no toLocaleDateString/TimeString. Validado que datas antigas nao regridem."
+}

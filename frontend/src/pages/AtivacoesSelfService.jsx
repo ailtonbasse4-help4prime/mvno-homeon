@@ -298,9 +298,18 @@ export function AtivacoesSelfService() {
                       <RetryInfo activation={a} />
                     </td>
                     <td className="text-xs text-zinc-400">
-                      {new Date(a.created_at).toLocaleDateString('pt-BR')}
-                      <br />
-                      {new Date(a.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      {(() => {
+                        // Fix fuso: backend salva UTC, garantimos que JS interprete como UTC (nao como local)
+                        const raw = a.created_at || '';
+                        const dt = new Date(raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw + 'Z');
+                        return (
+                          <>
+                            {dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                            <br />
+                            {dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td>
                       <div className="flex items-center gap-1 flex-wrap">
