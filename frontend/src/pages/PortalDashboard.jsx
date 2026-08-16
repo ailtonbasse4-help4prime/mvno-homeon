@@ -9,6 +9,7 @@ import {
   Copy, Check, Zap, Calendar, TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { InstallAppButton } from '../components/InstallAppButton';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -389,6 +390,9 @@ export default function PortalDashboard() {
             )}
           </p>
         </div>
+
+        {/* PWA Install prompt */}
+        <InstallAppButton />
 
         {/* Alert: overdue invoice */}
         {faturaVencida && (

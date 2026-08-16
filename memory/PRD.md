@@ -219,6 +219,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Corrigido erro de parsing pré-existente em `CarteiraMovel.jsx` (stray `/div>` após fechamento da função).
 - [x] Validado pelo testing_agent (iteration_44): 100% (10/10 rotas) renderizam datas em DD/MM/YYYY HH:MM BRT sem erros.
 
+### Botao "Instalar App" no Portal do Cliente (16/02/2026)
+- [x] Bug do usuario: menu do Chrome nao mostrava "Adicionar a tela inicial" ao abrir o Portal do Cliente.
+- [x] Causa raiz: (1) o portal-manifest.json so era ativado depois do React montar (via useEffect), entao o Chrome nao capturava no primeiro paint; (2) usuario estava abrindo o link dentro do Telegram (in-app browser nao suporta PWA install).
+- [x] Fix: swap do manifest agora acontece em `<script>` inline no `public/index.html` ANTES do React montar — Chrome ja ve o manifest correto no primeiro carregamento e dispara `beforeinstallprompt`.
+- [x] Novo hook `hooks/usePWAInstall.js` — captura `beforeinstallprompt`, detecta iOS Safari, in-app browsers (Telegram/WhatsApp/Instagram/FB/Line/Twitter), e modo standalone.
+- [x] Novo componente `components/InstallAppButton.jsx` — botao visivel "Instalar App na tela inicial" no PortalLogin (abaixo do submit) e no PortalDashboard (topo do main). Nao renderiza se ja instalado.
+- [x] Modal de fallback com instrucoes especificas por contexto: iOS (Safari + Compartilhar + Adicionar), in-app browser (aviso amarelo + copiar link + abrir no Chrome), Chrome (menu tres pontinhos + Instalar app).
+- [x] Smoke test: preview mobile 420x900, botao renderizado, modal abre com instrucoes corretas.
+
 
 ## Backlog
 
