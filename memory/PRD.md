@@ -211,6 +211,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Botao "Preencher Expiração Tá vazia (via Próx.Recarga)" adicionado ao Painel Central.
 - [x] Endpoint validado pelo bug_testing_agent (iteration_40, verdict=fixed): preview 100% funcional; issue no VPS por causa de processo uvicorn stale.
 
+### Fix Global de Timezone UTC→BRT (16/02/2026)
+- [x] Bug: backend serializa datetimes UTC sem sufixo 'Z', então `new Date(iso).toLocaleString('pt-BR')` no browser interpretava como local, mostrando datas com +/- 1 dia (ex: ativação às 22:21 BRT aparecia como 01:21 do dia seguinte).
+- [x] Aplicado `dateFormat.js` (formatDateBR, formatTimeBR, formatDateTimeBR, formatDateOnlyBR) em 9 arquivos adicionais: `Logs.jsx`, `Chips.jsx`, `Usuarios.jsx`, `Assinaturas.jsx`, `CarteiraMovel.jsx`, `DemoAcessos.jsx`, `AutomacaoBloqueio.jsx`, `AtivacoesSelfService.jsx`, `IccidInput.jsx`.
+- [x] Corrigido import faltante de `formatDateTimeBR` em `Dashboard.jsx` que estava causando "Erro ao carregar página".
+- [x] Atualizado `formatters.js` `formatDateTimeBR` para também ser UTC-aware (afeta PlanilhaOperacional, GestaoCobrancas, CobrancaLotePorVencimentoDialog, WhatsAppLoteDialog).
+- [x] Corrigido erro de parsing pré-existente em `CarteiraMovel.jsx` (stray `/div>` após fechamento da função).
+- [x] Validado pelo testing_agent (iteration_44): 100% (10/10 rotas) renderizam datas em DD/MM/YYYY HH:MM BRT sem erros.
+
 
 ## Backlog
 

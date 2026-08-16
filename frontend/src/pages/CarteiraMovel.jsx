@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { safeArray, safeObject } from '../lib/api';
+import { formatDateBR, formatDateOnlyBR } from '../lib/dateFormat';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -307,10 +308,10 @@ export function CarteiraMovel() {
                       }`}>{cob.billing_type}</span>
                     </td>
                     <td className="text-emerald-400 font-mono text-sm font-medium whitespace-nowrap">{formatCurrency(cob.valor)}</td>
-                    <td className="text-zinc-300 text-sm whitespace-nowrap">{cob.vencimento ? new Date(cob.vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{formatDateOnlyBR(cob.vencimento, '-')}</td>
                     <td className="whitespace-nowrap"><StatusBadge status={cob.status} /></td>
                     <td className="font-mono text-zinc-500 text-xs whitespace-nowrap">{cob.asaas_payment_id || '-'}</td>
-                    <td className="text-zinc-300 text-sm whitespace-nowrap">{cob.paid_at ? new Date(cob.paid_at).toLocaleDateString('pt-BR') : '-'}</td>
+                    <td className="text-zinc-300 text-sm whitespace-nowrap">{formatDateBR(cob.paid_at, '-')}</td>
                     {isAdmin && (
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">

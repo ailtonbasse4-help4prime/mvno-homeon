@@ -13,16 +13,11 @@ import {
   MessageCircle, History, Loader2, LayoutDashboard, Settings,
 } from 'lucide-react';
 
+import { formatDateTimeBR } from '../lib/dateFormat';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
-const formatDateTime = (v) => {
-  if (!v) return '—';
-  try {
-    return new Date(v).toLocaleString('pt-BR');
-  } catch {
-    return String(v);
-  }
-};
+const formatDateTime = (v) => formatDateTimeBR(v, '—');
 
 export default function AutomacaoBloqueio() {
   const [config, setConfig] = useState(null);
