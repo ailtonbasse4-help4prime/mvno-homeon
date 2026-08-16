@@ -7,7 +7,20 @@
         <meta name="description" content="HomeOn Internet - Gestao de Telefonia Movel" />
         <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
         <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
-        <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+        <link rel="manifest" href="%PUBLIC_URL%/manifest.json" id="app-manifest" />
+        <script>
+          // Swap para o manifest do Portal do Cliente antes do React montar,
+          // para que o Chrome capture o manifest correto no primeiro paint
+          // e dispare o evento beforeinstallprompt logo de cara.
+          (function(){
+            try {
+              if (window.location.pathname.indexOf('/portal') === 0) {
+                var link = document.getElementById('app-manifest');
+                if (link) link.href = '/portal-manifest.json';
+              }
+            } catch (e) { /* noop */ }
+          })();
+        </script>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&family=Outfit:wght@300;400;600;800;900&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />

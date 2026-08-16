@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Smartphone, Signal, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import { InstallAppButton } from '../components/InstallAppButton';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -216,14 +217,17 @@ export default function PortalLogin() {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-zinc-800 text-center">
-              <a
-                href="/login"
-                className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                data-testid="portal-admin-link"
-              >
-                Acesso administrativo
-              </a>
+            <div className="mt-6 pt-6 border-t border-zinc-800 space-y-4">
+              <InstallAppButton />
+              <div className="text-center">
+                <a
+                  href="/login"
+                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  data-testid="portal-admin-link"
+                >
+                  Acesso administrativo
+                </a>
+              </div>
             </div>
           </div>
         </div>
