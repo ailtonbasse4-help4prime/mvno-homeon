@@ -213,13 +213,9 @@ export default function AtivarSelfService() {
     if (telNum[2] !== '9') {
       setError('WhatsApp inválido — precisa ser celular (após o DDD deve começar com 9). Fixo não recebe WhatsApp.'); return;
     }
-    // Se estiver fazendo portabilidade, o WhatsApp NAO pode ser o mesmo numero que ele esta portando
-    if (form.portability) {
-      const portFull = (form.port_ddd || '').replace(/\D/g, '') + (form.port_number || '').replace(/\D/g, '');
-      if (portFull && portFull === telNum) {
-        setError('O WhatsApp de contato não pode ser o mesmo número da portabilidade (a linha nova ainda não estará ativa).'); return;
-      }
-    }
+    // Portabilidade: o numero em portabilidade AINDA ESTA ATIVO na operadora antiga
+    // ate a janela de portabilidade (normalmente madrugada). Entao usar o proprio
+    // numero da portabilidade como WhatsApp de contato e VALIDO — sem bloqueio.
     const cepNum = form.cep.replace(/\D/g, '');
     if (cepNum.length !== 8) {
       setError('CEP invalido — deve ter 8 digitos'); return;
@@ -474,7 +470,7 @@ export default function AtivarSelfService() {
                   <Input value={form.telefone} onChange={e => updateForm('telefone', e.target.value)}
                     className="form-input" placeholder="(11) 99999-9999" data-testid="telefone-input" />
                   <p className="text-[10px] text-yellow-500/80 mt-1">
-                    ⚠️ Precisa ser um <strong>celular com WhatsApp</strong>, diferente do número novo que está ativando. Fixo NÃO funciona.
+                    ⚠️ Precisa ser um <strong>celular com WhatsApp</strong>. Se estiver ativando um número novo, use um WhatsApp diferente (pois o número novo ainda não estará ativo). Em portabilidade, pode usar o próprio número — ele fica ativo até a janela de troca. Fixo NÃO funciona.
                   </p>
                 </div>
               </div>

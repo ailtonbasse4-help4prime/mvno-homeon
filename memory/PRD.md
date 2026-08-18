@@ -228,6 +228,12 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Modal de fallback com instrucoes especificas por contexto: iOS (Safari + Compartilhar + Adicionar), in-app browser (aviso amarelo + copiar link + abrir no Chrome), Chrome (menu tres pontinhos + Instalar app).
 - [x] Smoke test: preview mobile 420x900, botao renderizado, modal abre com instrucoes corretas.
 
+### Fix Portabilidade + WhatsApp Mesmo Numero (16/02/2026)
+- [x] Bug: ao pedir portabilidade, o sistema recusava usar o proprio numero como WhatsApp de contato ("O WhatsApp de contato nao pode ser o mesmo numero da portabilidade").
+- [x] Causa: validacao no frontend (AtivarSelfService.jsx linha 217-222) assumia que o numero em portabilidade ainda nao estava ativo — mas na verdade ele CONTINUA ativo na operadora antiga ate a janela de troca (madrugada).
+- [x] Fix: removida a validacao bloqueante em `AtivarSelfService.jsx` (bloco `if (form.portability) { ... setError('mesmo numero...') }`). Atualizado o texto amarelo abaixo do WhatsApp para explicar: "Em portabilidade, pode usar o proprio numero — ele fica ativo ate a janela de troca."
+- [x] Sem mudancas no backend (a validacao so existia no frontend).
+
 
 ## Backlog
 
