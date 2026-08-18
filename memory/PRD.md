@@ -234,6 +234,17 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Fix: removida a validacao bloqueante em `AtivarSelfService.jsx` (bloco `if (form.portability) { ... setError('mesmo numero...') }`). Atualizado o texto amarelo abaixo do WhatsApp para explicar: "Em portabilidade, pode usar o proprio numero — ele fica ativo ate a janela de troca."
 - [x] Sem mudancas no backend (a validacao so existia no frontend).
 
+### Tutorial de APN Automatico (16/02/2026)
+- [x] Configuracao APN Surf: `internet.br`, MCC 724, MNC 17, Protocolo IPv4/IPv6 (obrigatorio em modem).
+- [x] Novo servico `/app/backend/services/apn_service.py`: fonte unica de verdade (`APN_CONFIG` + `build_apn_whatsapp_message`).
+- [x] Envio automatico via Z-API assim que a ativacao Self-Service vira `ativo` (em ambos os fluxos: sucesso direto e verificacao pos-erro). Nao bloqueia a ativacao — falha e logada apenas.
+- [x] Endpoint publico `GET /api/public/apn` — retorna config + mensagem formatada.
+- [x] Endpoint publico `POST /api/public/ativacao/{id}/reenviar-apn` (rate-limit 5/min) para o botao "Reenviar tutorial no WhatsApp".
+- [x] Campo `apn_whatsapp_sent_at` gravado em `ativacoes_selfservice` para auditoria.
+- [x] Novo componente `frontend/src/components/ApnTutorialCard.jsx`: card visivel no passo Status quando `status === 'ativo'` — mostra dados APN com botao de copiar, tabs (Android / iPhone / Modem) com passo a passo e botao "Reenviar tutorial no WhatsApp".
+- [x] Alertas visuais: aviso de "Protocolo IPv4/IPv6 obrigatorio em modem" no tab Modem.
+- [x] Curl end-to-end validado: `GET /api/public/apn` 200; `POST /reenviar-apn` com id invalido retorna 404 corretamente.
+
 
 ## Backlog
 

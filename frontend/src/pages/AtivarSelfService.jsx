@@ -10,6 +10,7 @@ import {
   AlertCircle, Wifi, ScanLine, Loader2, Copy, ExternalLink, XCircle,
   ArrowRightLeft, Smartphone, MessageSquare,
 } from 'lucide-react';
+import { ApnTutorialCard } from '../components/ApnTutorialCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -707,6 +708,11 @@ export default function AtivarSelfService() {
                 </>
               )}
             </div>
+
+            {/* APN Tutorial - so quando ativo */}
+            {activation.status === 'ativo' && (
+              <ApnTutorialCard activationId={activation.id || activation._id} />
+            )}
 
             {/* Portabilidade Info */}
             {activation.status === 'portabilidade_em_andamento' && (

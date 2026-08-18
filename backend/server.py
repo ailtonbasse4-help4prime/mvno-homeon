@@ -28,6 +28,8 @@ from slowapi.errors import RateLimitExceeded
 from services.operadora_service import operadora_service, OperadoraStatus, BLOCK_REASONS, STOCK_STATUS_MAP, ErrorCode
 from services.asaas_service import asaas_service, AsaasNotConfiguredError, AsaasApiError
 from services.email_service import email_service
+from services.apn_service import build_apn_whatsapp_message, APN_CONFIG
+from services.zapi_service import zapi_service
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -77,6 +79,25 @@ def _append_portal_link(desc: str) -> str:
     if SITE_URL:
         return f"{desc} | Acesse seu portal: {SITE_URL}/portal"
     return desc
+
+async def _send_apn_whatsapp(cliente: dict, msisdn: str = None) -> dict:
+    """Envia o tutorial de APN via Z-API para o WhatsApp do cliente.
+
+    Nao levanta excecao — retorna dict com {success, error?} para permitir logging.
+    """
+    if not cliente:
+        return {"success": False, "error": "cliente ausente"}
+    telefone = cliente.get("telefone") or cliente.get("whatsapp")
+    if not telefone:
+        return {"success": False, "error": "telefone do cliente nao cadastrado"}
+    if not zapi_service.is_configured():
+        return {"success": False, "error": "Z-API nao configurado"}
+    try:
+        msg = build_apn_whatsapp_message(cliente_nome=cliente.get("nome"), msisdn=msisdn)
+        return await zapi_service.send_text(telefone, msg)
+    except Exception as e:  # noqa: BLE001 (log-only)
+        return {"success": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
 
 app = FastAPI(title="MVNO Management System - Ta Telecom")
 api_router = APIRouter(prefix="/api")
@@ -5228,6 +5249,41 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
         message="Pagamento gerado. Apos confirmacao, seu chip sera ativado automaticamente." if activation_doc["status"] == "aguardando_pagamento" else "Ativacao em processamento.",
     )
 
+@api_router.get("/public/apn")
+async def public_get_apn_config():
+    """Retorna a configuracao de APN publica (usado pelo Self-Service)."""
+    return {"config": APN_CONFIG, "message": build_apn_whatsapp_message()}
+
+
+@api_router.post("/public/ativacao/{activation_id}/reenviar-apn")
+@limiter.limit("5/minute")
+async def public_reenviar_apn(activation_id: str, request: Request):
+    """Reenvia o tutorial de APN via WhatsApp para o cliente da ativacao."""
+    try:
+        doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID de ativacao invalido")
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc.get("status") != "ativo":
+        raise HTTPException(status_code=400, detail="Ativacao ainda nao esta ativa")
+
+    cliente = await db.clientes.find_one({"_id": ObjectId(doc["cliente_id"])}) if doc.get("cliente_id") else None
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    result = await _send_apn_whatsapp(cliente, doc.get("msisdn"))
+    if not result.get("success"):
+        raise HTTPException(status_code=502, detail=f"Falha ao enviar WhatsApp: {result.get('error')}")
+
+    await db.ativacoes_selfservice.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"apn_whatsapp_sent_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    await create_log("ativacao", f"APN tutorial reenviado via WhatsApp: {cliente['nome']}", None, "self-service")
+    return {"success": True, "message": "Tutorial de APN enviado com sucesso"}
+
+
 @api_router.get("/public/ativacao/{activation_id}/status")
 async def public_check_activation_status(activation_id: str):
     """Verifica status de uma ativacao self-service."""
@@ -5473,6 +5529,18 @@ async def _trigger_selfservice_activation(doc: dict):
                         )
                     except Exception as e:
                         logger.warning(f"Erro ao enviar email de ativacao: {e}")
+
+            # Enviar tutorial de APN via WhatsApp (Z-API) — nao bloqueia a ativacao
+            if new_status == "ativo":
+                apn_result = await _send_apn_whatsapp(cliente, msisdn)
+                if apn_result.get("success"):
+                    await db.ativacoes_selfservice.update_one(
+                        {"_id": doc["_id"]},
+                        {"$set": {"apn_whatsapp_sent_at": datetime.now(timezone.utc).isoformat()}},
+                    )
+                    await create_log("ativacao", f"APN tutorial enviado via WhatsApp: {cliente['nome']}", None, "self-service")
+                else:
+                    logger.warning(f"Falha ao enviar APN via WhatsApp para {cliente.get('nome')}: {apn_result.get('error')}")
         else:
             err_msg = result.message
             if isinstance(err_msg, list):
@@ -5532,6 +5600,16 @@ async def _trigger_selfservice_activation(doc: dict):
                                         )
                                     except Exception:
                                         pass
+                            # APN WhatsApp — pos-verificacao (nao bloqueante)
+                            apn_result2 = await _send_apn_whatsapp(cliente, msisdn)
+                            if apn_result2.get("success"):
+                                await db.ativacoes_selfservice.update_one(
+                                    {"_id": doc["_id"]},
+                                    {"$set": {"apn_whatsapp_sent_at": datetime.now(timezone.utc).isoformat()}},
+                                )
+                                await create_log("ativacao", f"APN tutorial enviado via WhatsApp: {cliente['nome']}", None, "self-service")
+                            else:
+                                logger.warning(f"Falha ao enviar APN via WhatsApp para {cliente.get('nome')}: {apn_result2.get('error')}")
                             return  # Ativacao OK, nao marcar como erro
                 except Exception as e:
                     logger.warning(f"Verificacao pos-erro falhou: {e}")
