@@ -245,6 +245,12 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Alertas visuais: aviso de "Protocolo IPv4/IPv6 obrigatorio em modem" no tab Modem.
 - [x] Curl end-to-end validado: `GET /api/public/apn` 200; `POST /reenviar-apn` com id invalido retorna 404 corretamente.
 
+### Refinamento do Tutorial WhatsApp (18/02/2026)
+- [x] Branding: substituido "chip Surf ja esta ativo" por "Bem-vindo à *HOMEON TELECOMUNICAÇÕES*".
+- [x] Ordem correta de troubleshooting: 1) Reiniciar celular, 2) Deixar 4G como preferencial (com instrucao para Android e iPhone), 3) Só entao configurar APN.
+- [x] Todas as mensagens (WhatsApp + card do Self-Service) agora usam acentuação completa PT-BR.
+- [x] Card no Self-Service refletindo a mesma ordem visual (bloco verde "Reinicie", bloco amarelo "4G", bloco APN).
+
 
 ## Backlog
 
