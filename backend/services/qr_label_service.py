@@ -139,6 +139,11 @@ def build_qr_pdf(
     :param formato: "pimaco_6081" | "a4_grid"
     :return: bytes do PDF
     """
+    # Fallback para o dominio de producao se base_url estiver vazio
+    # (evita gerar QR com URL relativa que o celular nao sabe abrir)
+    if not base_url or not base_url.startswith("http"):
+        base_url = "https://mvno.homeonapp.com.br"
+
     cfg = LAYOUTS.get(formato)
     if not cfg:
         raise ValueError(f"Formato desconhecido: {formato}")
