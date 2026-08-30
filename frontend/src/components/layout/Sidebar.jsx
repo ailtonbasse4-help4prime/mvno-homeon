@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Users, CreditCard, Package, Tag, Zap,
   Phone, FileText, LogOut, Wifi, WifiOff, UserCog, KeyRound,
   Wallet, RefreshCw, X, Receipt, Store, Smartphone, Share2,
-  Table2, ChevronDown, ChevronRight, Activity, DollarSign, Settings, Radio, Eye, ShieldAlert,
+  Table2, ChevronDown, ChevronRight, Activity, DollarSign, Settings, Radio, Eye, ShieldAlert, QrCode,
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -36,6 +36,7 @@ const navGroups = [
     items: [
       { path: '/clientes', icon: Users, label: 'Clientes', roles: ['admin', 'atendente'] },
       { path: '/chips', icon: CreditCard, label: 'Chips', roles: ['admin', 'atendente'] },
+      { path: '/qr-lotes', icon: QrCode, label: 'Lotes QR', roles: ['admin'] },
       { path: '/linhas', icon: Phone, label: 'Linhas', roles: ['admin', 'atendente'] },
     ],
   },
