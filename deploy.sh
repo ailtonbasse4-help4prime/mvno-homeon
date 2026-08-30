@@ -170,8 +170,14 @@ if [ -n "$VENV_ACTIVATE" ]; then
     deactivate
 else
     echo "   Python do sistema (sem venv)"
-    python3 -m pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" --break-system-packages 2>/dev/null || \
-    python3 -m pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
+    # --break-system-packages: Ubuntu 24+ protege system Python
+    # --ignore-installed: nao mexe em pacotes gerenciados pelo apt (urllib3, pillow, etc)
+    python3 -m pip install --disable-pip-version-check -q \
+        --break-system-packages --ignore-installed \
+        -r "$REPO/backend/requirements.txt" 2>/dev/null || \
+    python3 -m pip install --disable-pip-version-check -q \
+        --ignore-installed \
+        -r "$REPO/backend/requirements.txt" || {
         echo "❌ pip install (sistema) falhou — abortando"
         exit 1
     }
