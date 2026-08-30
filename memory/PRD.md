@@ -274,6 +274,13 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Feedback via toasts: "chip adicionado", "ja adicionado", "no lote XXX", "nao encontrado".
 - [x] Auto-focus no input apos abrir dialog e apos cada chip adicionado — fluxo de entrada continuo.
 
+### Legibilidade da Etiqueta Impressa (30/08/2026)
+- [x] Bug reportado: texto "Escaneie para ativar" saia apagado e pequeno (cinza claro #888, 5.5pt).
+- [x] Fix `services/qr_label_service.py`: "Escaneie para ativar" agora em **azul #0066CC bold 6.5pt** (destaque visual).
+- [x] "Lote: L001" mudado de cinza claro #666 para #444 (mais legivel).
+- [x] ICCID de 6pt para 6.5pt bold + reposicionado (linhas em 7mm e 4mm do rodape) para nao colidir com o rodape novo.
+- [x] SITE_URL adicionado ao .env de producao na VPS (era vazio, QR encodava caminho relativo). Fallback `https://mvno.homeonapp.com.br` adicionado ao codigo para nao quebrar de novo se env estiver ausente.
+
 
 ## Backlog
 
