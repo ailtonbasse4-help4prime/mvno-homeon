@@ -145,6 +145,8 @@ sudo chown -R www-data:www-data "$WEB_DIR"
 
 # 4.5 Instalar/atualizar dependencias Python do backend
 echo "→ Instalando dependencias Python..."
+# emergentintegrations vem de um index privado
+PIP_EXTRA_INDEX="--extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/"
 # Detecta venv (checa locais conhecidos, incluindo /app/venv onde o systemd aponta)
 VENV_ACTIVATE=""
 for path in \
@@ -163,7 +165,7 @@ if [ -n "$VENV_ACTIVATE" ]; then
     echo "   venv: $VENV_ACTIVATE"
     # shellcheck disable=SC1090
     source "$VENV_ACTIVATE"
-    pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
+    pip install --disable-pip-version-check -q $PIP_EXTRA_INDEX -r "$REPO/backend/requirements.txt" || {
         echo "❌ pip install (venv) falhou — abortando"
         deactivate
         exit 1
@@ -171,13 +173,13 @@ if [ -n "$VENV_ACTIVATE" ]; then
     deactivate
 else
     echo "   Python do sistema (sem venv)"
-    # --break-system-packages: Ubuntu 24+ protege system Python
-    # --ignore-installed: nao mexe em pacotes gerenciados pelo apt (urllib3, pillow, etc)
     python3 -m pip install --disable-pip-version-check -q \
         --break-system-packages --ignore-installed \
+        $PIP_EXTRA_INDEX \
         -r "$REPO/backend/requirements.txt" 2>/dev/null || \
     python3 -m pip install --disable-pip-version-check -q \
         --ignore-installed \
+        $PIP_EXTRA_INDEX \
         -r "$REPO/backend/requirements.txt" || {
         echo "❌ pip install (sistema) falhou — abortando"
         exit 1
