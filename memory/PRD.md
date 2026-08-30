@@ -266,6 +266,14 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Curl end-to-end validado: preview retorna 402 disponiveis, cria lote L001 (5 chips), gera PDF Pimaco (60KB) e A4 Grid (60KB), landing publica responde `nao_ativado` corretamente.
 - [x] Deps instaladas: `reportlab==4.2.5`, `qrcode[pil]==7.4.2`, `pillow==12.1.1`.
 
+### Refino: Criação Manual de Lote por Sufixo de ICCID (30/08/2026)
+- [x] Bug UX: dialog anterior criava lotes por filtro (aleatoriamente pegava chips do banco). Usuario reclamou que ficava dificil identificar quais chips iam no lote.
+- [x] Novo endpoint `GET /api/qr-lotes/buscar-chip?termo=XXXX` — busca chip cujo ICCID termine com o sufixo digitado. Retorna ate 10 matches com status e info de lote (se ja pertencer a um).
+- [x] Dialog "Novo Lote" reescrito: input para "últimos digitos do ICCID" com Enter para busca rapida. Se 1 match, adiciona automaticamente. Se varios, mostra dropdown para escolher. Se ja em outro lote, bloqueia com aviso claro do lote pai.
+- [x] Lista visual dos chips selecionados com botao X para remover, contador ao vivo, botao "Criar Lote com N chips" so ativa quando ha pelo menos 1.
+- [x] Feedback via toasts: "chip adicionado", "ja adicionado", "no lote XXX", "nao encontrado".
+- [x] Auto-focus no input apos abrir dialog e apos cada chip adicionado — fluxo de entrada continuo.
+
 
 ## Backlog
 

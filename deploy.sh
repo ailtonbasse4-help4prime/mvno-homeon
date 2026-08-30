@@ -143,6 +143,48 @@ sudo find "$WEB_DIR" -mindepth 1 -maxdepth 1 ! -name 'homeon-assets' -exec rm -r
 sudo cp -r "$REPO/frontend/build/." "$WEB_DIR/"
 sudo chown -R www-data:www-data "$WEB_DIR"
 
+# 4.5 Instalar/atualizar dependencias Python do backend
+echo "→ Instalando dependencias Python..."
+# Detecta venv (checa locais conhecidos, incluindo /app/venv onde o systemd aponta)
+VENV_ACTIVATE=""
+for path in \
+    "/app/venv/bin/activate" \
+    "$REPO/backend/venv/bin/activate" \
+    "$REPO/backend/.venv/bin/activate" \
+    "$REPO/venv/bin/activate" \
+    "$REPO/.venv/bin/activate"
+do
+    if [ -f "$path" ]; then
+        VENV_ACTIVATE="$path"
+        break
+    fi
+done
+if [ -n "$VENV_ACTIVATE" ]; then
+    echo "   venv: $VENV_ACTIVATE"
+    # shellcheck disable=SC1090
+    source "$VENV_ACTIVATE"
+    pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
+        echo "❌ pip install (venv) falhou — abortando"
+        deactivate
+        exit 1
+    }
+    deactivate
+else
+    echo "   Python do sistema (sem venv)"
+    # --break-system-packages: Ubuntu 24+ protege system Python
+    # --ignore-installed: nao mexe em pacotes gerenciados pelo apt (urllib3, pillow, etc)
+    python3 -m pip install --disable-pip-version-check -q \
+        --break-system-packages --ignore-installed \
+        -r "$REPO/backend/requirements.txt" 2>/dev/null || \
+    python3 -m pip install --disable-pip-version-check -q \
+        --ignore-installed \
+        -r "$REPO/backend/requirements.txt" || {
+        echo "❌ pip install (sistema) falhou — abortando"
+        exit 1
+    }
+fi
+echo "   ✓ Dependencias Python instaladas/atualizadas"
+
 # 5. Reiniciar backend via systemd (mvno-backend.service)
 echo "→ Reiniciando backend via systemd..."
 # Force-kill de processo stale APENAS da porta MVNO (nunca 8001 do CRM)

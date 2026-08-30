@@ -128,6 +128,36 @@ async def public_chip_status(iccid: str):
     }
 
 
+# ---------- BUSCA POR SUFIXO DE ICCID (para criacao manual de lote) ----------
+@router.get("/qr-lotes/buscar-chip")
+async def buscar_chip_por_sufixo(termo: str = Query(..., min_length=3, max_length=22)):
+    """Busca chips pelo sufixo (ultimos digitos) do ICCID.
+
+    Retorna ate 10 matches com info do chip. Usado para criacao manual de lote.
+    """
+    db = _ctx["db"]
+    termo_clean = termo.strip()
+    if not termo_clean.isdigit():
+        raise HTTPException(status_code=400, detail="Digite apenas numeros")
+    # Regex: ICCID que termina com o sufixo digitado
+    import re
+    pattern = re.compile(f".*{re.escape(termo_clean)}$")
+    cursor = db.chips.find(
+        {"iccid": {"$regex": pattern}},
+        {"iccid": 1, "status": 1, "revendedor_id": 1, "qr_lote_id": 1, "qr_lote_numero": 1},
+    ).limit(10)
+    chips = await cursor.to_list(10)
+    result = []
+    for c in chips:
+        result.append({
+            "iccid": c.get("iccid"),
+            "status": c.get("status"),
+            "qr_lote_id": c.get("qr_lote_id"),
+            "qr_lote_numero": c.get("qr_lote_numero"),
+        })
+    return {"termo": termo_clean, "matches": result, "total": len(result)}
+
+
 # ---------- CRIACAO / LISTAGEM ----------
 class LoteFiltroInput(BaseModel):
     revendedor_id: Optional[str] = None
