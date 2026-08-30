@@ -251,6 +251,21 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Todas as mensagens (WhatsApp + card do Self-Service) agora usam acentuação completa PT-BR.
 - [x] Card no Self-Service refletindo a mesma ordem visual (bloco verde "Reinicie", bloco amarelo "4G", bloco APN).
 
+### Landing Inteligente `/chip/{iccid}` + Lotes de QR Code (30/08/2026)
+- [x] Endpoint publico `GET /api/public/chip/{iccid}/status` — retorna `estado` (nao_ativado | ativando | ativo | bloqueado | cancelado) e `msisdn` (so quando ativo). Cruza db.chips + db.linhas.
+- [x] Nova pagina publica `/chip/:iccid` — landing adaptativa que mostra: **Ativar meu chip agora** (nao ativado), spinner (ativando), **Acessar Portal do Cliente** com msisdn (ativo), aviso vermelho (bloqueado/cancelado). Botao Install PWA quando ativo.
+- [x] Servico `services/qr_label_service.py` — gera PDF em 2 formatos: **Pimaco 6081** (25.4x66.7mm, 30 por folha, 3x10) e **A4 Grid** (63x27mm com linhas de corte pontilhadas, mais tolerante). QR nivel H (30% correcao) para sobreviver a cortes.
+- [x] Endpoint `/api/qr-lotes/calibracao/pdf?formato=` — folha de calibracao com marcas azuis (perimetro) e cruzes vermelhas (centro) para testar alinhamento da impressora.
+- [x] Rotas admin `routes/qr_lotes.py`: preview, criar lote, listar, detalhes, baixar PDF (com opcao marcar_impresso=true no download), marcar impresso manual, reimprimir chip individual (gera PDF de 1 etiqueta e loga).
+- [x] Coleção `qr_lotes` com numeracao sequencial `L001, L002...` (contador em `counters.qr_lote_seq`, atomic $inc). Estados: `pendente | impresso | parcialmente_reimpresso`.
+- [x] Cada chip recebe `qr_lote_id` e `qr_lote_numero` em db.chips quando entra num lote (bloqueado pra nao entrar em 2 lotes).
+- [x] Nova pagina admin `/qr-lotes` — sidebar Menu "Lotes QR" em Clientes & Linhas. StatCards, card de calibracao, tabela, dialog "Novo Lote" com filtro (status, quantidade, apenas_sem_lote) e preview live.
+- [x] Dialog de detalhes: lista todos os chips do lote com botao de reimpressao individual (icone RotateCcw). Historico de reimpressoes salvo em `chips[i].reimpresso_em`.
+- [x] Etiqueta impressa contem: HOMEON (bold), "Lote: L001", ICCID quebrado em 2 linhas para legibilidade, QR apontando para `/chip/{iccid}`, rodape "Escaneie para ativar".
+- [x] Compatibilidade retroativa: QRs antigos ja no mercado apontam para `/ativar?iccid=XXX` — continuam funcionando. Landing nova e um path adicional.
+- [x] Curl end-to-end validado: preview retorna 402 disponiveis, cria lote L001 (5 chips), gera PDF Pimaco (60KB) e A4 Grid (60KB), landing publica responde `nao_ativado` corretamente.
+- [x] Deps instaladas: `reportlab==4.2.5`, `qrcode[pil]==7.4.2`, `pillow==12.1.1`.
+
 
 ## Backlog
 

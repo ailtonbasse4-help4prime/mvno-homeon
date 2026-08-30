@@ -3918,7 +3918,7 @@ async def preview_lote_por_vencimento(
     # Buscar TODAS as cobrancas ordenadas por vencimento DESC, e pegar a 1a (mais recente) por cliente
     # Usar agregacao para performance
     pipeline = [
-        {"$match": {"cliente_id": {"$ne": None}, "vencimento": {"$ne": None, "$ne": ""}}},
+        {"$match": {"cliente_id": {"$ne": None}, "vencimento": {"$nin": [None, ""]}}},
         {"$sort": {"vencimento": -1, "created_at": -1}},
         {"$group": {
             "_id": "$cliente_id",
@@ -6343,6 +6343,19 @@ init_whatsapp(db=db, get_current_user=get_current_user, require_admin=require_ad
 api_router_whatsapp = APIRouter(prefix="/api")
 api_router_whatsapp.include_router(whatsapp_router)
 app.include_router(api_router_whatsapp)
+
+# QR Lotes - etiquetas para impressao dos chips
+from routes.qr_lotes import router as qr_lotes_router, init as init_qr_lotes
+init_qr_lotes(
+    db=db,
+    get_current_user=get_current_user,
+    require_admin=require_admin,
+    create_log=create_log,
+    site_url=SITE_URL,
+)
+api_router_qr = APIRouter(prefix="/api")
+api_router_qr.include_router(qr_lotes_router)
+app.include_router(api_router_qr)
 
 # Automacao de bloqueio/desbloqueio por inadimplencia (Ta Telecom + Asaas)
 from routes.automacao_bloqueio import router as automacao_bloqueio_router, init as init_automacao_bloqueio

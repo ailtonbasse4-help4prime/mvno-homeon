@@ -11,6 +11,7 @@ boto3==1.42.75
 botocore==1.42.75
 certifi==2026.2.25
 cffi==2.0.0
+chardet==7.6.0
 charset-normalizer==3.4.6
 click==8.3.1
 cryptography==46.0.5
@@ -19,6 +20,7 @@ distro==1.9.0
 dnspython==2.8.0
 ecdsa==0.19.1
 email-validator==2.3.0
+emergentintegrations==0.1.0
 et_xmlfile==2.0.0
 fastapi==0.110.1
 fastuuid==0.14.0
@@ -29,6 +31,9 @@ fsspec==2026.2.0
 google-ai-generativelanguage==0.6.15
 google-api-core==2.30.0
 google-api-python-client==2.193.0
+google-auth==2.49.1
+google-auth-httplib2==0.3.0
+google-genai==1.68.0
 google-generativeai==0.8.6
 googleapis-common-protos==1.73.0
 grpcio==1.78.0
@@ -51,6 +56,7 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 librt==0.8.1
 limits==5.8.0
+litellm==1.80.0
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mccabe==0.7.0
@@ -61,6 +67,7 @@ mypy==1.19.1
 mypy_extensions==1.1.0
 numpy==2.4.3
 oauthlib==3.3.1
+openai==1.99.9
 openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.1
@@ -83,6 +90,7 @@ Pygments==2.19.2
 PyJWT==2.12.1
 pymongo==4.5.0
 pyparsing==3.3.2
+pypng==0.20220715.0
 pytest==9.0.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
@@ -90,8 +98,10 @@ python-jose==3.5.0
 python-multipart==0.0.22
 pytokens==0.4.1
 PyYAML==6.0.3
+qrcode==7.4.2
 referencing==0.37.0
 regex==2026.2.28
+reportlab==4.2.5
 requests==2.32.5
 requests-oauthlib==2.0.0
 rich==14.3.3
@@ -104,6 +114,7 @@ six==1.17.0
 slowapi==0.1.9
 sniffio==1.3.1
 starlette==0.37.2
+stripe==14.4.1
 tenacity==9.1.4
 tiktoken==0.12.0
 tokenizers==0.22.2

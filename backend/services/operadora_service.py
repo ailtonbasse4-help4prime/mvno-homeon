@@ -325,7 +325,7 @@ class MockTaTelecomAdapter(IOperadoraAdapter):
                 "contrato_status": "ATIVO",
                 "simcard_status": "EM USO",
                 "plano": "Ta Telecom 10GB",
-                "linha": linha or numero if 'numero' in dir() else "11999999999",
+                "linha": linha or "11999999999",
                 "cliente_nome": "Cliente Mock",
             }]},
             response_time_ms=300, http_status_code=200,
@@ -722,7 +722,7 @@ class OperadoraService:
         await self._save_log(db, "consulta_consumo", req, resp, user_id, user_name, f"Consumo consolidado: {periodo}")
         return resp
 
-    def get_config_status(self) -> dict:
+    def _get_config_status_v2(self) -> dict:
         return {
             "mode": "mock" if self.use_mock else "real",
             "api_url": TATELECOM_API_URL if not self.use_mock else None,

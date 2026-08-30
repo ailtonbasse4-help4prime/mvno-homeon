@@ -1355,7 +1355,6 @@ async def auto_proxima_recarga(request: Request):
     """
     user = await _ctx["require_admin"](request)
     db = _ctx["db"]
-    from datetime import timedelta
 
     linhas = await db.linhas.find({"status": {"$in": ["ativo", "suspenso"]}}).to_list(5000)
     # Ultima cobranca paga por cliente
@@ -1401,8 +1400,9 @@ async def limpar_datas_passadas(request: Request):
 
 async def _limpar_datas_passadas_legado_NAO_USAR(request: Request):
     """Funcao legada mantida apenas como referencia - nao chamada por nenhuma rota."""
+    user = await _ctx["require_admin"](request)
     db = _ctx["db"]
-    from datetime import timedelta, date as _date
+    from datetime import date as _date
     hoje = _date.today()
     hoje_iso = hoje.strftime("%Y-%m-%d")
 

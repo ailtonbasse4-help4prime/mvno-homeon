@@ -276,7 +276,7 @@ class TestOfertasWithCusto:
                     f"{BASE_URL}/api/ofertas/{created['id']}",
                     headers={"X-Confirm-Token": confirm_token}
                 )
-        except:
+        except Exception:
             pass
 
 
@@ -357,7 +357,7 @@ class TestClientesWithCanalObservacoes:
                     f"{BASE_URL}/api/clientes/{created['id']}",
                     headers={"X-Confirm-Token": confirm_token}
                 )
-        except:
+        except:  # noqa: E722
             pass
 
 

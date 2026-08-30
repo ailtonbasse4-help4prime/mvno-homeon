@@ -27,6 +27,8 @@ import PlanilhaOperacional from "./pages/PlanilhaOperacional";
 import Custos from "./pages/Custos";
 import DemoAcessos from "./pages/DemoAcessos";
 import AutomacaoBloqueio from "./pages/AutomacaoBloqueio";
+import QrLotes from "./pages/QrLotes";
+import ChipLanding from "./pages/ChipLanding";
 import Homeon from "./pages/Homeon";
 import Help4Prime from "./pages/Help4Prime";
 import DemoLogin from "./pages/demo/DemoLogin";
@@ -56,6 +58,7 @@ function AppRoutes() {
       <Route path="/homeon" element={<ErrorBoundary resetKey={location.pathname}><Homeon /></ErrorBoundary>} />
       <Route path="/help4prime" element={<ErrorBoundary resetKey={location.pathname}><Help4Prime /></ErrorBoundary>} />
       <Route path="/ativar" element={<ErrorBoundary resetKey={location.pathname}><AtivarSelfService /></ErrorBoundary>} />
+      <Route path="/chip/:iccid" element={<ErrorBoundary resetKey={location.pathname}><ChipLanding /></ErrorBoundary>} />
       <Route path="/portal" element={<ErrorBoundary resetKey={location.pathname}><PortalLogin /></ErrorBoundary>} />
       <Route path="/portal/dashboard" element={<ErrorBoundary resetKey={location.pathname}><PortalDashboard /></ErrorBoundary>} />
       {/* Demo publica (sem auth) */}
@@ -100,6 +103,7 @@ function AppRoutes() {
         <Route path="/logs" element={<ErrorBoundary resetKey={location.pathname}><Logs /></ErrorBoundary>} />
         <Route path="/demo-acessos" element={<ErrorBoundary resetKey={location.pathname}><DemoAcessos /></ErrorBoundary>} />
         <Route path="/automacao-bloqueio" element={<ErrorBoundary resetKey={location.pathname}><AutomacaoBloqueio /></ErrorBoundary>} />
+        <Route path="/qr-lotes" element={<ErrorBoundary resetKey={location.pathname}><QrLotes /></ErrorBoundary>} />
       </Route>
     </Routes>
   );
