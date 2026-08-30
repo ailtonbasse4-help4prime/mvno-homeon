@@ -159,7 +159,7 @@ export function Linhas() {
       setTransferDestino('');
       setTransferMigrar(false);
       setTransferInativar(false);
-      fetchData();
+      fetchLinhas();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao transferir');
     }

@@ -105,23 +105,22 @@ def _draw_label(c: canvas.Canvas, x: float, y: float, cfg: dict, url: str, iccid
 
     # Lote
     c.setFont("Helvetica", 6.5)
-    c.setFillColor(HexColor("#666666"))
+    c.setFillColor(HexColor("#444444"))
     c.drawString(text_x, uy + uh - 6 * mm, f"Lote: {lote_numero}")
 
-    # ICCID (quebra em 2 linhas se necessario)
-    c.setFont("Helvetica-Bold", 6)
+    # ICCID (quebra em 2 linhas para melhor legibilidade)
+    c.setFont("Helvetica-Bold", 6.5)
     c.setFillColor(black)
     iccid_str = iccid or ""
-    # Divide o ICCID em blocos para melhor legibilidade
     part1 = iccid_str[:10]
     part2 = iccid_str[10:]
-    c.drawString(text_x, uy + 5 * mm, part1)
-    c.drawString(text_x, uy + 2 * mm, part2)
+    c.drawString(text_x, uy + 7 * mm, part1)
+    c.drawString(text_x, uy + 4 * mm, part2)
 
-    # Rodape
-    c.setFont("Helvetica", 5.5)
-    c.setFillColor(HexColor("#888888"))
-    c.drawString(text_x, uy + 0.2 * mm, "Escaneie para ativar")
+    # Rodape "Escaneie para ativar" - agora bem legivel
+    c.setFont("Helvetica-Bold", 6.5)
+    c.setFillColor(HexColor("#0066CC"))
+    c.drawString(text_x, uy + 0.5 * mm, "Escaneie para ativar")
 
 
 def build_qr_pdf(
@@ -139,6 +138,11 @@ def build_qr_pdf(
     :param formato: "pimaco_6081" | "a4_grid"
     :return: bytes do PDF
     """
+    # Fallback para o dominio de producao se base_url estiver vazio
+    # (evita gerar QR com URL relativa que o celular nao sabe abrir)
+    if not base_url or not base_url.startswith("http"):
+        base_url = "https://mvno.homeonapp.com.br"
+
     cfg = LAYOUTS.get(formato)
     if not cfg:
         raise ValueError(f"Formato desconhecido: {formato}")
