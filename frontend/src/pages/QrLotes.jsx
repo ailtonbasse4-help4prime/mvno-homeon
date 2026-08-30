@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import {
-  QrCode, Package, Printer, RotateCcw, CheckCircle2, Clock, AlertTriangle, Plus, Search, Ruler,
+  QrCode, Package, Printer, RotateCcw, CheckCircle2, Clock, AlertTriangle, Plus, Ruler, X, Search, ScanLine,
 } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -46,10 +46,15 @@ export default function QrLotes() {
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [previewData, setPreviewData] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [filtro, setFiltro] = useState({ status: 'disponivel', apenas_sem_lote: true, limite: 40 });
   const [detailsLote, setDetailsLote] = useState(null);
+
+  // Manual chip picker state
+  const [sufixo, setSufixo] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [matches, setMatches] = useState(null); // null | array
+  const [selecionados, setSelecionados] = useState([]); // [{iccid, status}]
+  const sufixoRef = useRef(null);
 
   const loadLotes = async () => {
     setLoading(true);
@@ -67,28 +72,88 @@ export default function QrLotes() {
   useEffect(() => { loadLotes(); }, []);
 
   const openCreate = () => {
-    setPreviewData(null);
-    setFiltro({ status: 'disponivel', apenas_sem_lote: true, limite: 40 });
+    setSufixo('');
+    setMatches(null);
+    setSelecionados([]);
     setDialogOpen(true);
+    setTimeout(() => sufixoRef.current?.focus(), 100);
   };
 
-  const runPreview = async () => {
+  const buscarChip = async (termo) => {
+    const t = (termo || sufixo).replace(/\D/g, '');
+    if (t.length < 3) {
+      toast.error('Digite ao menos 3 dígitos');
+      return;
+    }
+    setBuscando(true);
+    setMatches(null);
     try {
-      const res = await axios.post(`${API_URL}/api/qr-lotes/preview`, filtro, { withCredentials: true });
-      setPreviewData(res.data);
+      const res = await axios.get(`${API_URL}/api/qr-lotes/buscar-chip?termo=${t}`, { withCredentials: true });
+      const found = res.data.matches || [];
+      if (found.length === 0) {
+        toast.error(`Nenhum chip encontrado com final "${t}"`);
+        setMatches([]);
+        return;
+      }
+      // Filter out already selected
+      const disponiveis = found.filter(m => !selecionados.some(s => s.iccid === m.iccid));
+      if (disponiveis.length === 0) {
+        toast.info('Todos os chips encontrados já estão na lista');
+        setMatches([]);
+        return;
+      }
+      if (disponiveis.length === 1) {
+        // Auto-add if only 1 match
+        addChip(disponiveis[0]);
+      } else {
+        setMatches(disponiveis);
+      }
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Erro no preview');
+      toast.error(e.response?.data?.detail || 'Erro na busca');
+    } finally {
+      setBuscando(false);
+    }
+  };
+
+  const addChip = (chip) => {
+    if (chip.qr_lote_id) {
+      toast.error(`Chip já está no lote ${chip.qr_lote_numero || chip.qr_lote_id}`);
+      return;
+    }
+    if (selecionados.some(s => s.iccid === chip.iccid)) {
+      toast.info('Chip já adicionado');
+      return;
+    }
+    setSelecionados([...selecionados, chip]);
+    setSufixo('');
+    setMatches(null);
+    toast.success(`Chip ...${chip.iccid.slice(-6)} adicionado`);
+    setTimeout(() => sufixoRef.current?.focus(), 50);
+  };
+
+  const removeChip = (iccid) => {
+    setSelecionados(selecionados.filter(s => s.iccid !== iccid));
+  };
+
+  const handleSufixoKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      buscarChip();
     }
   };
 
   const criarLote = async () => {
-    if (!previewData || previewData.limite_aplicado === 0) {
-      toast.error('Nenhum chip corresponde ao filtro');
+    if (selecionados.length === 0) {
+      toast.error('Adicione ao menos 1 chip ao lote');
       return;
     }
     setCreating(true);
     try {
-      const res = await axios.post(`${API_URL}/api/qr-lotes`, filtro, { withCredentials: true });
+      const payload = {
+        iccids: selecionados.map(s => s.iccid),
+        apenas_sem_lote: true,
+      };
+      const res = await axios.post(`${API_URL}/api/qr-lotes`, payload, { withCredentials: true });
       toast.success(`Lote ${res.data.numero} criado com ${res.data.quantidade} chips`);
       setDialogOpen(false);
       loadLotes();
@@ -234,74 +299,123 @@ export default function QrLotes() {
 
       {/* Dialog Novo Lote */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md" data-testid="qr-lotes-dialog">
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-lg" data-testid="qr-lotes-dialog">
           <DialogHeader>
-            <DialogTitle className="text-white">Novo Lote de QR Code</DialogTitle>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <ScanLine className="w-5 h-5 text-blue-400" /> Novo Lote de QR Code
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label className="text-zinc-300 text-xs">Status dos chips</Label>
-              <select
-                className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-white text-sm"
-                value={filtro.status}
-                onChange={(e) => { setFiltro({...filtro, status: e.target.value}); setPreviewData(null); }}
-                data-testid="filtro-status-select"
-              >
-                <option value="disponivel">Disponíveis</option>
-                <option value="reservado">Reservados</option>
-                <option value="">Todos</option>
-              </select>
-            </div>
-            <div>
-              <Label className="text-zinc-300 text-xs">Quantidade máxima</Label>
-              <Input
-                type="number"
-                min={1}
-                max={5000}
-                value={filtro.limite}
-                onChange={(e) => { setFiltro({...filtro, limite: parseInt(e.target.value) || 1}); setPreviewData(null); }}
-                className="mt-1 bg-zinc-950 border-zinc-800"
-                data-testid="filtro-limite-input"
-              />
-              <p className="text-[10px] text-zinc-500 mt-1">Pimaco 6081: 40 por folha • A4 Grid: 30 por folha</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="apenas-sem-lote"
-                checked={filtro.apenas_sem_lote}
-                onChange={(e) => { setFiltro({...filtro, apenas_sem_lote: e.target.checked}); setPreviewData(null); }}
-                data-testid="filtro-sem-lote-checkbox"
-              />
-              <label htmlFor="apenas-sem-lote" className="text-sm text-zinc-300">Apenas chips ainda sem lote</label>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-md p-3 text-xs text-blue-200">
+              Digite os <strong>últimos 4-8 dígitos</strong> do ICCID de cada chip que você separou fisicamente e pressione <kbd className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 rounded text-[10px]">Enter</kbd>. O sistema completa o número e adiciona à lista.
             </div>
 
-            <Button variant="outline" onClick={runPreview} className="w-full gap-2" data-testid="preview-btn">
-              <Search className="w-4 h-4" /> Ver quantos chips serão incluídos
-            </Button>
+            <div>
+              <Label className="text-zinc-300 text-xs">Últimos dígitos do ICCID</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  ref={sufixoRef}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Ex: 4567"
+                  value={sufixo}
+                  onChange={(e) => setSufixo(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={handleSufixoKeyDown}
+                  className="bg-zinc-950 border-zinc-800 font-mono text-base"
+                  maxLength={22}
+                  data-testid="sufixo-input"
+                />
+                <Button
+                  onClick={() => buscarChip()}
+                  disabled={buscando || sufixo.length < 3}
+                  className="bg-blue-600 hover:bg-blue-700 gap-1"
+                  data-testid="buscar-chip-btn"
+                >
+                  <Search className="w-4 h-4" />
+                  {buscando ? '...' : 'Buscar'}
+                </Button>
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-1">Mínimo 3 dígitos • pressione Enter para buscar rápido</p>
+            </div>
 
-            {previewData && (
-              <div className="bg-zinc-950 border border-zinc-800 rounded-md p-3 space-y-1">
-                <p className="text-sm text-white">
-                  <span className="font-bold text-2xl text-emerald-400">{previewData.limite_aplicado}</span> chips serão incluídos
+            {/* Multiplos matches: escolha */}
+            {matches && matches.length > 1 && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-md p-3">
+                <p className="text-xs text-amber-300 mb-2 font-semibold">
+                  {matches.length} chips terminam com "{sufixo}" — escolha o correto:
                 </p>
-                <p className="text-xs text-zinc-500">
-                  {previewData.total > previewData.limite_aplicado
-                    ? `${previewData.total} chips correspondem ao filtro — apenas os primeiros ${previewData.limite_aplicado} serão usados.`
-                    : `Todos os ${previewData.total} chips que correspondem ao filtro.`}
-                </p>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {matches.map(m => (
+                    <button
+                      key={m.iccid}
+                      type="button"
+                      onClick={() => addChip(m)}
+                      disabled={!!m.qr_lote_id}
+                      className={`w-full text-left px-3 py-2 rounded-md text-xs font-mono flex items-center justify-between ${
+                        m.qr_lote_id
+                          ? 'bg-zinc-800/40 text-zinc-600 cursor-not-allowed'
+                          : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-200'
+                      }`}
+                      data-testid={`match-${m.iccid}`}
+                    >
+                      <span>{m.iccid}</span>
+                      {m.qr_lote_id
+                        ? <span className="text-[10px] text-orange-400">no lote {m.qr_lote_numero}</span>
+                        : <span className="text-[10px] text-emerald-400">{m.status}</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
+
+            {/* Lista de selecionados */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-zinc-300 text-xs">Chips no lote</Label>
+                <span className="text-xs font-bold text-emerald-400" data-testid="selecionados-count">
+                  {selecionados.length} {selecionados.length === 1 ? 'chip' : 'chips'}
+                </span>
+              </div>
+              {selecionados.length === 0 ? (
+                <div className="bg-zinc-950/60 border border-dashed border-zinc-800 rounded-md p-6 text-center">
+                  <Package className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-500">Nenhum chip adicionado ainda</p>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                  {selecionados.map((s, i) => (
+                    <div
+                      key={s.iccid}
+                      className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2"
+                      data-testid={`selecionado-${s.iccid}`}
+                    >
+                      <span className="text-zinc-500 text-xs w-6 flex-none">{i + 1}.</span>
+                      <span className="text-white font-mono text-xs flex-1 truncate">{s.iccid}</span>
+                      <span className="text-[10px] text-emerald-400 flex-none">{s.status}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeChip(s.iccid)}
+                        className="flex-none text-zinc-500 hover:text-red-400 transition-colors"
+                        data-testid={`remove-${s.iccid}`}
+                        aria-label="Remover"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button
               onClick={criarLote}
-              disabled={creating || !previewData || previewData.limite_aplicado === 0}
+              disabled={creating || selecionados.length === 0}
               className="bg-blue-600 hover:bg-blue-700"
               data-testid="criar-lote-btn"
             >
-              {creating ? 'Criando…' : 'Criar Lote'}
+              {creating ? 'Criando…' : `Criar Lote com ${selecionados.length} ${selecionados.length === 1 ? 'chip' : 'chips'}`}
             </Button>
           </DialogFooter>
         </DialogContent>
