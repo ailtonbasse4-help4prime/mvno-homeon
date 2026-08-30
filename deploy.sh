@@ -145,9 +145,10 @@ sudo chown -R www-data:www-data "$WEB_DIR"
 
 # 4.5 Instalar/atualizar dependencias Python do backend
 echo "→ Instalando dependencias Python..."
-# Detecta se ha venv; senao usa pip do sistema
+# Detecta venv (checa locais conhecidos, incluindo /app/venv onde o systemd aponta)
 VENV_ACTIVATE=""
 for path in \
+    "/app/venv/bin/activate" \
     "$REPO/backend/venv/bin/activate" \
     "$REPO/backend/.venv/bin/activate" \
     "$REPO/venv/bin/activate" \
