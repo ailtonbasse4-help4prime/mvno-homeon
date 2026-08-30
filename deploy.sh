@@ -143,6 +143,36 @@ sudo find "$WEB_DIR" -mindepth 1 -maxdepth 1 ! -name 'homeon-assets' -exec rm -r
 sudo cp -r "$REPO/frontend/build/." "$WEB_DIR/"
 sudo chown -R www-data:www-data "$WEB_DIR"
 
+# 4.5 Instalar/atualizar dependencias Python do backend (dentro do venv)
+echo "→ Instalando dependencias Python..."
+VENV_ACTIVATE=""
+for path in \
+    "$REPO/backend/venv/bin/activate" \
+    "$REPO/backend/.venv/bin/activate" \
+    "$REPO/venv/bin/activate" \
+    "$REPO/.venv/bin/activate"
+do
+    if [ -f "$path" ]; then
+        VENV_ACTIVATE="$path"
+        break
+    fi
+done
+if [ -z "$VENV_ACTIVATE" ]; then
+    echo "❌ SAFETY: venv Python nao encontrado em locais padrao — abortando deploy"
+    echo "   Ajuste o loop 'for path in' em deploy.sh com o caminho correto"
+    exit 1
+fi
+echo "   venv: $VENV_ACTIVATE"
+# shellcheck disable=SC1090
+source "$VENV_ACTIVATE"
+pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
+    echo "❌ pip install falhou — abortando (backend nao vai subir com deps faltando)"
+    deactivate
+    exit 1
+}
+deactivate
+echo "   ✓ Dependencias Python instaladas/atualizadas"
+
 # 5. Reiniciar backend via systemd (mvno-backend.service)
 echo "→ Reiniciando backend via systemd..."
 # Force-kill de processo stale APENAS da porta MVNO (nunca 8001 do CRM)
