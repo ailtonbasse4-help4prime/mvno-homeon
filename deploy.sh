@@ -143,8 +143,9 @@ sudo find "$WEB_DIR" -mindepth 1 -maxdepth 1 ! -name 'homeon-assets' -exec rm -r
 sudo cp -r "$REPO/frontend/build/." "$WEB_DIR/"
 sudo chown -R www-data:www-data "$WEB_DIR"
 
-# 4.5 Instalar/atualizar dependencias Python do backend (dentro do venv)
+# 4.5 Instalar/atualizar dependencias Python do backend
 echo "→ Instalando dependencias Python..."
+# Detecta se ha venv; senao usa pip do sistema
 VENV_ACTIVATE=""
 for path in \
     "$REPO/backend/venv/bin/activate" \
@@ -157,20 +158,24 @@ do
         break
     fi
 done
-if [ -z "$VENV_ACTIVATE" ]; then
-    echo "❌ SAFETY: venv Python nao encontrado em locais padrao — abortando deploy"
-    echo "   Ajuste o loop 'for path in' em deploy.sh com o caminho correto"
-    exit 1
-fi
-echo "   venv: $VENV_ACTIVATE"
-# shellcheck disable=SC1090
-source "$VENV_ACTIVATE"
-pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
-    echo "❌ pip install falhou — abortando (backend nao vai subir com deps faltando)"
+if [ -n "$VENV_ACTIVATE" ]; then
+    echo "   venv: $VENV_ACTIVATE"
+    # shellcheck disable=SC1090
+    source "$VENV_ACTIVATE"
+    pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
+        echo "❌ pip install (venv) falhou — abortando"
+        deactivate
+        exit 1
+    }
     deactivate
-    exit 1
-}
-deactivate
+else
+    echo "   Python do sistema (sem venv)"
+    python3 -m pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" --break-system-packages 2>/dev/null || \
+    python3 -m pip install --disable-pip-version-check -q -r "$REPO/backend/requirements.txt" || {
+        echo "❌ pip install (sistema) falhou — abortando"
+        exit 1
+    }
+fi
 echo "   ✓ Dependencias Python instaladas/atualizadas"
 
 # 5. Reiniciar backend via systemd (mvno-backend.service)
