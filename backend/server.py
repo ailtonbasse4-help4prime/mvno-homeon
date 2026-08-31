@@ -1502,6 +1502,37 @@ async def update_chip(chip_id: str, data: ChipUpdate, request: Request):
     updated = await db.chips.find_one({"_id": ObjectId(chip_id)})
     return await build_chip_response(updated)
 
+
+class BulkOfertaRequest(BaseModel):
+    iccids: List[str]
+    oferta_id: str
+
+
+@api_router.post("/chips/bulk-oferta")
+async def chips_bulk_oferta(data: BulkOfertaRequest, request: Request):
+    """Aplica uma oferta a varios chips (apenas disponivel/reservado)."""
+    user = await require_admin(request)
+    if not data.iccids:
+        raise HTTPException(status_code=400, detail="Nenhum ICCID informado")
+    oferta = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+    if not oferta:
+        raise HTTPException(status_code=400, detail="Oferta nao encontrada")
+    if not oferta.get("ativo", True):
+        raise HTTPException(status_code=400, detail="Oferta nao esta ativa")
+    result = await db.chips.update_many(
+        {
+            "iccid": {"$in": data.iccids},
+            "status": {"$in": [ChipStatus.disponivel.value, ChipStatus.reservado.value]},
+        },
+        {"$set": {"oferta_id": data.oferta_id}},
+    )
+    await create_log(
+        "cadastro",
+        f"Oferta '{oferta['nome']}' aplicada a {result.modified_count} chips (de {len(data.iccids)} solicitados)",
+        user["id"], user["name"],
+    )
+    return {"success": True, "updated": result.modified_count, "requested": len(data.iccids)}
+
 # ==================== ACTIVATION ROUTE ====================
 @api_router.post("/ativacao", response_model=ActivationResponse)
 async def activate_line(data: ActivationRequest, request: Request):

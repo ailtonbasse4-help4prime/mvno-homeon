@@ -281,6 +281,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] ICCID de 6pt para 6.5pt bold + reposicionado (linhas em 7mm e 4mm do rodape) para nao colidir com o rodape novo.
 - [x] SITE_URL adicionado ao .env de producao na VPS (era vazio, QR encodava caminho relativo). Fallback `https://mvno.homeonapp.com.br` adicionado ao codigo para nao quebrar de novo se env estiver ausente.
 
+### Vinculacao em Massa: Chips → Oferta / Revendedor (31/08/2026)
+- [x] Novo endpoint `POST /api/chips/bulk-oferta` — aceita `{iccids: [], oferta_id: str}`. Aplica em chips com status disponivel/reservado. Retorna `{updated, requested}`.
+- [x] Endpoint helper `GET /api/qr-lotes/por-numero/{numero}` — busca lote pelo numero (L001) alem do ObjectId. Usado pela tab "Por Lote".
+- [x] Componente reutilizavel `components/ChipPicker.jsx` — 2 tabs: **Por ICCID** (sufixo + Enter, mesmo padrao QR Lotes) e **Por Lote** (digitar L001, ver preview de disponiveis/outros status, botao "Adicionar N chips do lote"). Lista visual dos selecionados com X pra remover, contador ao vivo, "Limpar tudo".
+- [x] Pagina `/chips`: novos botoes **"Vincular Oferta em Massa"** e **"Vincular Revendedor em Massa"** (so admin). Dialog usa ChipPicker + dropdown de oferta/revendedor.
+- [x] Pagina `/revendedores`: dialog "Vincular Chips" reescrito para usar o ChipPicker (antes era checkbox scrollavel — usuario reclamou de "muito trabalhoso").
+- [x] Filtro `onlyAvailable`: modo revendedor aceita so chips com status `disponivel`. Modo oferta aceita `disponivel` e `reservado`.
+- [x] Smoke test: /chips → botao Vincular Oferta → dialog abre → tab "Por Lote" → digitar L001 → mostra "5 disponiveis" → botao "Adicionar 5 chips do lote L001" funciona.
+
 
 ## Backlog
 

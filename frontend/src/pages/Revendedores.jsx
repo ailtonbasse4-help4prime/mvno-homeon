@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { ChipPicker } from '../components/ChipPicker';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Plus, Edit, Trash2, Search, Store, Package, CheckCircle, Link,
@@ -39,7 +40,8 @@ export function Revendedores() {
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
   const [chipSearch, setChipSearch] = useState('');
-  const [selectedIccids, setSelectedIccids] = useState([]);
+  const [selectedIccids, setSelectedIccids] = useState([]); // legado (usado em outros dialogs)
+  const [vincularChips, setVincularChips] = useState([]); // novo picker
   const { executeSecureDelete, confirmState, closeConfirm } = useSecureAction();
 
   // QR Code state
@@ -111,28 +113,23 @@ export function Revendedores() {
 
   const handleOpenVincular = (revId) => {
     setSelectedRevId(revId);
-    setSelectedIccids([]);
+    setVincularChips([]);
     setChipSearch('');
     setVincularDialogOpen(true);
   };
 
   const handleVincular = async () => {
-    if (!selectedIccids.length) { toast.error('Selecione ao menos um chip'); return; }
+    if (!vincularChips.length) { toast.error('Selecione ao menos um chip'); return; }
+    const iccids = vincularChips.map(c => c.iccid);
     setSubmitting(true);
     try {
       const res = await axios.post(`${API_URL}/api/revendedores/${selectedRevId}/vincular-chips`,
-        { iccids: selectedIccids }, { withCredentials: true });
+        { iccids }, { withCredentials: true });
       toast.success(`${res.data.linked} chips vinculados`);
       setVincularDialogOpen(false);
       fetchAll();
     } catch (e) { toast.error('Erro ao vincular chips'); }
     setSubmitting(false);
-  };
-
-  const toggleIccid = (iccid) => {
-    setSelectedIccids(prev =>
-      prev.includes(iccid) ? prev.filter(i => i !== iccid) : [...prev, iccid]
-    );
   };
 
   // =================== QR CODE ===================
@@ -459,24 +456,18 @@ export function Revendedores() {
             <DialogTitle>Vincular Chips ao Revendedor</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-4 h-4" />
-              <Input placeholder="Buscar ICCID..." value={chipSearch} onChange={e => setChipSearch(e.target.value)}
-                className="pl-10 bg-zinc-900 border-zinc-700" />
-            </div>
-            <p className="text-sm text-zinc-400">{selectedIccids.length} selecionados de {filteredChips.length} disponiveis</p>
-            <div className="max-h-64 overflow-y-auto border border-zinc-800 rounded-md p-2 space-y-1">
-              {filteredChips.slice(0, 100).map(c => (
-                <label key={c.iccid} className="flex items-center gap-2 p-1.5 hover:bg-zinc-900 rounded cursor-pointer text-sm font-mono">
-                  <input type="checkbox" checked={selectedIccids.includes(c.iccid)}
-                    onChange={() => toggleIccid(c.iccid)} className="rounded" />
-                  {c.iccid}
-                </label>
-              ))}
-              {filteredChips.length > 100 && <p className="text-xs text-zinc-500 text-center py-2">Mostrando 100 de {filteredChips.length}. Use a busca para filtrar.</p>}
-            </div>
-            <Button onClick={handleVincular} disabled={submitting || !selectedIccids.length} className="w-full btn-primary">
-              {submitting ? 'Vinculando...' : `Vincular ${selectedIccids.length} Chips`}
+            <ChipPicker
+              selecionados={vincularChips}
+              onChange={setVincularChips}
+              onlyAvailable={true}
+            />
+            <Button
+              onClick={handleVincular}
+              disabled={submitting || !vincularChips.length}
+              className="w-full btn-primary"
+              data-testid="vincular-executar-btn"
+            >
+              {submitting ? 'Vinculando...' : `Vincular ${vincularChips.length} Chips`}
             </Button>
           </div>
         </DialogContent>
