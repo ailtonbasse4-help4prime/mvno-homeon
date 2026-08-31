@@ -269,6 +269,17 @@ async def listar_lotes(
     }
 
 
+@router.get("/qr-lotes/por-numero/{numero}")
+async def detalhes_lote_por_numero(numero: str):
+    """Busca lote pelo numero (ex: L001) ao inves do ObjectId."""
+    db = _ctx["db"]
+    numero_up = numero.strip().upper()
+    lote = await db.qr_lotes.find_one({"numero": numero_up})
+    if not lote:
+        raise HTTPException(status_code=404, detail=f"Lote {numero_up} nao encontrado")
+    return _lote_to_public(lote)
+
+
 @router.get("/qr-lotes/{lote_id}")
 async def detalhes_lote(lote_id: str):
     db = _ctx["db"]

@@ -13,9 +13,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel,
 } from '../components/ui/select';
 import { toast } from 'sonner';
-import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio, ArrowRightLeft, RotateCcw } from 'lucide-react';
+import { Plus, CreditCard, Trash2, Filter, Tag, RefreshCw, Edit, Smartphone, Radio, ArrowRightLeft, RotateCcw, Users } from 'lucide-react';
 import { ConfirmPasswordDialog } from '../components/ConfirmPasswordDialog';
 import { useSecureAction } from '../hooks/useSecureAction';
+import { ChipPicker } from '../components/ChipPicker';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -92,6 +93,57 @@ export function Chips() {
   const [editFormData, setEditFormData] = useState({ oferta_id: '' });
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Bulk actions state
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState('oferta'); // 'oferta' | 'revendedor'
+  const [bulkChips, setBulkChips] = useState([]);
+  const [bulkOfertaId, setBulkOfertaId] = useState('');
+  const [bulkRevendedorId, setBulkRevendedorId] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [revendedores, setRevendedores] = useState([]);
+
+  useEffect(() => {
+    axios.get(`${API_URL}/api/revendedores`, { withCredentials: true })
+      .then(r => setRevendedores(safeArray(r.data)))
+      .catch(() => {});
+  }, []);
+
+  const openBulkDialog = (mode) => {
+    setBulkMode(mode);
+    setBulkChips([]);
+    setBulkOfertaId('');
+    setBulkRevendedorId('');
+    setBulkDialogOpen(true);
+  };
+
+  const executarBulk = async () => {
+    if (bulkChips.length === 0) {
+      toast.error('Adicione ao menos 1 chip');
+      return;
+    }
+    const iccids = bulkChips.map(c => c.iccid);
+    setBulkSubmitting(true);
+    try {
+      if (bulkMode === 'oferta') {
+        if (!bulkOfertaId) { toast.error('Selecione uma oferta'); return; }
+        const res = await axios.post(`${API_URL}/api/chips/bulk-oferta`,
+          { iccids, oferta_id: bulkOfertaId }, { withCredentials: true });
+        toast.success(`${res.data.updated} chips atualizados (de ${res.data.requested})`);
+      } else {
+        if (!bulkRevendedorId) { toast.error('Selecione um revendedor'); return; }
+        const res = await axios.post(`${API_URL}/api/revendedores/${bulkRevendedorId}/vincular-chips`,
+          { iccids }, { withCredentials: true });
+        toast.success(`${res.data.linked} chips vinculados ao revendedor`);
+      }
+      setBulkDialogOpen(false);
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao aplicar em massa');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -263,6 +315,26 @@ export function Chips() {
             <Button onClick={() => { setFormData({ iccid: '', oferta_id: '' }); setDialogOpen(true); }} className="btn-primary flex items-center gap-2 flex-1 sm:flex-initial" data-testid="add-chip-button">
               <Plus className="w-4 h-4" />Novo Chip
             </Button>
+          )}
+          {isAdmin && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => openBulkDialog('oferta')}
+                className="flex items-center gap-2 border-zinc-700 hover:bg-zinc-800"
+                data-testid="bulk-oferta-btn"
+              >
+                <Tag className="w-4 h-4" /> Vincular Oferta em Massa
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => openBulkDialog('revendedor')}
+                className="flex items-center gap-2 border-zinc-700 hover:bg-zinc-800"
+                data-testid="bulk-revendedor-btn"
+              >
+                <Users className="w-4 h-4" /> Vincular Revendedor em Massa
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -518,6 +590,68 @@ export function Chips() {
         </DialogContent>
       </Dialog>
       <ConfirmPasswordDialog open={confirmState.open} onClose={closeConfirm} onConfirmed={confirmState.onConfirmed} actionDescription={confirmState.description} />
+
+      {/* Bulk Dialog: oferta ou revendedor */}
+      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-lg max-h-[90vh] overflow-y-auto" data-testid="bulk-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              {bulkMode === 'oferta' ? <Tag className="w-5 h-5 text-blue-400" /> : <Users className="w-5 h-5 text-blue-400" />}
+              {bulkMode === 'oferta' ? 'Vincular Oferta em Massa' : 'Vincular Revendedor em Massa'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {bulkMode === 'oferta' ? (
+              <div>
+                <Label className="text-zinc-300 text-xs">Oferta a aplicar</Label>
+                <select
+                  value={bulkOfertaId}
+                  onChange={(e) => setBulkOfertaId(e.target.value)}
+                  className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-white text-sm"
+                  data-testid="bulk-oferta-select"
+                >
+                  <option value="">-- selecione --</option>
+                  {ofertas.filter(o => o.ativo !== false).map(o => (
+                    <option key={o.id} value={o.id}>{o.nome}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-zinc-300 text-xs">Revendedor</Label>
+                <select
+                  value={bulkRevendedorId}
+                  onChange={(e) => setBulkRevendedorId(e.target.value)}
+                  className="w-full mt-1 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-white text-sm"
+                  data-testid="bulk-revendedor-select"
+                >
+                  <option value="">-- selecione --</option>
+                  {revendedores.map(r => (
+                    <option key={r.id} value={r.id}>{r.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <ChipPicker
+              selecionados={bulkChips}
+              onChange={setBulkChips}
+              onlyAvailable={bulkMode === 'revendedor'}
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={executarBulk}
+              disabled={bulkSubmitting || bulkChips.length === 0 || (bulkMode === 'oferta' ? !bulkOfertaId : !bulkRevendedorId)}
+              className="bg-blue-600 hover:bg-blue-700"
+              data-testid="bulk-executar-btn"
+            >
+              {bulkSubmitting ? 'Aplicando…' : `Aplicar em ${bulkChips.length} ${bulkChips.length === 1 ? 'chip' : 'chips'}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
