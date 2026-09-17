@@ -291,15 +291,44 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 - [x] Smoke test: /chips → botao Vincular Oferta → dialog abre → tab "Por Lote" → digitar L001 → mostra "5 disponiveis" → botao "Adicionar 5 chips do lote L001" funciona.
 
 
+### INCIDENTE E RECUPERACAO - Ataque Ransomware ao MongoDB (17/09/2026)
+- [x] Ataque identificado: grupo `1G95AF` dropou DB `mvno_management` inteiro, deixou nota de resgate exigindo 0.0065 BTC. Nao foi pago (grupo comprovadamente nao restaura dados).
+- [x] Root cause: MongoDB container Docker (`homeon-crm-mongodb-1`, mongo:6) rodava sem `--auth` e com bind `0.0.0.0:27017` exposto na internet. Porta 27017 acessivel externamente.
+- [x] MongoDB endurecido: recriado container com `command: ["mongod","--auth","--bind_ip_all"]` e port mapping `127.0.0.1:27017:27017` (localhost only). Usuario root `mvnoadmin` criado com senha forte de 28 chars. Credenciais salvas em `/root/mongo_credentials.txt`.
+- [x] Firewall aplicado: `iptables -I INPUT -p tcp --dport 27017 ! -s 127.0.0.1 -j DROP` (porta 27017 bloqueada externamente).
+- [x] `.env` do MVNO e do CRM (`/opt/homeon-crm/backend/.env`) atualizados com `MONGO_URL=mongodb://mvnoadmin:...@mongodb:27017/?authSource=admin`.
+- [x] `docker-compose.yml` do CRM reescrito: adicionou `command: ["mongod","--auth","--bind_ip_all"]` no service mongodb, port 127.0.0.1, `MONGO_URL` explicito no environment: block (prevalence sobre .env interno).
+- [x] Restaurados 17.466 documentos do backup local `/opt/backups/mvno/20260917_030001` (backup diario 03:00). 234 clientes, 530 chips, 254 linhas, 16 ofertas, 18 revendedores, 107 ativacoes, 32 planos.
+- [x] Senha admin resetada: `ailtonhomeon@gmail.com` / `@mvnohomeon157258` (58 lockouts limpos - tentativas de brute force do atacante durante 12h). Credenciais em `/app/memory/test_credentials.md`.
+- [x] Bilhete de resgate `READ_ME_TO_RECOVER_YOUR_DATA` dropado.
+
+### Backup Externo Backblaze B2 (17/09/2026) - P0 CONCLUIDO
+- [x] Conta B2 configurada, bucket privado `homeon-mvno-backup` (encryption AES-256, 10GB grátis)
+- [x] `rclone v1.75.1` instalado no VPS, remote `b2` configurado com Application Key `mvno-backup-script` (read+write, restrito ao bucket)
+- [x] Script `/opt/mvno-homeon/deploy/backup-mvno.sh` atualizado: agora faz mongodump com auth + upload rclone sync pro B2 + rotacao offsite (10 backups). Cron 03:00 diario ja aponta pra ele.
+- [x] Primeiro backup no B2: 20260917_183134 (24 MiB, 17.511 documentos). Custo mensal estimado: R$ 0,00 (dentro dos 10 GB grátis).
+
+### Fix Portal do Cliente - Bug MSISDN Prefixo 55 (17/09/2026)
+- [x] Bug reportado: cliente "Eduardo de Jesus" mostrava saldo `1.0 GB` no Portal enquanto Ta mostrava `6.6 GB`.
+- [x] Root cause: `linhas.msisdn` armazenado como `5511927060195` (13 dig com prefixo pais), Ta API retorna `balance=0` para 13 digitos e `balance=6792.79` para 11 digitos.
+- [x] Fix aplicado em `GET /api/portal/saldo/{numero}` (server.py:4941): apos `re.sub(r'\D', '', numero)`, se len == 13 e comeca com "55", strip prefixo.
+- [x] Fix aplicado tanto no VPS `/opt/mvno-homeon/backend/server.py` quanto em `/app/backend/server.py` (source).
+
 ## Backlog
 
+### P0 - Critico
+- [ ] Auditoria completa do ataque: mongod.log ultimas 72h, identificar quando atacante entrou, se leu dados antes de dropar, IPs de origem, criar abuse report
+- [ ] Trocar senhas dos outros 2 admins do MVNO (`usuarios` collection tem 3 admins - todas expostas durante ataque)
+
 ### P1 - Alta Prioridade
+- [ ] Verificar outros bugs de formato MSISDN em endpoints Ta (portabilidade, alteracao plano, cancelamento, bloqueio) - podem ter mesmo bug do prefixo 55
 - [ ] **Fase B - Geracao de boletos por Expiracao Ta**: usar `data_expiracao_ta - 5 dias` como vencimento sugerido em CobrancaLotePorVencimentoDialog
-- [ ] Configurar autenticacao interna do MongoDB (habilitar `--auth` no Docker, criar usuario root forte, atualizar `MONGO_URL` no .env)
+- [ ] Fix ASAAS_API_KEY do CRM (docker-compose interpretou `\\$aact_prod` como env vazia - warnings no `docker compose up`)
+- [ ] Tier 1 CPF Validation (Self-Service): validacao matematica de CPF + se ja existe em `db.clientes`, auto-preenche nome/tel/endereco
 - [ ] Desmembrar server.py (6100+ linhas) em roteadores separados (`/app/backend/routes/`)
-- [ ] Backup externo do MongoDB (S3/Backblaze) - hoje so backup local na VPS
 
 ### P2 - Media Prioridade
+- [ ] Tier 2 CPF Validation: integrar HubDoDesenvolvedor para fetch Nome/DOB/Nome da Mae
 - [ ] Dashboard Executivo com metricas de recuperacao de receita via auto-bloqueio
 - [ ] Historico de ativacoes
 - [ ] Expansao Multi-Tenant (SaaS - Fase 1)

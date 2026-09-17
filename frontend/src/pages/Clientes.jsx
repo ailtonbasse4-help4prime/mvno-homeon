@@ -201,7 +201,7 @@ export function Clientes() {
     try {
       const res = await axios.post(`${API_URL}/api/clientes/${cliente.id}/sincronizar-com-ta`, {}, { withCredentials: true });
       toast.success(res.data?.message || 'Sincronizado com sucesso');
-      fetchData();
+      fetchClientes();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao sincronizar com a Tá');
     }
