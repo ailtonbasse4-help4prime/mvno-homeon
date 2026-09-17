@@ -4943,6 +4943,9 @@ async def portal_saldo(numero: str, request: Request):
     """Consulta saldo de dados na Ta Telecom."""
     cliente = await _get_portal_cliente(request)
     numero_clean = re.sub(r'\D', '', numero)
+    # Ta API exige 11 digitos (sem prefixo 55)
+    if len(numero_clean) == 13 and numero_clean.startswith("55"):
+        numero_clean = numero_clean[2:]
     try:
         resp = await operadora_service.consultar_saldo_dados(numero_clean, db=db, user_id=str(cliente["_id"]), user_name=cliente["nome"])
         if resp.success and resp.data:
