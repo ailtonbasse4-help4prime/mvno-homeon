@@ -82,7 +82,10 @@ export default function AtivarSelfService() {
     if (cleaned.length === 11) {
       setCpfSearching(true);
       try {
-        const res = await axios.get(`${API_URL}/api/public/buscar-cpf/${cleaned}`);
+        // SEC-003: exige ICCID como prova de posse do chip
+        const iccidClean = iccid.replace(/\D/g, '');
+        if (iccidClean.length < 18) { setCpfSearching(false); return; }
+        const res = await axios.get(`${API_URL}/api/public/buscar-cpf/${cleaned}?iccid=${iccidClean}`);
         if (res.data?.found && res.data.data) {
           const d = res.data.data;
           setForm(prev => ({

@@ -587,24 +587,25 @@ async def build_client_response(c: dict) -> ClientResponse:
 
 # ==================== AUTH ROUTES ====================
 @api_router.post("/auth/register", response_model=UserResponse)
-async def register(data: UserCreate, response: Response):
+async def register(data: UserCreate, response: Response, current_user: dict = Depends(get_current_user)):
+    # SEC-001 fix: cadastro exige admin logado + ignora role vindo do body (forcado atendente)
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas administradores podem cadastrar usuarios")
     email = data.email.lower()
     existing = await db.usuarios.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="Email ja cadastrado")
+    # Sempre atendente por padrao - admin promove depois via PUT /usuarios/{id}
+    forced_role = UserRole.atendente
     user_doc = {
         "email": email, "password_hash": hash_password(data.password),
-        "name": data.name, "role": data.role.value,
+        "name": data.name, "role": forced_role.value,
         "created_at": datetime.now(timezone.utc)
     }
     result = await db.usuarios.insert_one(user_doc)
     user_id = str(result.inserted_id)
-    access_token = create_access_token(user_id, email)
-    refresh_token = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=3600, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
-    await create_log("cadastro", f"Novo usuario registrado: {email}", user_id, data.name)
-    return UserResponse(id=user_id, email=email, name=data.name, role=data.role.value, created_at=user_doc["created_at"])
+    await create_log("cadastro", f"Novo usuario registrado por {current_user.get('email')}: {email}", user_id, data.name)
+    return UserResponse(id=user_id, email=email, name=data.name, role=forced_role.value, created_at=user_doc["created_at"])
 
 @api_router.post("/auth/login", response_model=UserResponse)
 @limiter.limit("10/minute")
@@ -1014,11 +1015,32 @@ async def buscar_cliente_por_cpf(cpf: str, request: Request):
     return await _consultar_cpfhub(doc_clean)
 
 @api_router.get("/public/buscar-cpf/{cpf}")
-async def buscar_cpf_publico(cpf: str):
-    """Busca CPF: banco local primeiro, depois CPFHub.io (endpoint publico)."""
+@limiter.limit("20/hour")
+async def buscar_cpf_publico(cpf: str, request: Request, iccid: Optional[str] = None):
+    """Busca CPF: banco local primeiro, depois CPFHub.io.
+    
+    SEC-003 fix: exige ICCID valido como prova de posse fisica do chip.
+    Rate limit: 20/hora por IP. Loga toda consulta para auditoria.
+    """
+    ip = request.client.host if request.client else "unknown"
     doc_clean = cpf.replace(".", "").replace("-", "").replace("/", "").strip()
     if len(doc_clean) < 11:
         return {"found": False}
+    
+    # Exige ICCID e valida que existe/disponivel
+    if not iccid:
+        await create_log("buscar_cpf_bloqueado", f"Tentativa sem ICCID de IP {ip}", None, None)
+        raise HTTPException(status_code=403, detail="Parametro iccid obrigatorio para consulta")
+    iccid_clean = re.sub(r'\D', '', iccid)
+    if len(iccid_clean) < 18:
+        raise HTTPException(status_code=400, detail="ICCID invalido")
+    chip = await db.chips.find_one({"iccid": iccid_clean})
+    if not chip:
+        await create_log("buscar_cpf_bloqueado", f"ICCID inexistente {iccid_clean[-4:]} de IP {ip}", None, None)
+        raise HTTPException(status_code=404, detail="Chip nao encontrado")
+    
+    await create_log("buscar_cpf", f"Consulta CPF ***{doc_clean[-4:]} via ICCID ***{iccid_clean[-4:]} de IP {ip}", None, None)
+    
     cliente = await db.clientes.find_one({"documento": doc_clean})
     if cliente:
         return {
@@ -4374,7 +4396,22 @@ async def disable_asaas_notifications_bulk(request: Request):
 # --- Webhook Asaas ---
 @api_router.post("/webhooks/asaas")
 async def asaas_webhook(request: Request):
-    """Recebe notificacoes de pagamento do Asaas."""
+    """Recebe notificacoes de pagamento do Asaas.
+    
+    SEC-004 fix: valida header 'asaas-access-token' contra ASAAS_WEBHOOK_TOKEN do .env.
+    Se ASAAS_WEBHOOK_TOKEN estiver vazio, o webhook rejeita TUDO (fail-safe).
+    Configure em: Asaas Painel > Integracoes > Webhook > Access Token.
+    """
+    expected_token = os.environ.get("ASAAS_WEBHOOK_TOKEN", "").strip()
+    if not expected_token:
+        logger.error("[SEC-004] ASAAS_WEBHOOK_TOKEN nao configurado no .env - webhook rejeitado")
+        raise HTTPException(status_code=503, detail="Webhook nao configurado")
+    received_token = request.headers.get("asaas-access-token", "").strip()
+    if received_token != expected_token:
+        ip = request.client.host if request.client else "unknown"
+        logger.warning(f"[SEC-004] Webhook Asaas com token invalido de IP {ip}")
+        raise HTTPException(status_code=401, detail="Token de webhook invalido")
+    
     try:
         body = await request.json()
     except Exception:
@@ -4946,6 +4983,14 @@ async def portal_saldo(numero: str, request: Request):
     # Ta API exige 11 digitos (sem prefixo 55)
     if len(numero_clean) == 13 and numero_clean.startswith("55"):
         numero_clean = numero_clean[2:]
+    # SEC-005 fix: valida que a linha pertence ao cliente autenticado
+    numero_variants = [numero_clean, "55" + numero_clean] if len(numero_clean) == 11 else [numero_clean]
+    linha_do_cliente = await db.linhas.find_one({
+        "cliente_id": str(cliente["_id"]),
+        "$or": [{"msisdn": {"$in": numero_variants}}, {"numero": {"$in": numero_variants}}]
+    })
+    if not linha_do_cliente:
+        raise HTTPException(status_code=403, detail="Linha nao pertence ao cliente autenticado")
     try:
         resp = await operadora_service.consultar_saldo_dados(numero_clean, db=db, user_id=str(cliente["_id"]), user_name=cliente["nome"])
         if resp.success and resp.data:
@@ -4963,6 +5008,17 @@ async def portal_consumo(numero: str, request: Request, periodo: Optional[str] =
     """Consulta consumo consolidado do mes."""
     cliente = await _get_portal_cliente(request)
     numero_clean = re.sub(r'\D', '', numero)
+    # Ta API exige 11 digitos (sem prefixo 55)
+    if len(numero_clean) == 13 and numero_clean.startswith("55"):
+        numero_clean = numero_clean[2:]
+    # SEC-005 fix: valida que a linha pertence ao cliente autenticado
+    numero_variants = [numero_clean, "55" + numero_clean] if len(numero_clean) == 11 else [numero_clean]
+    linha_do_cliente = await db.linhas.find_one({
+        "cliente_id": str(cliente["_id"]),
+        "$or": [{"msisdn": {"$in": numero_variants}}, {"numero": {"$in": numero_variants}}]
+    })
+    if not linha_do_cliente:
+        raise HTTPException(status_code=403, detail="Linha nao pertence ao cliente autenticado")
     if not periodo:
         periodo = datetime.now(timezone.utc).strftime("%Y-%m")
     try:
@@ -5754,8 +5810,11 @@ async def _trigger_selfservice_activation(doc: dict):
             }})
 
 @api_router.post("/public/ativacao/{activation_id}/confirmar-pagamento")
-async def public_confirm_payment_manual(activation_id: str):
-    """Permite confirmacao manual do pagamento (para testes ou quando webhook nao funcionar)."""
+async def public_confirm_payment_manual(activation_id: str, request: Request):
+    """SEC-002 fix: endpoint agora exige admin logado. Antes qualquer um ativava linha real sem pagar.
+    Se webhook do Asaas nao chegou, admin pode confirmar manualmente. Fluxo publico e via webhook Asaas verificado.
+    """
+    await require_admin(request)
     doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
