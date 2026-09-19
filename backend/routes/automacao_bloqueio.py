@@ -730,6 +730,7 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str, origem: str
         # Janela: [venc - 30d, venc + 3d] (3 dias de graca pos-vencimento p/ pagamentos tardios)
         ciclo_inicio = (venc_dt - timedelta(days=30)).isoformat()
         ciclo_fim = (venc_dt + timedelta(days=3)).isoformat()
+        hoje_iso = datetime.now(timezone.utc).date().isoformat()
 
         # (1) LOCAL: cobranca paga com vencimento dentro do ciclo atual
         paga_ciclo = await _db.cobrancas.find_one({
@@ -739,6 +740,17 @@ async def _cliente_ja_pagou_no_mes(cliente_id: str, vencimento: str, origem: str
         })
         if paga_ciclo:
             return True
+
+        # SANITY CHECK: se cliente tem cobranca OPEN OVERDUE (venc <= hoje e nao paga),
+        # ele NAO esta em dia mesmo que tenha pago algo recentemente (pagamento antigo).
+        # Isso evita falso positivo do fail-safe quando um novo boleto foi gerado pos-pagamento.
+        cob_overdue = await _db.cobrancas.find_one({
+            "cliente_id": str(cliente_id),
+            "vencimento": {"$lte": hoje_iso},
+            "status": {"$nin": paid_statuses + ["CANCELLED", "REFUNDED"]},
+        })
+        if cob_overdue:
+            return False
 
         # (2) LOCAL: paid_at dentro do ciclo atual (cobranca de outro periodo mas paga no ciclo)
         limite_dt = datetime.now(timezone.utc) - timedelta(days=30)
