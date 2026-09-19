@@ -43,7 +43,7 @@ DEFAULT_CONFIG = {
     "hora_alerta_d0": 12,          # envia alerta D-0 (vence hoje) as 12h BRT
     "aviso_dia_anterior": True,    # WhatsApp 3 dias antes do bloqueio HOMEON
     "aviso_dia_vencimento": True,  # WhatsApp no dia do bloqueio (D-0) — vence hoje
-    "motivo_bloqueio": 15,         # codigo Ta Telecom para bloqueio total
+    "motivo_bloqueio": 4,          # codigo Ta Telecom: 4=Inadimplencia (validos: 1-5)
     "desbloqueio_automatico": True,
     "sync_asaas_antes_bloqueio": True,  # SALVAGUARDA: sincroniza status com Asaas antes do job de bloqueio
     "notificar_admin": True,
@@ -680,7 +680,7 @@ async def _executar_reblock_confianca_expirada():
             if not chip:
                 continue
             result = await _operadora_service.bloquear_total(
-                iccid=chip["iccid"], reason=15, db=_db, user_id="sistema", user_name="Automacao",
+                iccid=chip["iccid"], reason=4, db=_db, user_id="sistema", user_name="Automacao",
             )
             if result.success:
                 await _db.linhas.update_one(
