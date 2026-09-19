@@ -679,8 +679,8 @@ async def _executar_reblock_confianca_expirada():
             chip = await _db.chips.find_one({"_id": ObjectId(l["chip_id"])}) if l.get("chip_id") else None
             if not chip:
                 continue
-            result = await _operadora_service.bloquear_total(
-                iccid=chip["iccid"], reason=4, db=_db, user_id="sistema", user_name="Automacao",
+            result = await _operadora_service.bloquear_parcial(
+                iccid=chip["iccid"], db=_db, user_id="sistema", user_name="Automacao",
             )
             if result.success:
                 await _db.linhas.update_one(
@@ -1365,8 +1365,8 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
                 if not dry_run:
                     disparado_id = (disparado_por or {}).get("id", "sistema")
                     disparado_name = (disparado_por or {}).get("name", "Automacao")
-                    result = await _operadora_service.bloquear_total(
-                        iccid=chip["iccid"], reason=motivo, db=_db,
+                    result = await _operadora_service.bloquear_parcial(
+                        iccid=chip["iccid"], db=_db,
                         user_id=disparado_id, user_name=disparado_name,
                     )
                     if result.success:
