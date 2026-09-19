@@ -12,6 +12,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ## Implementado
 
+### Correção Auto-Bloqueio v2 (19/09/2026)
+- [x] Fix bug fail-safe "cobranca_nao_encontrada" (fluxo v2 passava _id da linha como cobranca_id) - `routes/automacao_bloqueio.py:_executar_job_bloqueio`
+- [x] Fix falso positivo `_cliente_ja_pagou_no_mes` (pagamento de ciclo anterior ignorava OVERDUE novo)
+- [x] Fix `motivo_bloqueio` de 15 (invalido) para 4 (Inadimplencia) - Ta Telecom aceita apenas 1-5
+- [x] Fix KeyError `msisdn`/`link` na mensagem WhatsApp de bloqueio
+- [x] Script CLI `scripts/dry_run_bloqueio.py [--execute]` para simular/executar sem token HTTP
+- [x] Script `scripts/fix_motivo_bloqueio.py` atualiza config do DB
+- [x] Validado com bloqueio real de 6 clientes: Cosme, Fernando, Dieison, Josenildo, Marcelo, Amilton
+
 ### Sistema Completo (31/03 - 14/04/2026)
 - [x] Dashboard, CRUD clientes/chips/planos/ofertas/linhas
 - [x] Cobrancas integradas Asaas (Boleto, PIX, Cartao)

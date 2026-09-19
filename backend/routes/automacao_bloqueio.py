@@ -1392,10 +1392,20 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
                         try:
                             telefone = item.get("telefone")
                             if telefone and cfg.get("notificar_admin"):
+                                link_boleto = "https://mvno.homeonapp.com.br/portal"
+                                try:
+                                    if cobranca_id_real:
+                                        cob_link = await _db.cobrancas.find_one({"_id": ObjectId(cobranca_id_real)})
+                                        if cob_link:
+                                            link_boleto = await _construir_link_boleto(cob_link)
+                                except Exception:
+                                    pass
                                 msg = (cfg.get("mensagem_bloqueado") or "").format(
                                     nome=item.get("cliente_nome") or "",
+                                    msisdn=l_info.get("msisdn") or "",
                                     valor=f"{item.get('valor', 0):.2f}",
                                     vencimento=item.get("vencimento") or "",
+                                    link=link_boleto,
                                 )
                                 await _zapi_service.send_text(phone=telefone, message=msg)
                         except Exception as e:
