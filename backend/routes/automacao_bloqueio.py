@@ -1294,13 +1294,44 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
         # DUPLA-CHECAGEM INDIVIDUAL: consulta o Asaas naquele pagamento especifico
         # Fail-safe: em caso de erro NAO bloqueia (evita bloqueio indevido)
         if not dry_run:
-            verificacao = await _verificar_pagamento_final_asaas(item["cobranca_id"])
-            pagamentos_verificados += 1
+            # FIX v2: no fluxo por expiracao_ta, item["cobranca_id"] e o _id da LINHA
+            # (sintetico). Precisamos localizar a cobranca REAL aberta do cliente
+            # em db.cobrancas antes da dupla-checagem Asaas.
+            cobranca_id_real = item["cobranca_id"]
+            origem_item = item.get("origem", "cobranca")
+            verificacao = None
+
+            if origem_item == "expiracao_ta":
+                cob_aberta = await _db.cobrancas.find_one(
+                    {
+                        "cliente_id": str(item["cliente_id"]),
+                        "status": {"$nin": ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "CANCELLED", "REFUNDED"]},
+                    },
+                    sort=[("vencimento", 1)],
+                )
+                if cob_aberta:
+                    cobranca_id_real = str(cob_aberta["_id"])
+                else:
+                    # Nao ha cobranca local aberta. _cliente_ja_pagou_no_mes ja
+                    # confirmou (via Asaas last 30d) que cliente NAO pagou o ciclo.
+                    # Como nao ha payment_id p/ dupla-checar, aceitamos o bloqueio
+                    # confiando na verificacao Asaas ja feita no _build_simulacao.
+                    pagamentos_verificados += 1
+                    logger.info(
+                        f"[auto-bloqueio v2] cliente={item.get('cliente_nome')} sem cobranca local aberta; "
+                        f"prosseguindo com bloqueio (Asaas ja checado em _cliente_ja_pagou_no_mes)"
+                    )
+                    verificacao = {"pode_bloquear": True, "motivo": "sem_cobranca_local_inadimplente_asaas", "status": None}
+
+            if verificacao is None:
+                verificacao = await _verificar_pagamento_final_asaas(cobranca_id_real)
+                pagamentos_verificados += 1
+
             if not verificacao["pode_bloquear"]:
                 pulados_pagamento_asaas += 1
                 detalhes.append({
                     "cliente_nome": item.get("cliente_nome"),
-                    "cobranca_id": item["cobranca_id"],
+                    "cobranca_id": cobranca_id_real,
                     "acao": "PULADO",
                     "motivo": verificacao["motivo"],
                     "status_asaas": verificacao.get("status"),
@@ -1335,7 +1366,7 @@ async def _executar_job_bloqueio(dias_tolerancia: int = 0, dry_run: bool = False
                                     "ativo": True,
                                     "data": datetime.now(timezone.utc),
                                     "motivo": "inadimplencia",
-                                    "cobranca_id": item["cobranca_id"],
+                                    "cobranca_id": cobranca_id_real,
                                 },
                             }},
                         )
