@@ -12,6 +12,15 @@ Sistema web completo para gestao de telefonia movel (MVNO), com integracao real 
 
 ## Implementado
 
+### Recarga PIX Portal (20/09/2026)
+- [x] Novo router `routes/portal_recarga.py`: `GET /portal/ofertas-disponiveis`, `POST /portal/recarga/iniciar`, `GET /portal/recarga/{id}/status`
+- [x] Webhook Asaas estendido: pagamento confirmado com external_reference "recarga:{linha}:{oferta}" dispara `alterar_plano` na Ta Telecom + desbloqueio + atualiza data_expiracao_ta = hoje+30
+- [x] Frontend `components/RecargaModal.jsx`: modal com escolha de ofertas + PIX QR + polling status
+- [x] Botão "Recarregar / Trocar plano" na linha principal e nas linhas extras do PortalDashboard
+- [x] Reaproveitamento inteligente de cobrança PIX PENDING recente (24h)
+- [x] Fix JWT payload key (`sub` vs `cliente_id`) via testing_agent
+- [x] Testing agent: 16/16 pytest passaram (incluindo criação real Asaas)
+
 ### Correção Auto-Bloqueio v2 (19/09/2026)
 - [x] Fix bug fail-safe "cobranca_nao_encontrada" (fluxo v2 passava _id da linha como cobranca_id) - `routes/automacao_bloqueio.py:_executar_job_bloqueio`
 - [x] Fix falso positivo `_cliente_ja_pagou_no_mes` (pagamento de ciclo anterior ignorava OVERDUE novo)

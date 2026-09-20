@@ -49,7 +49,7 @@ async def _get_portal_cliente(request: Request) -> dict:
         payload = _jwt.decode(token, _secret_key, algorithms=["HS256"])
         if payload.get("type") != "portal":
             raise HTTPException(status_code=401, detail="Token invalido")
-        cliente_id = payload.get("cliente_id")
+        cliente_id = payload.get("sub") or payload.get("cliente_id")
         cliente = await _db.clientes.find_one({"_id": ObjectId(cliente_id)})
         if not cliente:
             raise HTTPException(status_code=401, detail="Cliente nao encontrado")
