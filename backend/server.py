@@ -5065,6 +5065,7 @@ async def portal_consumo(numero: str, request: Request, periodo: Optional[str] =
 # ==================== PUBLIC SELF-SERVICE ACTIVATION ====================
 class SelfServiceActivationRequest(BaseModel):
     iccid: str
+    oferta_id: Optional[str] = None  # obrigatorio se chip nao tiver oferta pre-vinculada
     nome: str
     tipo_pessoa: TipoPessoa = TipoPessoa.pf
     documento: str
@@ -5118,7 +5119,47 @@ async def public_validate_chip(iccid: str):
         raise HTTPException(status_code=400, detail=status_msgs.get(chip["status"], f"Chip indisponivel (status: {chip['status']})"))
 
     if not chip.get("oferta_id"):
-        raise HTTPException(status_code=400, detail="Chip nao possui oferta vinculada. Contate o administrador.")
+        # Chip sem oferta vinculada: cliente deve escolher entre ofertas ativas publicas.
+        ofertas_disp = await db.ofertas.find({"ativo": True, "categoria": "movel"}).sort("valor", 1).to_list(100)
+        planos_map = {}
+        plano_ids = list({o.get("plano_id") for o in ofertas_disp if o.get("plano_id")})
+        if plano_ids:
+            valid_pids = [ObjectId(p) for p in plano_ids if ObjectId.is_valid(p)]
+            if valid_pids:
+                planos_docs = await db.planos.find({"_id": {"$in": valid_pids}}).to_list(len(valid_pids))
+                planos_map = {str(p["_id"]): p for p in planos_docs}
+
+        desconto = 0.0
+        revendedor_nome = None
+        if chip.get("revendedor_id"):
+            rev = await db.revendedores.find_one({"_id": ObjectId(chip["revendedor_id"])})
+            if rev:
+                desconto = rev.get("desconto_valor", 0)
+                revendedor_nome = rev.get("nome")
+
+        ofertas_out = []
+        for o in ofertas_disp:
+            pl = planos_map.get(str(o.get("plano_id", "")))
+            valor = o.get("valor", 0)
+            ofertas_out.append({
+                "id": str(o["_id"]),
+                "nome": o.get("nome"),
+                "descricao": o.get("descricao") or (pl.get("descricao") if pl else None),
+                "plano_nome": pl.get("nome") if pl else None,
+                "franquia": pl.get("franquia") if pl else None,
+                "valor_original": valor,
+                "valor_final": max(0, valor - desconto),
+            })
+
+        return {
+            "chip_id": str(chip["_id"]),
+            "iccid": chip["iccid"],
+            "precisa_escolher_oferta": True,
+            "ofertas_disponiveis": ofertas_out,
+            "desconto": desconto,
+            "revendedor_nome": revendedor_nome,
+            "tem_revendedor": bool(chip.get("revendedor_id")),
+        }
 
     oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
     if not oferta or not oferta.get("ativo", True):
@@ -5186,7 +5227,19 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
     if chip["status"] != "disponivel":
         raise HTTPException(status_code=400, detail="Chip nao esta disponivel para ativacao")
 
-    oferta = await db.ofertas.find_one({"_id": ObjectId(chip["oferta_id"])})
+    oferta_id_final = chip.get("oferta_id")
+    if not oferta_id_final:
+        # Chip sem oferta pre-vinculada: exige oferta_id do cliente
+        if not data.oferta_id:
+            raise HTTPException(status_code=400, detail="Chip sem oferta vinculada — escolha um plano")
+        if not ObjectId.is_valid(data.oferta_id):
+            raise HTTPException(status_code=400, detail="oferta_id invalido")
+        oferta_check = await db.ofertas.find_one({"_id": ObjectId(data.oferta_id)})
+        if not oferta_check or not oferta_check.get("ativo", True) or oferta_check.get("categoria", "movel") != "movel":
+            raise HTTPException(status_code=400, detail="Oferta indisponivel")
+        oferta_id_final = data.oferta_id
+
+    oferta = await db.ofertas.find_one({"_id": ObjectId(oferta_id_final)})
     if not oferta:
         raise HTTPException(status_code=400, detail="Oferta do chip nao encontrada")
     plano = None

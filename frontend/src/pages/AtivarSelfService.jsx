@@ -246,6 +246,7 @@ export default function AtivarSelfService() {
     try {
       const payload = {
         iccid: iccid.replace(/\D/g, ''),
+        oferta_id: chipInfo?.oferta_id,
         nome: form.nome,
         documento: form.documento.replace(/\D/g, ''),
         telefone: form.telefone.replace(/\D/g, ''),
@@ -419,7 +420,56 @@ export default function AtivarSelfService() {
         {/* STEP 1: Chip Info + Personal Data Form */}
         {step === 1 && chipInfo && (
           <div className="space-y-4 animate-fade-in">
+            {/* Seletor de Oferta (chip sem oferta pre-vinculada) */}
+            {chipInfo.precisa_escolher_oferta && !chipInfo.oferta_id && (
+              <Card className="bg-zinc-900 border-blue-500/40">
+                <CardContent className="p-4">
+                  <p className="text-white font-semibold mb-1">Escolha um plano</p>
+                  <p className="text-zinc-400 text-xs mb-3">Este chip ainda nao tem plano vinculado. Selecione abaixo — a ativacao sera liberada apos o pagamento.</p>
+                  <div className="space-y-2" data-testid="selfservice-ofertas-picker">
+                    {(chipInfo.ofertas_disponiveis || []).map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => setChipInfo({
+                          ...chipInfo,
+                          precisa_escolher_oferta: false,
+                          oferta_id: o.id,
+                          oferta_nome: o.nome,
+                          plano_nome: o.plano_nome,
+                          franquia: o.franquia,
+                          descricao: o.descricao,
+                          valor_original: o.valor_original,
+                          valor_final: o.valor_final,
+                        })}
+                        className="w-full text-left p-3 rounded-lg border border-zinc-700 hover:border-blue-500 bg-zinc-950 transition-colors"
+                        data-testid={`selfservice-oferta-${o.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-semibold text-sm">{o.nome}</p>
+                            {o.franquia && <p className="text-zinc-400 text-xs mt-0.5">{o.plano_nome} - {o.franquia}</p>}
+                            {o.descricao && <p className="text-zinc-500 text-[11px] mt-1 line-clamp-2">{o.descricao}</p>}
+                          </div>
+                          <div className="text-right shrink-0">
+                            {o.valor_final !== o.valor_original && (
+                              <p className="text-zinc-500 text-xs line-through">R$ {o.valor_original.toFixed(2)}</p>
+                            )}
+                            <p className="text-lg font-bold text-white">R$ {o.valor_final.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                    {(!chipInfo.ofertas_disponiveis || chipInfo.ofertas_disponiveis.length === 0) && (
+                      <p className="text-zinc-500 text-sm text-center py-4">Nenhum plano disponivel no momento</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Chip Info Card */}
+            {!chipInfo.precisa_escolher_oferta && (
             <Card className="bg-zinc-900 border-zinc-500/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
@@ -451,8 +501,11 @@ export default function AtivarSelfService() {
                 )}
               </CardContent>
             </Card>
+            )}
 
-            {/* Personal Data Form */}
+            {/* Personal Data Form (so aparece quando ja tem oferta escolhida) */}
+            {!chipInfo.precisa_escolher_oferta && (
+            <>
             <h3 className="text-white font-semibold text-sm">Seus Dados</h3>
             <div className="space-y-3">
               <div>
@@ -633,6 +686,8 @@ export default function AtivarSelfService() {
                 Pagar e Ativar
               </Button>
             </div>
+            </>
+            )}
           </div>
         )}
 
