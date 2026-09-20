@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { InstallAppButton } from '../components/InstallAppButton';
+import { RecargaModal } from '../components/RecargaModal';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -192,6 +193,7 @@ export default function PortalDashboard() {
   const [loadingConsumo, setLoadingConsumo] = useState({});
   const [expandedLine, setExpandedLine] = useState(null);
   const [copiedPix, setCopiedPix] = useState(null);
+  const [linhaRecarga, setLinhaRecarga] = useState(null);
 
   useEffect(() => {
     if (!token || !cliente) {
@@ -459,6 +461,16 @@ export default function PortalDashboard() {
                 <span className="text-sm text-zinc-300">{primeiraLinha.oferta_nome}</span>
               </div>
             )}
+
+            {/* Botao Recarregar */}
+            <button
+              onClick={() => setLinhaRecarga(primeiraLinha)}
+              className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gradient-to-r from-[#007AFF] to-[#0055D4] hover:from-[#3395FF] hover:to-[#007AFF] text-white font-bold text-sm transition-all"
+              data-testid="portal-recarregar-btn"
+            >
+              <Zap className="w-4 h-4" />
+              Recarregar / Trocar plano
+            </button>
           </div>
         )}
 
@@ -548,6 +560,14 @@ export default function PortalDashboard() {
                             <span className="text-xs text-zinc-500 ml-2">Atualizando...</span>
                           </div>
                         )}
+                        <button
+                          onClick={() => setLinhaRecarga(linha)}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#007AFF]/10 hover:bg-[#007AFF]/20 border border-[#007AFF]/30 text-[#007AFF] font-bold text-xs transition-colors"
+                          data-testid={`portal-recarregar-linha-${numClean}`}
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Recarregar / Trocar plano
+                        </button>
                       </div>
                     )}
                   </div>
@@ -652,6 +672,15 @@ export default function PortalDashboard() {
           <p className="text-[11px] text-zinc-600 font-outfit">HomeOn Internet &mdash; Telefonia Movel</p>
         </div>
       </footer>
+
+      {linhaRecarga && (
+        <RecargaModal
+          token={token}
+          linha={linhaRecarga}
+          onClose={() => setLinhaRecarga(null)}
+          onSuccess={() => { setLinhaRecarga(null); fetchDashboard(); }}
+        />
+      )}
     </div>
   );
 }

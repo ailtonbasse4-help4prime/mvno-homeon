@@ -4444,6 +4444,17 @@ async def asaas_webhook(request: Request):
                 except Exception as e:
                     logger.error(f"Falha no desbloqueio automatico via webhook: {e}", exc_info=True)
 
+                # Recarga automatica via portal (se external_reference == "recarga:...")
+                try:
+                    external_ref = (cobranca.get("external_reference") or payment.get("externalReference") or "")
+                    if external_ref.startswith("recarga:"):
+                        from routes.portal_recarga import aplicar_recarga_pos_pagamento
+                        cob_full = await db.cobrancas.find_one({"_id": cobranca["_id"]})
+                        r_recarga = await aplicar_recarga_pos_pagamento(cob_full)
+                        logger.info(f"Recarga portal aplicada (webhook Asaas): {r_recarga}")
+                except Exception as e:
+                    logger.error(f"Falha na recarga automatica portal via webhook: {e}", exc_info=True)
+
     return {"received": True}
 
 # --- Sync status from Asaas ---
@@ -6462,6 +6473,19 @@ init_automacao_bloqueio(
 api_router_automacao = APIRouter(prefix="/api")
 api_router_automacao.include_router(automacao_bloqueio_router)
 app.include_router(api_router_automacao)
+
+# Portal Recarga PIX
+from routes.portal_recarga import router as portal_recarga_router, init as init_portal_recarga
+init_portal_recarga(
+    db=db,
+    asaas_service=asaas_service,
+    operadora_service=operadora_service,
+    create_log=create_log,
+    secret_key=JWT_SECRET,
+)
+api_router_portal_recarga = APIRouter(prefix="/api")
+api_router_portal_recarga.include_router(portal_recarga_router)
+app.include_router(api_router_portal_recarga)
 
 # Carrega config Z-API no startup
 from services.zapi_service import zapi_service as _zapi_service
