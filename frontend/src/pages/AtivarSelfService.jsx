@@ -55,7 +55,8 @@ export default function AtivarSelfService() {
 
   // Form data
   const [form, setForm] = useState({
-    nome: '', documento: '', telefone: '', data_nascimento: '',
+    tipo_pessoa: 'pf', nome: '', documento: '', cpf_responsavel: '',
+    telefone: '', data_nascimento: '',
     cep: '', endereco: '', numero_endereco: '', bairro: '',
     cidade: '', estado: '', email: '', billing_type: 'PIX',
     ddd: '', portability: false, port_ddd: '', port_number: '',
@@ -70,19 +71,28 @@ export default function AtivarSelfService() {
   const [cpfSearching, setCpfSearching] = useState(false);
 
   const handleDocumentoLookup = async (rawVal) => {
-    const cleaned = rawVal.replace(/\D/g, '');
-    // Format CPF
-    let formatted = cleaned;
-    if (cleaned.length <= 3) formatted = cleaned;
-    else if (cleaned.length <= 6) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3)}`;
-    else if (cleaned.length <= 9) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6)}`;
-    else formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6,9)}-${cleaned.slice(9,11)}`;
+    const cleaned = rawVal.replace(/\D/g, '').slice(0, 14);
+    // Format: CPF (11) ou CNPJ (14) automatico pelo tamanho
+    let formatted;
+    if (form.tipo_pessoa === 'pj' || cleaned.length > 11) {
+      // CNPJ 00.000.000/0000-00
+      if (cleaned.length <= 2) formatted = cleaned;
+      else if (cleaned.length <= 5) formatted = `${cleaned.slice(0,2)}.${cleaned.slice(2)}`;
+      else if (cleaned.length <= 8) formatted = `${cleaned.slice(0,2)}.${cleaned.slice(2,5)}.${cleaned.slice(5)}`;
+      else if (cleaned.length <= 12) formatted = `${cleaned.slice(0,2)}.${cleaned.slice(2,5)}.${cleaned.slice(5,8)}/${cleaned.slice(8)}`;
+      else formatted = `${cleaned.slice(0,2)}.${cleaned.slice(2,5)}.${cleaned.slice(5,8)}/${cleaned.slice(8,12)}-${cleaned.slice(12,14)}`;
+    } else {
+      if (cleaned.length <= 3) formatted = cleaned;
+      else if (cleaned.length <= 6) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3)}`;
+      else if (cleaned.length <= 9) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6)}`;
+      else formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6,9)}-${cleaned.slice(9,11)}`;
+    }
     updateForm('documento', formatted);
 
-    if (cleaned.length === 11) {
+    // Auto-preenchimento so por CPF (11 digitos)
+    if (cleaned.length === 11 && form.tipo_pessoa === 'pf') {
       setCpfSearching(true);
       try {
-        // SEC-003: exige ICCID como prova de posse do chip
         const iccidClean = iccid.replace(/\D/g, '');
         if (iccidClean.length < 18) { setCpfSearching(false); return; }
         const res = await axios.get(`${API_URL}/api/public/buscar-cpf/${cleaned}?iccid=${iccidClean}`);
@@ -105,6 +115,16 @@ export default function AtivarSelfService() {
       } catch {} // eslint-disable-line no-empty
       setCpfSearching(false);
     }
+  };
+
+  const formatCpfResponsavel = (rawVal) => {
+    const cleaned = rawVal.replace(/\D/g, '').slice(0, 11);
+    let formatted;
+    if (cleaned.length <= 3) formatted = cleaned;
+    else if (cleaned.length <= 6) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3)}`;
+    else if (cleaned.length <= 9) formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6)}`;
+    else formatted = `${cleaned.slice(0,3)}.${cleaned.slice(3,6)}.${cleaned.slice(6,9)}-${cleaned.slice(9,11)}`;
+    updateForm('cpf_responsavel', formatted);
   };
 
   // QR Scanner
@@ -188,26 +208,38 @@ export default function AtivarSelfService() {
       setError('Preencha todos os campos obrigatorios');
       return;
     }
-    // Validacao de formato — evita ativacoes falhando por dado incorreto
-    const cpfNum = form.documento.replace(/\D/g, '');
-    if (cpfNum.length !== 11) {
-      setError('CPF deve ter 11 digitos'); return;
-    }
-    // Valida DV do CPF
-    if (!/^(\d)\1{10}$/.test(cpfNum)) {
-      const calcDv = (base, mult) => {
-        let sum = 0;
-        for (let i = 0; i < base.length; i++) sum += parseInt(base[i]) * (mult - i);
-        const r = (sum * 10) % 11;
-        return r === 10 ? 0 : r;
-      };
-      const d1 = calcDv(cpfNum.slice(0, 9), 10);
-      const d2 = calcDv(cpfNum.slice(0, 10), 11);
-      if (d1 !== parseInt(cpfNum[9]) || d2 !== parseInt(cpfNum[10])) {
-        setError('CPF invalido — verifique os digitos'); return;
-      }
+    // Valida CPF/CNPJ conforme tipo
+    const docNum = form.documento.replace(/\D/g, '');
+    const isPJ = form.tipo_pessoa === 'pj';
+    const calcDvCpf = (base, mult) => {
+      let sum = 0;
+      for (let i = 0; i < base.length; i++) sum += parseInt(base[i]) * (mult - i);
+      const r = (sum * 10) % 11;
+      return r === 10 ? 0 : r;
+    };
+    const validaCpf = (cpf) => {
+      if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+      const d1 = calcDvCpf(cpf.slice(0, 9), 10);
+      const d2 = calcDvCpf(cpf.slice(0, 10), 11);
+      return d1 === parseInt(cpf[9]) && d2 === parseInt(cpf[10]);
+    };
+    const validaCnpj = (cnpj) => {
+      if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+      const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
+      const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+      const s1 = w1.reduce((a, w, i) => a + w * parseInt(cnpj[i]), 0);
+      const d1 = s1 % 11 < 2 ? 0 : 11 - (s1 % 11);
+      if (d1 !== parseInt(cnpj[12])) return false;
+      const s2 = w2.reduce((a, w, i) => a + w * parseInt(cnpj[i]), 0);
+      const d2 = s2 % 11 < 2 ? 0 : 11 - (s2 % 11);
+      return d2 === parseInt(cnpj[13]);
+    };
+    if (isPJ) {
+      if (!validaCnpj(docNum)) { setError('CNPJ invalido — verifique os digitos'); return; }
+      const respNum = (form.cpf_responsavel || '').replace(/\D/g, '');
+      if (!validaCpf(respNum)) { setError('CPF do responsavel invalido'); return; }
     } else {
-      setError('CPF invalido — verifique os digitos'); return;
+      if (!validaCpf(docNum)) { setError('CPF invalido — verifique os digitos'); return; }
     }
     const telNum = form.telefone.replace(/\D/g, '');
     if (telNum.length !== 11) {
@@ -248,6 +280,8 @@ export default function AtivarSelfService() {
         iccid: iccid.replace(/\D/g, ''),
         oferta_id: chipInfo?.oferta_id,
         nome: form.nome,
+        tipo_pessoa: form.tipo_pessoa || 'pf',
+        cpf_responsavel: form.tipo_pessoa === 'pj' ? (form.cpf_responsavel || '').replace(/\D/g, '') : undefined,
         documento: form.documento.replace(/\D/g, ''),
         telefone: form.telefone.replace(/\D/g, ''),
         data_nascimento: form.data_nascimento,
@@ -508,17 +542,38 @@ export default function AtivarSelfService() {
             <>
             <h3 className="text-white font-semibold text-sm">Seus Dados</h3>
             <div className="space-y-3">
+              {/* Toggle PF / PJ */}
+              <div className="flex bg-zinc-900 border border-zinc-700 rounded-lg p-1" data-testid="tipo-pessoa-toggle">
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, tipo_pessoa: 'pf', documento: '', cpf_responsavel: '' }))}
+                  className={`flex-1 py-2 rounded-md text-xs font-semibold transition-colors ${
+                    form.tipo_pessoa === 'pf' ? 'bg-blue-600 text-white' : 'text-zinc-400'
+                  }`}
+                  data-testid="tipo-pessoa-pf-btn"
+                >Pessoa Fisica (CPF)</button>
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, tipo_pessoa: 'pj', documento: '', cpf_responsavel: '' }))}
+                  className={`flex-1 py-2 rounded-md text-xs font-semibold transition-colors ${
+                    form.tipo_pessoa === 'pj' ? 'bg-blue-600 text-white' : 'text-zinc-400'
+                  }`}
+                  data-testid="tipo-pessoa-pj-btn"
+                >Pessoa Juridica (CNPJ)</button>
+              </div>
               <div>
-                <Label className="text-zinc-300 text-xs">Nome Completo *</Label>
+                <Label className="text-zinc-300 text-xs">
+                  {form.tipo_pessoa === 'pj' ? 'Razao Social *' : 'Nome Completo *'}
+                </Label>
                 <Input value={form.nome} onChange={e => updateForm('nome', e.target.value)}
-                  className="form-input" placeholder="Nome completo" data-testid="nome-input" />
+                  className="form-input" placeholder={form.tipo_pessoa === 'pj' ? 'Razao Social' : 'Nome completo'} data-testid="nome-input" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-zinc-300 text-xs">CPF *</Label>
+                  <Label className="text-zinc-300 text-xs">{form.tipo_pessoa === 'pj' ? 'CNPJ *' : 'CPF *'}</Label>
                   <div className="relative">
                     <Input value={form.documento} onChange={e => handleDocumentoLookup(e.target.value)}
-                      className="form-input" placeholder="000.000.000-00" maxLength={14} data-testid="cpf-input" />
+                      className="form-input" placeholder={form.tipo_pessoa === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'} maxLength={form.tipo_pessoa === 'pj' ? 18 : 14} data-testid="cpf-input" />
                     {cpfSearching && <div className="absolute right-2 top-1/2 -translate-y-1/2"><div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>}
                   </div>
                 </div>
@@ -531,9 +586,20 @@ export default function AtivarSelfService() {
                   </p>
                 </div>
               </div>
+              {/* CPF do responsavel — obrigatorio para PJ */}
+              {form.tipo_pessoa === 'pj' && (
+                <div>
+                  <Label className="text-zinc-300 text-xs">CPF do Responsavel pela Linha *</Label>
+                  <Input value={form.cpf_responsavel} onChange={e => formatCpfResponsavel(e.target.value)}
+                    className="form-input" placeholder="000.000.000-00" maxLength={14} data-testid="cpf-responsavel-input" />
+                  <p className="text-[10px] text-zinc-500 mt-1">O CPF do titular responsavel pela linha (exigido pela operadora).</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-zinc-300 text-xs">Data Nascimento *</Label>
+                  <Label className="text-zinc-300 text-xs">
+                    {form.tipo_pessoa === 'pj' ? 'Data Fundacao *' : 'Data Nascimento *'}
+                  </Label>
                   <Input type="date" value={form.data_nascimento} onChange={e => updateForm('data_nascimento', e.target.value)}
                     className="form-input" data-testid="nascimento-input" />
                 </div>

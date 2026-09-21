@@ -36,12 +36,17 @@ function usePortalPWA() {
   }, []);
 }
 
-function formatCPF(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+function formatCPFCNPJ(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 11) {
+    // CPF
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+  // CNPJ
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`;
 }
 
 function formatPhone(value) {
@@ -85,8 +90,8 @@ export default function PortalLogin() {
     const docClean = documento.replace(/\D/g, '');
     const telClean = telefone.replace(/\D/g, '');
 
-    if (docClean.length < 11) {
-      setError('CPF deve ter 11 digitos.');
+    if (docClean.length !== 11 && docClean.length !== 14) {
+      setError('Informe um CPF (11 digitos) ou CNPJ (14 digitos) valido.');
       return;
     }
     if (telClean.length < 10) {
@@ -171,14 +176,14 @@ export default function PortalLogin() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="documento" className="text-zinc-300">CPF</Label>
+                <Label htmlFor="documento" className="text-zinc-300">CPF ou CNPJ</Label>
                 <Input
                   id="documento"
                   type="text"
                   inputMode="numeric"
                   value={documento}
-                  onChange={(e) => setDocumento(formatCPF(e.target.value))}
-                  placeholder="000.000.000-00"
+                  onChange={(e) => setDocumento(formatCPFCNPJ(e.target.value))}
+                  placeholder="000.000.000-00 ou 00.000.000/0000-00"
                   required
                   className="form-input font-mono"
                   data-testid="portal-login-cpf-input"

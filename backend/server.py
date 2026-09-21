@@ -849,13 +849,22 @@ async def list_clients(request: Request, search: Optional[str] = None):
             else:
                 regex_parts.append(re.escape(ch))
         nome_regex = ''.join(regex_parts)
-        query = {"$or": [
+        search_digits = re.sub(r'\D', '', search)
+        or_conditions = [
             {"nome": {"$regex": nome_regex, "$options": "i"}},
             {"documento": {"$regex": re.escape(search), "$options": "i"}},
             {"cpf": {"$regex": re.escape(search), "$options": "i"}},
             {"telefone": {"$regex": re.escape(search), "$options": "i"}},
             {"email": {"$regex": re.escape(search), "$options": "i"}},
-        ]}
+        ]
+        # Se digitou com mascara (CPF/CNPJ/telefone), tambem busca pela versao so-digitos
+        if search_digits and search_digits != search:
+            or_conditions.extend([
+                {"documento": {"$regex": re.escape(search_digits)}},
+                {"cpf": {"$regex": re.escape(search_digits)}},
+                {"telefone": {"$regex": re.escape(search_digits)}},
+            ])
+        query = {"$or": or_conditions}
     clients = await db.clientes.find(query).sort("nome", 1).to_list(1000)
     # Pre-fetch all lines in bulk for performance
     client_ids = [str(c["_id"]) for c in clients]
@@ -4768,14 +4777,18 @@ class PortalLoginRequest(BaseModel):
 @api_router.post("/portal/login")
 @limiter.limit("10/minute")
 async def portal_login(data: PortalLoginRequest, request: Request):
-    """Login do cliente por CPF + telefone."""
+    """Login do cliente por CPF/CNPJ + telefone."""
     try:
         doc_clean = clean_document(data.documento)
         tel_clean = re.sub(r'\D', '', data.telefone)
 
+        if len(doc_clean) not in (11, 14):
+            raise HTTPException(status_code=400, detail="Informe um CPF (11 digitos) ou CNPJ (14 digitos) valido")
+
         cliente = await db.clientes.find_one({"documento": doc_clean})
         if not cliente:
-            raise HTTPException(status_code=401, detail="CPF nao encontrado. Entre em contato com a operadora para verificar seu cadastro.")
+            tp = "CPF" if len(doc_clean) == 11 else "CNPJ"
+            raise HTTPException(status_code=401, detail=f"{tp} nao encontrado. Entre em contato com a operadora para verificar seu cadastro.")
 
         cliente_id_str = str(cliente["_id"])
 
@@ -4822,7 +4835,7 @@ async def portal_login(data: PortalLoginRequest, request: Request):
                     break
 
         if not linha_match and not chip_match:
-            raise HTTPException(status_code=401, detail="Telefone nao encontrado para este CPF.")
+            raise HTTPException(status_code=401, detail="Telefone nao encontrado para este documento.")
 
         # Generate portal token (simple JWT with limited scope)
         portal_token = jwt.encode({
@@ -5069,6 +5082,7 @@ class SelfServiceActivationRequest(BaseModel):
     nome: str
     tipo_pessoa: TipoPessoa = TipoPessoa.pf
     documento: str
+    cpf_responsavel: Optional[str] = None  # obrigatorio quando tipo_pessoa=pj
     telefone: str
     data_nascimento: str
     cep: str
@@ -5257,25 +5271,32 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
 
     # 3. Validate document
     doc_clean = clean_document(data.documento)
+    cpf_resp_clean = clean_document(data.cpf_responsavel or "")
     if data.tipo_pessoa == TipoPessoa.pf:
         if not validate_cpf(doc_clean):
             raise HTTPException(status_code=400, detail="CPF invalido")
     else:
         if not validate_cnpj(doc_clean):
             raise HTTPException(status_code=400, detail="CNPJ invalido")
+        # Ativacao PJ exige CPF do responsavel pela linha
+        if not cpf_resp_clean or not validate_cpf(cpf_resp_clean):
+            raise HTTPException(status_code=400, detail="Informe um CPF valido do responsavel pela linha")
 
     # 4. Create or find cliente
     existing_client = await db.clientes.find_one({"documento": doc_clean})
     if existing_client:
         cliente_id = str(existing_client["_id"])
         # Update client data
-        await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": {
+        update_fields = {
             "nome": data.nome, "telefone": data.telefone,
             "data_nascimento": data.data_nascimento, "cep": re.sub(r'\D', '', data.cep),
             "endereco": data.endereco, "numero_endereco": data.numero_endereco,
             "bairro": data.bairro, "cidade": data.cidade, "estado": data.estado,
             "city_code": data.city_code, "complemento": data.complemento,
-        }})
+        }
+        if data.tipo_pessoa == TipoPessoa.pj and cpf_resp_clean:
+            update_fields["cpf_responsavel"] = cpf_resp_clean
+        await db.clientes.update_one({"_id": existing_client["_id"]}, {"$set": update_fields})
         cliente = await db.clientes.find_one({"_id": existing_client["_id"]})
     else:
         cliente_doc = {
@@ -5289,6 +5310,8 @@ async def public_self_service_activation(data: SelfServiceActivationRequest):
             "email": data.email, "status": "ativo",
             "created_at": datetime.now(timezone.utc),
         }
+        if data.tipo_pessoa == TipoPessoa.pj and cpf_resp_clean:
+            cliente_doc["cpf_responsavel"] = cpf_resp_clean
         result = await db.clientes.insert_one(cliente_doc)
         cliente_id = str(result.inserted_id)
         cliente_doc["_id"] = result.inserted_id
