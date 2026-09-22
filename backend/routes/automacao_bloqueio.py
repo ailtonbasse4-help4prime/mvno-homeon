@@ -38,7 +38,7 @@ _asaas_service = None
 
 DEFAULT_CONFIG = {
     "ativo": False,
-    "hora_bloqueio": 14,           # bloqueia as 14h BRT (D-2 da expiracao Ta)
+    "hora_bloqueio": 16,           # bloqueia as 16h BRT (D-1 da expiracao Ta)
     "hora_aviso": 9,               # envia lembrete D-3 as 9h BRT
     "hora_alerta_d0": 12,          # envia alerta D-0 (vence hoje) as 12h BRT
     "aviso_dia_anterior": True,    # WhatsApp 3 dias antes do bloqueio HOMEON
@@ -267,8 +267,8 @@ async def remove_whitelist(cliente_id: str, request: Request):
 async def _find_cobrancas_para_bloquear(dias_tolerancia: int = 0) -> List[dict]:
     """
     LOGICA v2 (2026-07): usa `linhas.data_expiracao_ta` como UNICA fonte de verdade.
-    Regra: bloquear quando hoje >= data_expiracao_ta - 2 dias (ou seja, 2 dias antes da Ta cobrar novo ciclo).
-    Equivale a: data_expiracao_ta <= hoje + 2.
+    Regra: bloquear quando hoje >= data_expiracao_ta - 1 dia (ou seja, 1 dia antes da Ta cobrar novo ciclo).
+    Equivale a: data_expiracao_ta <= hoje + 1.
     Alem disso, so bloqueia se cliente NAO tiver pago o ciclo atual (verificado em _build_simulacao).
 
     IMPORTANTE: nao ha fallback legacy. Se linha nao tem `data_expiracao_ta` sincronizado,
@@ -307,12 +307,12 @@ def _resolver_expiracao_ta(linha: dict) -> Optional[str]:
 
 
 async def _find_via_expiracao_ta(hoje, dias_tolerancia: int) -> List[dict]:
-    """Algoritmo v2: bloqueia D-2 da expiracao Ta.
-    Filtro: data_expiracao_efetiva <= hoje + 2 dias (equivalente a hoje >= exp - 2).
+    """Algoritmo v2: bloqueia D-1 da expiracao Ta.
+    Filtro: data_expiracao_efetiva <= hoje + 1 dia (equivalente a hoje >= exp - 1).
     Le da linha: expirar_dados OR data_expiracao_ta OR proxima_recarga.
     dias_tolerancia adiciona dias EXTRAS de graca (empurra o bloqueio para depois).
     """
-    limite_dt = hoje + timedelta(days=2 - dias_tolerancia)
+    limite_dt = hoje + timedelta(days=1 - dias_tolerancia)
     alvo = limite_dt.isoformat()
     # Query no Mongo: qualquer um dos 3 campos <= alvo
     linhas = await _db.linhas.find({
@@ -1105,13 +1105,13 @@ async def painel_bloqueio(request: Request):
         exp_ta_str = _resolver_expiracao_ta(l)  # unifica expirar_dados/data_expiracao_ta/proxima_recarga
         exp_ta_valid = exp_ta_str is not None
 
-        # Bloqueio HOMEON = exp_ta - 2 dias
+        # Bloqueio HOMEON = exp_ta - 1 dia
         bloqueio_homeon = None
         dias_ate_bloqueio = None
         if exp_ta_valid:
             try:
                 exp_dt = datetime.strptime(exp_ta_str, "%Y-%m-%d").date()
-                bloq_dt = exp_dt - timedelta(days=2)
+                bloq_dt = exp_dt - timedelta(days=1)
                 bloqueio_homeon = bloq_dt.isoformat()
                 dias_ate_bloqueio = (bloq_dt - hoje).days
             except Exception:
@@ -1482,7 +1482,7 @@ async def _linhas_por_situacao(situacoes: List[str]) -> List[dict]:
             exp_dt = datetime.strptime(exp[:10], "%Y-%m-%d").date()
         except Exception:
             continue
-        dias = (exp_dt - timedelta(days=2) - hoje).days
+        dias = (exp_dt - timedelta(days=1) - hoje).days
 
         # Descobrir situacao
         situacao = None
@@ -1515,7 +1515,7 @@ async def _linhas_por_situacao(situacoes: List[str]) -> List[dict]:
             "linha": l,
             "situacao": situacao,
             "data_expiracao_ta": exp[:10],
-            "bloqueio_homeon": (exp_dt - timedelta(days=2)).isoformat(),
+            "bloqueio_homeon": (exp_dt - timedelta(days=1)).isoformat(),
             "dias_ate_bloqueio": dias,
         })
     return out
@@ -1727,7 +1727,7 @@ async def enviar_lembrete_massa(data: EnviarLembreteRequest, request: Request):
             linha_info = {
                 "msisdn": l.get("msisdn") or l.get("numero"),
                 "data_expiracao_ta": exp_str,
-                "bloqueio_homeon": (exp_dt - timedelta(days=2)).isoformat(),
+                "bloqueio_homeon": (exp_dt - timedelta(days=1)).isoformat(),
             }
             r = await _enviar_lembrete_para_cliente(cliente, cob, linha_info, data.tipo, cfg)
             if r.get("ok"):
@@ -1975,8 +1975,8 @@ async def _worker_loop():
                 except Exception as e:
                     logger.error(f"Job D-0 falhou: {e}", exc_info=True)
 
-            # Job de bloqueio (D-2 da expiracao Ta)
-            hora_bloqueio = cfg.get("hora_bloqueio", 14)
+            # Job de bloqueio (D-1 da expiracao Ta)
+            hora_bloqueio = cfg.get("hora_bloqueio", 16)
             marker_bloqueio = f"{data_br_str}-bloq"
             if hora_br == hora_bloqueio and cfg.get("executar_bloqueio_auto", True) and _worker_state.get("last_bloqueio_hour") != marker_bloqueio:
                 logger.info(f"Executando job de bloqueio automatico ({hora_br}h BRT)")
