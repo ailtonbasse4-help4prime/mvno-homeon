@@ -1850,7 +1850,11 @@ async def editar_data_expiracao_ta_lote(data: EditarExpiracaoLoteRequest, reques
 
 async def desbloquear_por_pagamento(cobranca: dict):
     """Chamado quando webhook Asaas confirma pagamento.
-    Desbloqueia todas as linhas do cliente que foram bloqueadas pela automacao."""
+    Desbloqueia todas as linhas do cliente que foram bloqueadas pela automacao.
+
+    SAFETY CHECK: nao desbloqueia se cliente ainda tiver cobranca OPEN OVERDUE
+    (evita liberar cliente que pagou boleto antigo/futuro mas nao o do ciclo atual).
+    """
     cfg = await _get_config()
     if not cfg.get("desbloqueio_automatico", True):
         return {"skipped": True, "motivo": "desbloqueio_automatico desativado"}
@@ -1858,6 +1862,26 @@ async def desbloquear_por_pagamento(cobranca: dict):
     cliente_id = str(cobranca.get("cliente_id") or "")
     if not cliente_id:
         return {"skipped": True, "motivo": "sem cliente_id"}
+
+    # SAFETY CHECK: cliente ainda tem cobranca OVERDUE aberta?
+    paid_statuses = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]
+    hoje_iso = datetime.now(timezone.utc).date().isoformat()
+    cob_overdue = await _db.cobrancas.find_one({
+        "cliente_id": cliente_id,
+        "vencimento": {"$lte": hoje_iso},
+        "status": {"$nin": paid_statuses + ["CANCELLED", "REFUNDED"]},
+    })
+    if cob_overdue:
+        logger.info(
+            f"[desbloqueio-auto] BLOQUEADO cliente={cliente_id} - "
+            f"ainda tem cobranca OVERDUE aberta cob_id={cob_overdue['_id']} venc={cob_overdue.get('vencimento')}"
+        )
+        return {
+            "skipped": True,
+            "motivo": "cliente_ainda_tem_cobranca_overdue",
+            "cobranca_overdue_id": str(cob_overdue["_id"]),
+            "vencimento_overdue": cob_overdue.get("vencimento"),
+        }
 
     linhas_bloqueadas = await _db.linhas.find({
         "cliente_id": cliente_id,
