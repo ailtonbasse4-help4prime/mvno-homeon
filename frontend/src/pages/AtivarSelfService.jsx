@@ -175,9 +175,16 @@ export default function AtivarSelfService() {
     setError('');
     try {
       const res = await axios.get(`${API_URL}/api/public/validar-chip/${iccid.replace(/\D/g, '')}`);
-      setChipInfo(res.data);
-      stopScanner();
-      setStep(1);
+      // Se o backend indicou retomada de pagamento, pula direto p/ step 3
+      if (res.data?.retomar_pagamento && res.data?.activation) {
+        setActivation(res.data.activation);
+        stopScanner();
+        setStep(3);
+      } else {
+        setChipInfo(res.data);
+        stopScanner();
+        setStep(1);
+      }
     } catch (e) {
       setError(e.response?.data?.detail || 'Erro ao validar chip');
     }

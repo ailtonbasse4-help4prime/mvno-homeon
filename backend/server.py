@@ -5124,6 +5124,33 @@ async def public_validate_chip(iccid: str):
     if not chip:
         raise HTTPException(status_code=404, detail="Chip nao encontrado. Verifique o ICCID informado.")
     if chip["status"] != "disponivel":
+        # Se chip esta "reservado" e ha ativacao aguardando pagamento, retomar
+        if chip["status"] == "reservado":
+            atv = await db.ativacoes_selfservice.find_one(
+                {"iccid": iccid_clean, "status": "aguardando_pagamento"},
+                sort=[("created_at", -1)],
+            )
+            if atv:
+                return {
+                    "chip_id": str(chip["_id"]),
+                    "iccid": chip["iccid"],
+                    "retomar_pagamento": True,
+                    "activation": {
+                        "id": str(atv["_id"]),
+                        "status": atv.get("status"),
+                        "chip_iccid": atv.get("iccid"),
+                        "valor_original": atv.get("valor_original"),
+                        "desconto": atv.get("desconto", 0),
+                        "valor_final": atv.get("valor_final"),
+                        "billing_type": atv.get("billing_type"),
+                        "asaas_invoice_url": atv.get("asaas_invoice_url"),
+                        "asaas_pix_code": atv.get("asaas_pix_code"),
+                        "asaas_pix_qrcode": atv.get("asaas_pix_qrcode"),
+                        "barcode": atv.get("barcode"),
+                        "plano_nome": atv.get("plano_nome"),
+                        "oferta_nome": atv.get("oferta_nome"),
+                    },
+                }
         status_msgs = {
             "ativado": "Este chip ja foi ativado.",
             "bloqueado": "Este chip esta bloqueado.",
