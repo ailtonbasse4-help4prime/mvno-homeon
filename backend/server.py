@@ -4769,6 +4769,87 @@ async def get_chips_revendedor(rev_id: str, request: Request):
 
 
 
+# ==================== INTEGRACAO CRM (2a via de boleto) ====================
+@api_router.get("/integracao/buscar-cliente-boleto")
+async def integracao_buscar_cliente_boleto(request: Request, termo: str):
+    """
+    Endpoint protegido para o CRM buscar clientes MVNO + boletos abertos.
+    Auth: header `x-integration-token` deve casar com INTEGRATION_TOKEN do .env.
+
+    termo: CPF (com ou sem mascara), CNPJ, ou parte do nome (min 3 chars).
+    """
+    expected = os.environ.get("INTEGRATION_TOKEN", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="INTEGRATION_TOKEN nao configurado")
+    got = request.headers.get("x-integration-token", "").strip()
+    if got != expected:
+        raise HTTPException(status_code=401, detail="Token de integracao invalido")
+
+    termo_raw = (termo or "").strip()
+    if not termo_raw:
+        return {"clientes": []}
+
+    termo_digits = re.sub(r"\D", "", termo_raw)
+    ors = []
+    if termo_digits and len(termo_digits) >= 4:
+        ors.append({"documento": termo_digits})
+        # CPF/CNPJ pode estar salvo em campo 'cpf' antigo
+        ors.append({"cpf": termo_digits})
+        # Ou parcial
+        ors.append({"documento": {"$regex": re.escape(termo_digits)}})
+        # Telefone
+        if len(termo_digits) >= 8:
+            ors.append({"telefone": {"$regex": re.escape(termo_digits)}})
+    if len(termo_raw) >= 3 and not termo_digits.isdigit() or (termo_digits and len(termo_digits) < len(termo_raw)):
+        # Nome (parcial, case-insensitive)
+        ors.append({"nome": {"$regex": re.escape(termo_raw), "$options": "i"}})
+    if not ors:
+        # Ainda tenta busca por nome curto se tem letras
+        if len(termo_raw) >= 3:
+            ors.append({"nome": {"$regex": re.escape(termo_raw), "$options": "i"}})
+
+    if not ors:
+        return {"clientes": []}
+
+    clientes = await db.clientes.find({"$or": ors}).limit(20).to_list(20)
+
+    result = []
+    paid_statuses = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH", "REFUNDED", "CANCELLED"]
+    for c in clientes:
+        cid = str(c["_id"])
+        cobrancas = await db.cobrancas.find({
+            "cliente_id": cid,
+            "status": {"$nin": paid_statuses},
+        }).sort("vencimento", 1).to_list(20)
+
+        boletos = []
+        for cb in cobrancas:
+            boletos.append({
+                "id": str(cb["_id"]),
+                "valor": cb.get("valor"),
+                "vencimento": cb.get("vencimento"),
+                "status": cb.get("status"),
+                "billing_type": cb.get("billing_type"),
+                "descricao": cb.get("descricao"),
+                "asaas_invoice_url": cb.get("asaas_invoice_url"),
+                "asaas_bankslip_url": cb.get("asaas_bankslip_url"),
+                "asaas_pix_code": cb.get("asaas_pix_code"),
+                "barcode": cb.get("barcode"),
+            })
+
+        result.append({
+            "cliente_id": cid,
+            "nome": c.get("nome"),
+            "documento": c.get("documento") or c.get("cpf"),
+            "tipo_pessoa": c.get("tipo_pessoa", "pf"),
+            "telefone": c.get("telefone"),
+            "email": c.get("email"),
+            "boletos_abertos": boletos,
+        })
+
+    return {"clientes": result, "total": len(result)}
+
+
 # ==================== PORTAL DO CLIENTE ====================
 class PortalLoginRequest(BaseModel):
     documento: str
