@@ -1,0 +1,37 @@
+{
+  "summary": "Backend testing of GET /api/integracao/buscar-cliente-boleto (MVNO integration endpoint used as fallback by CRM). All 7 requested scenarios pass: 503 when INTEGRATION_TOKEN not configured (verified via curl before setting env), 401 without header, 401 wrong token, 200 with valid CPF returning cliente + boletos_abertos with full structure (id, valor, vencimento, status, asaas_invoice_url, asaas_bankslip_url, asaas_pix_code, barcode), 200 partial-name regex search, empty clientes for non-existent CPF, and only pending boletos returned (no CONFIRMED/RECEIVED/REFUNDED/CANCELLED).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/integracao/buscar-cliente-boleto", "issue": "Response ignora fake unused field asaas_payment_id (poderia ser útil ao CRM para deduplicação, mas não é requisito)."},
+      {"endpoint": "/api/integracao/buscar-cliente-boleto", "issue": "Lógica de OR na linha 4803 tem precedência confusa: `len(termo_raw) >= 3 and not termo_digits.isdigit() or (termo_digits and len(termo_digits) < len(termo_raw))` — funciona nos casos testados mas é frágil; recomendo parênteses explícitos."},
+      {"endpoint": "/api/integracao/buscar-cliente-boleto", "issue": "Sem rate limit no endpoint (@limiter.limit ausente). Como é endpoint público autenticado só por token estático, é aconselhável adicionar rate limit para evitar brute force do token."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_integracao_buscar_cliente_boleto.py",
+    "/app/test_reports/pytest/integracao_results.xml"
+  ],
+  "action_items": [
+    "Considerar adicionar rate limit no endpoint /integracao/buscar-cliente-boleto para prevenir brute force do token.",
+    "Refatorar expressão booleana em server.py linha 4803 para clareza (parênteses explícitos).",
+    "INTEGRATION_TOKEN foi adicionado ao /app/backend/.env com valor de teste 'test-integration-token-abc123'. Main agent deve substituir por token real de produção."
+  ],
+  "critical_code_review_comments": [
+    "Token comparação usa igualdade direta de string — em produção considere hmac.compare_digest para evitar timing attacks.",
+    "server.py tem 6702 linhas — está muito acima da recomendação de 700 linhas; deveria ser modularizado em rotas/domínios.",
+    "Endpoint retorna cliente_id como str(_id) do ObjectId Mongo — ok, porém o restante do sistema usa UUIDs em outros lugares; consistência de identificadores merece revisão."
+  ],
+  "updated_files": [
+    "/app/backend/.env (adicionado INTEGRATION_TOKEN=test-integration-token-abc123)",
+    "/app/backend/tests/test_integracao_buscar_cliente_boleto.py (novo)"
+  ],
+  "success_rate": {"backend": "100% (6/6 pytest + 1 curl 503)", "frontend": "N/A (skipped)"},
+  "test_credentials": "INTEGRATION_TOKEN=test-integration-token-abc123 (setado em /app/backend/.env para testes)",
+  "seed_data_creation": "Não foi necessário criar dados novos. Reusado cliente existente 'Maria Santos' (documento 11144477735) com 1 cobrança em aberto (PENDING, valor 39.99).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Endpoint /api/integracao/buscar-cliente-boleto está funcional e coberto por pytest. INTEGRATION_TOKEN de teste já está no .env. Se o main agent trocar por token real, atualizar a constante TOKEN no arquivo de teste ou expor via env.",
+  "rca of the issue": "N/A — nenhum bug encontrado."
+}
