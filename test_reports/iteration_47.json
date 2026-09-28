@@ -1,0 +1,32 @@
+{
+  "summary": "Revalidação leve do endpoint GET /api/integracao/buscar-cliente-boleto após mudanças de menu no CRM. Rodei o test suite existente (6 casos) — todos passam. Confirmados: 401 sem token, 401 token errado, 200 CPF válido retorna estrutura completa (cliente_id, nome, documento, telefone, email, boletos_abertos com id/valor/vencimento/status/asaas_invoice_url/asaas_bankslip_url/asaas_pix_code/barcode), 200 busca por nome parcial, empty result para CPF inexistente, e filtro só retorna boletos com status pendente (nunca CONFIRMED/RECEIVED/RECEIVED_IN_CASH/REFUNDED/CANCELLED). Endpoint estável, sem regressões. INTEGRATION_TOKEN foi adicionado ao .env para o teste e REMOVIDO após conclusão.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/integracao/buscar-cliente-boleto", "issue": "Sem rate limit — endpoint autenticado apenas por token estático deveria ter @limiter.limit para prevenir brute force do token. (herdado da iteration_46, não bloqueia)"},
+      {"endpoint": "/api/integracao/buscar-cliente-boleto", "issue": "Comparação de token com == (linha 4785). Recomendado hmac.compare_digest para evitar timing attacks."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_integracao_buscar_cliente_boleto.py",
+    "/app/test_reports/pytest/integracao_revalidation.xml"
+  ],
+  "action_items": [
+    "Nenhuma ação bloqueante. Considerar (não-crítico) adicionar rate limit e hmac.compare_digest no endpoint."
+  ],
+  "critical_code_review_comments": [
+    "server.py já com 6702 linhas — precisa modularização urgente em routers por domínio.",
+    "Endpoint retorna 503 quando INTEGRATION_TOKEN não está setado no .env (comportamento correto/fail-fast) — validado por curl após remoção do token."
+  ],
+  "updated_files": [
+    "/app/backend/.env (INTEGRATION_TOKEN adicionado durante teste e REMOVIDO ao final — arquivo está no estado original)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "N/A (skipped por solicitação)"},
+  "test_credentials": "INTEGRATION_TOKEN=test-integration-token-abc123 usado temporariamente no .env durante o teste; removido ao final. Main agent deve setar o token real em produção.",
+  "seed_data_creation": "Nenhuma. Reusado cliente 'Maria Santos' (CPF 11144477735) com cobrança PENDING (39.99) já existente no DB.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Endpoint /api/integracao/buscar-cliente-boleto continua estável. Suite de teste em /app/backend/tests/test_integracao_buscar_cliente_boleto.py é auto-contida — basta setar INTEGRATION_TOKEN=test-integration-token-abc123 no /app/backend/.env, reiniciar backend e rodar pytest. Sempre remover o token do .env após terminar.",
+  "rca of the issue": "N/A — nenhum bug. Endpoint permaneceu íntegro após mudanças de menu do CRM (que são frontend-only e não impactam o backend MVNO)."
+}
