@@ -6174,6 +6174,90 @@ async def admin_reenviar_whatsapp_selfservice(activation_id: str, request: Reque
     return {"success": True, "message": f"Boleto reenviado por WhatsApp para {telefone}"}
 
 
+@api_router.post("/ativacoes-selfservice/{activation_id}/reconciliar")
+async def admin_reconciliar_selfservice(activation_id: str, request: Request):
+    """Admin reconcilia uma ativacao self-service: se o chip ja esta ativado,
+    marca o self-service como 'ativo'. Util para registros orfaos onde o chip
+    foi ativado por outro fluxo (manual, outro admin, etc).
+    """
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] in ("ativo", "cancelado"):
+        return {"success": False, "message": f"Ativacao ja esta em status: {doc['status']}"}
+
+    iccid = doc.get("iccid")
+    if not iccid:
+        raise HTTPException(status_code=400, detail="Ativacao sem ICCID")
+
+    chip = await db.chips.find_one({"iccid": iccid})
+    if not chip or chip.get("status") != "ativado":
+        raise HTTPException(status_code=400, detail=f"Chip nao esta ativado (status={chip.get('status') if chip else 'inexistente'})")
+
+    msisdn = chip.get("msisdn")
+    linha = None
+    if chip.get("cliente_id"):
+        linha = await db.linhas.find_one({"chip_id": str(chip["_id"])}) or await db.linhas.find_one({"msisdn": msisdn})
+
+    await db.ativacoes_selfservice.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {
+            "status": "ativo",
+            "msisdn": msisdn,
+            "ativado_em": datetime.now(timezone.utc),
+            "reconciliado_em": datetime.now(timezone.utc),
+            "reconciliado_por": user.get("id"),
+            "nota_reconciliacao": "Chip ja estava ativado (reconciliacao manual pelo admin)",
+        }},
+    )
+    await create_log(
+        "ativacao",
+        f"Admin reconciliou ativacao self-service: iccid={iccid} msisdn={msisdn}",
+        user["id"], user["name"],
+    )
+    return {"success": True, "message": f"Ativacao reconciliada para 'ativo'. msisdn={msisdn}"}
+
+
+async def _reconciliar_selfservice_orfaos():
+    """Worker periodico: reconcilia ativacoes self-service orfaos (chip ja ativado)."""
+    try:
+        aguardando = await db.ativacoes_selfservice.find({"status": "aguardando_pagamento"}).limit(200).to_list(200)
+        reconciliados = 0
+        for a in aguardando:
+            iccid = a.get("iccid")
+            if not iccid:
+                continue
+            chip = await db.chips.find_one({"iccid": iccid})
+            if chip and chip.get("status") == "ativado":
+                await db.ativacoes_selfservice.update_one(
+                    {"_id": a["_id"]},
+                    {"$set": {
+                        "status": "ativo",
+                        "msisdn": chip.get("msisdn"),
+                        "ativado_em": datetime.now(timezone.utc),
+                        "reconciliado_em": datetime.now(timezone.utc),
+                        "reconciliado_por": "worker_automatico",
+                        "nota_reconciliacao": "Reconciliacao automatica: chip ja estava ativado",
+                    }},
+                )
+                reconciliados += 1
+        if reconciliados > 0:
+            logger.info(f"[reconciliar-selfservice] {reconciliados} ativacoes orfas reconciliadas")
+    except Exception as e:
+        logger.warning(f"[reconciliar-selfservice] erro: {e}")
+
+
+async def _worker_reconciliar_selfservice():
+    """Loop que roda reconciliacao a cada 1h."""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 1h
+            await _reconciliar_selfservice_orfaos()
+        except Exception as e:
+            logger.warning(f"[worker-reconciliar] erro: {e}")
+
+
 # ==================== RETRY AUTOMATICO ====================
 
 @api_router.post("/ativacoes-selfservice/{activation_id}/retry")
@@ -6648,6 +6732,8 @@ async def startup_event():
         logger.warning(f"Startup cleanup error (non-fatal): {e}")
     # Iniciar worker de retry automatico em background
     asyncio.create_task(_process_retry_queue())
+    # Iniciar worker de reconciliacao de self-service orfaos (1h)
+    asyncio.create_task(_worker_reconciliar_selfservice())
     # Iniciar worker de automacao de bloqueio por inadimplencia
     try:
         from routes.automacao_bloqueio import start_worker as start_automacao_bloqueio

@@ -11,7 +11,7 @@ import {
 import {
   Search, CheckCircle, Clock, AlertCircle, XCircle,
   RefreshCw, Zap, CreditCard, RotateCw, Timer, ChevronDown, ChevronUp, Hash,
-  ExternalLink, Send,
+  ExternalLink, Send, GitMerge,
 } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
 import { formatDateBR, formatTimeBR } from '../lib/dateFormat';
@@ -135,6 +135,22 @@ export function AtivacoesSelfService() {
       toast.success(r.data?.message || 'Boleto reenviado por WhatsApp');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao reenviar WhatsApp');
+    }
+    setSubmitting(null);
+  };
+
+  const handleReconciliar = async (id) => {
+    setSubmitting(id);
+    try {
+      const r = await axios.post(`${API_URL}/api/ativacoes-selfservice/${id}/reconciliar`, {}, { withCredentials: true });
+      if (r.data?.success) {
+        toast.success(r.data.message || 'Reconciliado com sucesso');
+        fetchData();
+      } else {
+        toast.warning(r.data?.message || 'Nao foi possivel reconciliar');
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao reconciliar');
     }
     setSubmitting(null);
   };
@@ -338,6 +354,14 @@ export function AtivacoesSelfService() {
                               title="Reenviar boleto por WhatsApp"
                             >
                               <Send className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleReconciliar(a.id)}
+                              disabled={submitting === a.id}
+                              className="h-7 px-2 text-xs border-zinc-700 text-zinc-300 hover:text-amber-400 hover:border-amber-500"
+                              data-testid={`reconciliar-btn-${a.id}`}
+                              title="Reconciliar: marcar como ativo se chip ja estiver ativado"
+                            >
+                              <GitMerge className="w-3.5 h-3.5 mr-1" /> Reconciliar
                             </Button>
                             <Button size="sm" onClick={() => handleConfirm(a.id)}
                               disabled={submitting === a.id}
