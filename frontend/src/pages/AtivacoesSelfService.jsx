@@ -11,6 +11,7 @@ import {
 import {
   Search, CheckCircle, Clock, AlertCircle, XCircle,
   RefreshCw, Zap, CreditCard, RotateCw, Timer, ChevronDown, ChevronUp, Hash,
+  ExternalLink, Send,
 } from 'lucide-react';
 import { StatCard } from '../components/StatCard';
 import { formatDateBR, formatTimeBR } from '../lib/dateFormat';
@@ -123,6 +124,17 @@ export function AtivacoesSelfService() {
       fetchData();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Erro ao cancelar');
+    }
+    setSubmitting(null);
+  };
+
+  const handleReenviarWhats = async (id) => {
+    setSubmitting(id);
+    try {
+      const r = await axios.post(`${API_URL}/api/ativacoes-selfservice/${id}/reenviar-whatsapp`, {}, { withCredentials: true });
+      toast.success(r.data?.message || 'Boleto reenviado por WhatsApp');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Erro ao reenviar WhatsApp');
     }
     setSubmitting(null);
   };
@@ -307,6 +319,26 @@ export function AtivacoesSelfService() {
                       <div className="flex items-center gap-1 flex-wrap">
                         {a.status === 'aguardando_pagamento' && (
                           <>
+                            {a.asaas_invoice_url && (
+                              <a
+                                href={a.asaas_invoice_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center h-7 px-2 rounded-md border border-zinc-700 text-zinc-300 hover:text-blue-400 hover:border-blue-500 text-xs transition-colors"
+                                data-testid={`ver-boleto-btn-${a.id}`}
+                                title="Ver boleto/PIX"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5 mr-1" /> Ver
+                              </a>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => handleReenviarWhats(a.id)}
+                              disabled={submitting === a.id}
+                              className="h-7 px-2 text-xs border-zinc-700 text-zinc-300 hover:text-emerald-400 hover:border-emerald-500"
+                              data-testid={`reenviar-whats-btn-${a.id}`}
+                              title="Reenviar boleto por WhatsApp"
+                            >
+                              <Send className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                            </Button>
                             <Button size="sm" onClick={() => handleConfirm(a.id)}
                               disabled={submitting === a.id}
                               className="h-7 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"

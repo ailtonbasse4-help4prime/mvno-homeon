@@ -6069,6 +6069,9 @@ async def admin_list_selfservice_activations(request: Request, status: Optional[
             "last_retry_at": d.get("last_retry_at").isoformat() if d.get("last_retry_at") else None,
             "retry_errors": d.get("retry_errors", []),
             "revendedor_id": d.get("revendedor_id"),
+            "asaas_invoice_url": d.get("asaas_invoice_url"),
+            "asaas_payment_id": d.get("asaas_payment_id"),
+            "telefone": d.get("telefone"),
             "created_at": d.get("created_at", datetime.now(timezone.utc)).isoformat(),
         })
     return result
@@ -6108,6 +6111,67 @@ async def admin_cancel_selfservice(activation_id: str, request: Request):
     await db.ativacoes_selfservice.update_one({"_id": doc["_id"]}, {"$set": {"status": "cancelado"}})
     await create_log("ativacao", f"Admin cancelou ativacao self-service: {doc.get('iccid')}", user["id"], user["name"])
     return {"success": True, "message": "Ativacao cancelada e chip liberado."}
+
+
+@api_router.post("/ativacoes-selfservice/{activation_id}/reenviar-whatsapp")
+async def admin_reenviar_whatsapp_selfservice(activation_id: str, request: Request):
+    """Admin reenvia o boleto/PIX da ativacao self-service para o cliente via WhatsApp (Z-API)."""
+    user = await require_admin(request)
+    doc = await db.ativacoes_selfservice.find_one({"_id": ObjectId(activation_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ativacao nao encontrada")
+    if doc["status"] not in ("aguardando_pagamento",):
+        raise HTTPException(status_code=400, detail="Ativacao nao esta aguardando pagamento")
+
+    cliente_id = doc.get("cliente_id")
+    cliente = await db.clientes.find_one({"_id": ObjectId(cliente_id)}) if cliente_id else None
+    telefone = (cliente or {}).get("telefone") or doc.get("telefone")
+    if not telefone:
+        raise HTTPException(status_code=400, detail="Telefone do cliente nao encontrado")
+
+    nome = (cliente or {}).get("nome") or doc.get("nome") or "Cliente"
+    valor = doc.get("valor_final") or 0
+    billing_type = (doc.get("billing_type") or "PIX").upper()
+    invoice_url = doc.get("asaas_invoice_url") or ""
+    pix_code = doc.get("asaas_pix_code") or ""
+    barcode = doc.get("barcode") or ""
+
+    partes = [f"Ola *{nome}*! Aqui esta o seu boleto da ativacao do chip:\n"]
+    try:
+        partes.append(f"Valor: *R$ {float(valor):.2f}*")
+    except Exception:
+        partes.append(f"Valor: R$ {valor}")
+    partes.append(f"Forma: *{billing_type}*")
+    if invoice_url:
+        partes.append(f"\nLink de pagamento:\n{invoice_url}")
+    if billing_type == "PIX" and pix_code:
+        partes.append(f"\n*PIX Copia e Cola:*\n```{pix_code}```")
+    if billing_type == "BOLETO" and barcode:
+        partes.append(f"\n*Codigo de Barras:*\n```{barcode}```")
+    partes.append("\n_Apos o pagamento, a ativacao e automatica em ate 15 minutos._")
+    mensagem = "\n".join(partes)
+
+    try:
+        from services.zapi_service import zapi_service
+        resp = await zapi_service.send_text(phone=telefone, message=mensagem)
+        if not resp or not resp.get("success", True):
+            raise HTTPException(status_code=502, detail=f"Falha ao enviar WhatsApp: {resp}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reenviar WhatsApp selfservice falhou: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail=f"Falha ao enviar WhatsApp: {e}")
+
+    await db.ativacoes_selfservice.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"ultimo_reenvio_whatsapp": datetime.now(timezone.utc)}},
+    )
+    await create_log(
+        "ativacao",
+        f"Admin reenviou boleto por WhatsApp: ativacao={doc.get('iccid')} tel={telefone}",
+        user["id"], user["name"],
+    )
+    return {"success": True, "message": f"Boleto reenviado por WhatsApp para {telefone}"}
 
 
 # ==================== RETRY AUTOMATICO ====================
