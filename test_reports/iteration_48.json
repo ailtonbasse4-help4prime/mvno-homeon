@@ -1,0 +1,31 @@
+{
+  "summary": "Backend-only testing of admin self-service activations endpoints. 7/7 pytest cases passed. Validated: (1) GET /api/ativacoes-selfservice now exposes new fields asaas_invoice_url, asaas_payment_id and telefone; (2) POST /api/ativacoes-selfservice/{id}/reenviar-whatsapp returns 401 without auth, 404 for inexistent id, 400 when status != aguardando_pagamento, and 200/502 on success path (Z-API is configured locally, so endpoint reaches the send step). Seed data criado via insercao direta no mongo (clientes + ativacoes_selfservice) e limpo apos cada teste via fixtures.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/ativacoes-selfservice/{id}/reenviar-whatsapp", "issue": "Nao valida formato do activation_id — ObjectId(activation_id) joga bson.errors.InvalidId -> 500 ao inves de 404/400. Idealmente envolver em try/except e retornar 404."},
+      {"endpoint": "/api/ativacoes-selfservice/{id}/reenviar-whatsapp", "issue": "Mensagem monta 'Valor: R$ 49.99' com formatacao en-US (ponto) em vez de pt-BR (virgula). Pequeno nitpick de UX."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_selfservice_reenviar_whatsapp.py",
+    "/app/test_reports/pytest/selfservice_reenviar.xml"
+  ],
+  "action_items": [
+    "Nenhum bloqueador. Opcional: envolver ObjectId(activation_id) em try/except InvalidId em todos endpoints de ativacoes-selfservice (padrao recorrente no server.py)."
+  ],
+  "critical_code_review_comments": [
+    "server.py com 6766 linhas — modularizacao em routers (ativacoes, clientes, portal, admin, integracao) continua pendente desde iteracoes anteriores.",
+    "Validacao de ObjectId ausente em multiplos endpoints — raise 500 em vez de 400/404 quando id malformado.",
+    "Endpoint reenviar-whatsapp monta mensagem corretamente com nome, valor, invoice_url e PIX code / barcode condicionalmente ao billing_type — logica validada."
+  ],
+  "updated_files": ["/app/backend/tests/test_selfservice_reenviar_whatsapp.py (criado)"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "N/A (skipped)"},
+  "test_credentials": "admin@mvno.com / admin123 (de /app/memory/test_credentials.md)",
+  "seed_data_creation": "Fixtures criam clientes TEST_* + ativacoes_selfservice em aguardando_pagamento (PIX e BOLETO) e em pago; cleanup automatico via yield.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Suite /app/backend/tests/test_selfservice_reenviar_whatsapp.py cobre todo o fluxo de reenviar-whatsapp e os novos campos do listing. Z-API esta configurado localmente — endpoint pode retornar 200 ou 502; a suite aceita ambos. Para testar envio real, verificar painel do Z-API apos rodar test_success_pix_builds_message.",
+  "rca of the issue": "N/A — todas as features novas funcionam conforme spec."
+}
