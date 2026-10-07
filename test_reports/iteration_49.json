@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only testing of admin reconciliar self-service endpoint + worker _reconciliar_selfservice_orfaos. 7/7 pytest cases passed covering auth, 404, status-already-ativo (returns success:false), 400 sem iccid, 400 chip nao-ativado, happy path (verifies msisdn/ativado_em/reconciliado_em/nota_reconciliacao persisted) e teste direto do worker (importa funcao do server e executa via asyncio.run, verificando reconciliacao de orfao + nao-afetacao de nao-orfao).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/ativacoes-selfservice/{id}/reconciliar", "issue": "ObjectId(activation_id) sem try/except bson.errors.InvalidId -> 500 em id malformado (padrao recorrente ja reportado em iteracoes anteriores)."},
+      {"endpoint": "_reconciliar_selfservice_orfaos", "issue": "Limita a 200 ativacoes por run; se backlog crescer >200 nao sera coberto em um unico ciclo de 1h. Considerar paginacao ou aumentar limite."},
+      {"endpoint": "/api/ativacoes-selfservice/{id}/reconciliar", "issue": "Status 'cancelado' retorna 200 success:false (consistente com 'ativo') mas a feature-list sugere o mesmo comportamento — ok, validado."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_selfservice_reconciliar.py",
+    "/app/test_reports/pytest/reconciliar.xml"
+  ],
+  "action_items": [
+    "Nenhum bloqueador. Opcional (ja aberto em iteracoes anteriores): envolver ObjectId() em try/except InvalidId em todos endpoints de ativacoes-selfservice.",
+    "Considerar aumentar limite do worker ou paginar _reconciliar_selfservice_orfaos (hoje .limit(200))."
+  ],
+  "critical_code_review_comments": [
+    "Endpoint admin_reconciliar_selfservice (linha 6177) e _reconciliar_selfservice_orfaos (linha 6222) duplicam ~15 linhas de logica de update ($set com status/msisdn/ativado_em/reconciliado_em/nota). Extrair helper reduziria DRY.",
+    "server.py continua com ~6852 linhas — modularizacao pendente ha varias iteracoes.",
+    "Worker loop _worker_reconciliar_selfservice usa sleep(3600) ANTES do run; na primeira hora apos deploy nenhum orfao e reconciliado. Melhor rodar uma vez no startup e depois esperar."
+  ],
+  "updated_files": ["/app/backend/tests/test_selfservice_reconciliar.py (criado)"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "N/A (skipped)"},
+  "test_credentials": "admin@mvno.com / admin123 (de /app/memory/test_credentials.md)",
+  "seed_data_creation": "Fixtures criam clientes TEST_Reconc_* + chips (status=ativado/reservado) + ativacoes_selfservice; cleanup automatico via yield. Worker test cria 2 cenarios (orfao e nao-orfao) e limpa no finally.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Suite /app/backend/tests/test_selfservice_reconciliar.py cobre endpoint reconciliar + worker. Para testar o loop _worker_reconciliar_selfservice (sleep 3600 + run), nao foi testado diretamente — apenas a funcao core _reconciliar_selfservice_orfaos foi importada e invocada via asyncio.run.",
+  "rca of the issue": "N/A — feature funciona conforme spec."
+}
